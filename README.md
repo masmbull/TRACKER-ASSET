@@ -48,7 +48,7 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Dashboard (KPI, charts breakdown, warnings, recent activity) | ✅ Done |
 | Transfer Workflow (atomic, assignment history, sequential numbering) | ✅ Done |
 | RBAC (admin / support / technician / viewer via policies + gates) | ✅ Done |
-| Activity Log (immutable trail on every mutation) | ✅ Done (dedicated page pending) |
+| Activity Log (immutable trail on every mutation) | ✅ Done — filter + pagination |
 | Repair History | ✅ Done |
 | Document Templates | ✅ Done (CRUD) |
 | Audit (server-side MATCH/MISMATCH comparison, mismatch detail) | ✅ Done — result computed by the system |
@@ -59,6 +59,7 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Users management (local) | ✅ Done — admin only |
 | Attachments Upload | ✅ Done — validated, logged |
 | Activity Log page | ✅ Done — filter + pagination |
+| IKE_BAST Inspection Table | ✅ Done — multi-line receiving inspection per asset, approve/reject, print-friendly — see `docs/ike-bast-inspection.md` |
 | Microsoft Entra ID SSO | ✅ Done — OAuth/OIDC code flow, auto-provision, config-gated (set `ENTRA_ENABLED=true`) |
 | Microsoft Graph / SharePoint integration | 🟡 Graph profile sync done (SSO); file storage to SharePoint pending |
 | Reports page | ✅ Done — summary, breakdowns, audit coverage, CSV export |

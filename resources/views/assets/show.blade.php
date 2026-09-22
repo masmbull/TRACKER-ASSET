@@ -303,6 +303,41 @@
     </div>
 </div>
 
+<div id="inspections" class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">IKE_BAST Inspections</h2>
+        @can('manageAttachments', $asset)
+            <a href="{{ route('ike-bast.inspection.create', $asset) }}" class="bg-purple-600 text-white px-3 py-1 rounded text-sm">+ Start Inspection</a>
+        @endcan
+    </div>
+    @if(($asset->inspectionSessions ?? collect())->count() > 0)
+    <table class="min-w-full bg-white shadow rounded text-sm">
+        <thead>
+            <tr class="border-b">
+                <th class="text-left py-2 px-4">Session No</th>
+                <th class="text-left py-2 px-4">Kind</th>
+                <th class="text-left py-2 px-4">Date</th>
+                <th class="text-left py-2 px-4">Lines</th>
+                <th class="text-left py-2 px-4">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($asset->inspectionSessions as $inspection)
+            <tr class="border-b">
+                <td class="py-2 px-4"><a href="{{ route('ike-bast.inspection.show', $inspection) }}" class="text-blue-600">{{ $inspection->session_number }}</a></td>
+                <td class="py-2 px-4">{{ $inspection->kind }}</td>
+                <td class="py-2 px-4">{{ $inspection->inspection_date?->format('Y-m-d') }}</td>
+                <td class="py-2 px-4">{{ $inspection->lines_count ?? $inspection->lines->count() }}</td>
+                <td class="py-2 px-4"><span class="px-2 py-1 text-xs rounded bg-gray-200">{{ $inspection->status }}</span></td>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
+    @else
+    <p class="text-gray-500">No inspection sessions for this asset yet.</p>
+    @endif
+</div>
+
 <div class="mt-6">
     @can('audit', $asset)
         <a href="{{ route('assets.audit', $asset) }}" class="bg-blue-600 text-white px-4 py-2 rounded">Start Audit</a>

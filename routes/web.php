@@ -95,6 +95,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/templates/{template}/toggle', [TemplateController::class, 'toggle'])->name('templates.toggle');
 
         Route::get('/ike-bast/inspection/create/{asset}', [IkeBastInspectionController::class, 'create'])->name('ike-bast.inspection.create');
+        Route::get('/ike-bast/inspection', [IkeBastInspectionController::class, 'index'])->name('ike-bast.inspection.index');
         Route::post('/ike-bast/inspection', [IkeBastInspectionController::class, 'store'])->name('ike-bast.inspection.store');
         Route::get('/ike-bast/inspection/{session}', [IkeBastInspectionController::class, 'show'])->name('ike-bast.inspection.show');
         Route::put('/ike-bast/inspection/{session}', [IkeBastInspectionController::class, 'update'])->name('ike-bast.inspection.update');

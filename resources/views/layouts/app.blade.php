@@ -38,6 +38,9 @@
                         @can('view-activity-log')
                             <a href="{{ route('activity.index') }}" class="text-gray-600 hover:text-gray-900">Activity</a>
                         @endcan
+                        @can('manage-master-data')
+                            <a href="{{ route('ike-bast.inspection.index') }}" class="text-gray-600 hover:text-gray-900">Inspections</a>
+                        @endcan
                         @can('export-assets')
                             <a href="{{ route('reports.index') }}" class="text-gray-600 hover:text-gray-900">Reports</a>
                         @endcan
