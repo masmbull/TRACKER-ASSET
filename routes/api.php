@@ -1,15 +1,19 @@
 <?php
 
+use App\Http\Controllers\Api\AuditApiController;
+use App\Http\Middleware\AuthenticateAuditAgent;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/assets', function () {
-        return response()->json(['message' => 'Assets API']);
-    });
-    Route::get('/dashboard/summary', function () {
-        return response()->json(['message' => 'Dashboard summary']);
-    });
-    Route::get('/dashboard/charts', function () {
-        return response()->json(['message' => 'Dashboard charts']);
-    });
-});
+/*
+|--------------------------------------------------------------------------
+| Audit Agent API (PRD §11 — preferred audit architecture)
+|--------------------------------------------------------------------------
+|
+| Lightweight client posts device JSON; all logic stays in Laravel.
+| Authenticates with a Bearer token issued via `php artisan audit:token`.
+|
+*/
+
+Route::post('/audits', [AuditApiController::class, 'submit'])
+    ->middleware(AuthenticateAuditAgent::class);
+
