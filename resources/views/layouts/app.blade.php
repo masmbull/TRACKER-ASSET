@@ -21,7 +21,22 @@
                             <a href="{{ route('assets.import') }}" class="text-gray-600 hover:text-gray-900">Import</a>
                         @endcan
                         @can('manage-master-data')
-                            <a href="{{ route('templates.index') }}" class="text-gray-600 hover:text-gray-900">Templates</a>
+                            <div class="relative">
+                                <button onclick="document.getElementById('master-menu').classList.toggle('hidden')" class="text-gray-600 hover:text-gray-900">Master Data ▾</button>
+                                <div id="master-menu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded shadow-lg border z-10">
+                                    <a href="{{ route('master.index', 'companies') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Companies</a>
+                                    <a href="{{ route('master.index', 'locations') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Locations</a>
+                                    <a href="{{ route('master.index', 'categories') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Categories</a>
+                                    <a href="{{ route('master.index', 'statuses') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Statuses</a>
+                                    @can('manage-users')
+                                        <a href="{{ route('users.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-t">Users</a>
+                                    @endcan
+                                    <a href="{{ route('templates.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Templates</a>
+                                </div>
+                            </div>
+                        @endcan
+                        @can('view-activity-log')
+                            <a href="{{ route('activity.index') }}" class="text-gray-600 hover:text-gray-900">Activity</a>
                         @endcan
                         @auth
                             <span class="text-sm text-gray-500">

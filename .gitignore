@@ -27,5 +27,6 @@ CLAUDE.md
 database/*.sqlite*
 storage/app/imports/
 storage/app/documents/
+storage/app/attachments/
 # Real company asset data must never enter the repository.
 IT Assets.xlsx

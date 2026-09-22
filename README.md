@@ -54,9 +54,11 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Audit (server-side MATCH/MISMATCH comparison, mismatch detail) | ✅ Done — result computed by the system |
 | FAT / BAST (auto-populate, configurable numbering, A4 PDF, preview/download/print) | ✅ Done — see `docs/document-workflow.md` |
 | Document Generation (auto-populate) | ✅ Done |
-| QR Code | ⬜ Pending |
-| Master Data CRUD (Companies/Locations/Categories/Users/Statuses) | ⬜ Pending |
-| Attachments Upload | ⬜ Pending |
+| QR Code | ✅ Done — per-asset PNG, encodes asset detail URL |
+| Master Data CRUD (Companies/Locations/Categories/Statuses) | ✅ Done — delete protection on referenced records |
+| Users management (local) | ✅ Done — admin only |
+| Attachments Upload | ✅ Done — validated, logged |
+| Activity Log page | ✅ Done — filter + pagination |
 | Microsoft Entra ID SSO | ⬜ Pending |
 | Microsoft Graph / SharePoint integration | ⬜ Pending |
 | Reports page | ⬜ Pending |

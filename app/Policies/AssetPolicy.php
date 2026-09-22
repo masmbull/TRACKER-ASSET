@@ -71,4 +71,12 @@ class AssetPolicy
     {
         return $user->hasRole('admin', 'support');
     }
+
+    /**
+     * Upload/delete attachments (PRD §37).
+     */
+    public function manageAttachments(User $user, Asset $asset): bool
+    {
+        return $user->hasRole('admin', 'support');
+    }
 }

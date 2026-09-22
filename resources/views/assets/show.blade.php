@@ -128,6 +128,7 @@
             </div>
         @endcan
     </div>
+
     @if($asset->documents->count() > 0)
     <table class="min-w-full bg-white shadow rounded">
         <thead>
@@ -235,6 +236,71 @@
     @else
     <p class="text-gray-500">No activity logs.</p>
     @endif
+</div>
+
+<div id="attachments" class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Attachments</h2>
+        @can('manageAttachments', $asset)
+            <form method="POST" action="{{ route('assets.attachments.store', $asset) }}" enctype="multipart/form-data" class="flex items-center gap-2">
+                @csrf
+                <input type="file" name="file" required accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" class="border rounded px-3 py-1 text-sm">
+                <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Upload</button>
+            </form>
+        @endcan
+    </div>
+    @error('file')
+        <p class="text-red-600 text-sm mb-2">{{ $message }}</p>
+    @enderror
+    @if($asset->attachments->count() > 0)
+    <table class="min-w-full bg-white shadow rounded text-sm">
+        <thead>
+            <tr class="border-b">
+                <th class="text-left py-2 px-4">File</th>
+                <th class="text-left py-2 px-4">Type</th>
+                <th class="text-left py-2 px-4">Size</th>
+                <th class="text-left py-2 px-4">Uploaded By</th>
+                <th class="text-left py-2 px-4">Date</th>
+                <th class="text-left py-2 px-4">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($asset->attachments as $attachment)
+            <tr class="border-b">
+                <td class="py-2 px-4"><a href="{{ route('assets.attachments.download', [$asset, $attachment]) }}" class="text-blue-600">{{ $attachment->file_name }}</a></td>
+                <td class="py-2 px-4"><span class="px-2 py-1 text-xs rounded bg-gray-200">{{ $attachment->file_type }}</span></td>
+                <td class="py-2 px-4">{{ number_format($attachment->file_size / 1024, 0) }} KB</td>
+                <td class="py-2 px-4">{{ $attachment->uploader?->name }}</td>
+                <td class="py-2 px-4">{{ $attachment->created_at?->format('Y-m-d') }}</td>
+                <td class="py-2 px-4">
+                    @can('manageAttachments', $asset)
+                        <form method="POST" action="{{ route('assets.attachments.destroy', [$asset, $attachment]) }}" class="inline" onsubmit="return confirm('Delete this attachment?')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="text-red-600 text-sm">Delete</button>
+                        </form>
+                    @endcan
+                </td>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
+    @else
+    <p class="text-gray-500">No attachments.</p>
+    @endif
+</div>
+
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">QR Code</h2>
+    </div>
+    <div class="bg-white p-6 rounded shadow flex items-center gap-6">
+        <img src="{{ route('assets.qr', $asset) }}" alt="QR {{ $asset->asset_id }}" width="150" height="150" class="border">
+        <div class="text-sm text-gray-600">
+            <p class="mb-1">Scan untuk membuka halaman aset ini (harus login).</p>
+            <code>{{ url('/assets/' . $asset->id) }}</code>
+        </div>
+    </div>
 </div>
 
 <div class="mt-6">
