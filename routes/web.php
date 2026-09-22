@@ -7,6 +7,7 @@ use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\IkeBastInspectionController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
@@ -92,5 +93,12 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('templates', TemplateController::class)->except(['show', 'edit', 'update']);
         Route::put('/templates/{template}/toggle', [TemplateController::class, 'toggle'])->name('templates.toggle');
+
+        Route::get('/ike-bast/inspection/create/{asset}', [IkeBastInspectionController::class, 'create'])->name('ike-bast.inspection.create');
+        Route::post('/ike-bast/inspection', [IkeBastInspectionController::class, 'store'])->name('ike-bast.inspection.store');
+        Route::get('/ike-bast/inspection/{session}', [IkeBastInspectionController::class, 'show'])->name('ike-bast.inspection.show');
+        Route::put('/ike-bast/inspection/{session}', [IkeBastInspectionController::class, 'update'])->name('ike-bast.inspection.update');
+        Route::post('/ike-bast/inspection/{session}/approve', [IkeBastInspectionController::class, 'approve'])->name('ike-bast.inspection.approve');
+        Route::get('/ike-bast/inspection/{session}/print', [IkeBastInspectionController::class, 'print'])->name('ike-bast.inspection.print');
     });
 });
