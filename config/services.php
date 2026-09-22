@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // Microsoft Entra ID / Microsoft 365 SSO (PRD §12, §38).
+    // Enabled only when ENTRA_ENABLED=true; otherwise local auth is used.
+    'entra' => [
+        'enabled' => env('ENTRA_ENABLED', false),
+        'client_id' => env('ENTRA_CLIENT_ID'),
+        'client_secret' => env('ENTRA_CLIENT_SECRET'),
+        'tenant_id' => env('ENTRA_TENANT_ID', 'common'),
+        'redirect' => env('ENTRA_REDIRECT_URI'),
+    ],
+
 ];
