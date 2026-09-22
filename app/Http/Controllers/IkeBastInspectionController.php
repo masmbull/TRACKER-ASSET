@@ -186,4 +186,26 @@ class IkeBastInspectionController extends Controller
 
         return view('ike-bast.inspection.print', compact('session'));
     }
+
+    public function index(Request $request)
+    {
+        $sessions = IkeBastInspectionSession::query()
+            ->with(['asset', 'creator'])
+            ->withCount('lines')
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $search = trim((string) $request->input('search'));
+                $q->where('session_number', 'like', "%{$search}%")
+                    ->orWhereHas('asset', fn ($sub) => $sub
+                        ->where('asset_id', 'like', "%{$search}%")
+                        ->orWhere('hostname', 'like', "%{$search}%")
+                        ->orWhere('serial_number', 'like', "%{$search}%"));
+            })
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+            ->when($request->filled('kind'), fn ($q) => $q->where('kind', $request->input('kind')))
+            ->orderByDesc('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('ike-bast.inspection.index', compact('sessions'));
+    }
 }
