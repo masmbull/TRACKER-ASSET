@@ -8,8 +8,23 @@ build/
 coverage/
 *.log
 storage/*.key
-storage/logs/*
+storage/logs/
+.storage
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+.gitignore_laravel
+.editorconfig
+.gitattributes
+.npmrc
+AGENTS.md
+CLAUDE.md
+
+.phpunit.result.cache
+/public/build
+/public/hot
+database/*.sqlite*
+storage/app/imports/
+# Real company asset data must never enter the repository.
+IT Assets.xlsx
