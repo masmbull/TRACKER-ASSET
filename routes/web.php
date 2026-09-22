@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\QrController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login')->middleware('guest');
 Route::post('/login', [AuthController::class, 'login'])->middleware('guest');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
+
+// Microsoft Entra ID SSO (PRD §12, §38) — only functional when ENTRA_ENABLED=true.
+Route::get('/auth/microsoft', [AuthController::class, 'microsoftRedirect'])->name('auth.microsoft')->middleware('guest');
+Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallback'])->name('auth.microsoft.callback');
 
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
@@ -61,6 +66,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/activity', [ActivityLogController::class, 'index'])
         ->name('activity.index')
         ->middleware('can:view-activity-log');
+
+    Route::get('/reports', [ReportController::class, 'index'])
+        ->name('reports.index')
+        ->middleware('can:export-assets');
+    Route::get('/reports/export', [ReportController::class, 'export'])
+        ->name('reports.export')
+        ->middleware('can:export-assets');
 
     Route::middleware('can:manage-master-data')->group(function () {
         Route::get('/master/{type}', [MasterDataController::class, 'index'])->name('master.index');

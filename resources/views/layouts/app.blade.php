@@ -38,6 +38,9 @@
                         @can('view-activity-log')
                             <a href="{{ route('activity.index') }}" class="text-gray-600 hover:text-gray-900">Activity</a>
                         @endcan
+                        @can('export-assets')
+                            <a href="{{ route('reports.index') }}" class="text-gray-600 hover:text-gray-900">Reports</a>
+                        @endcan
                         @auth
                             <span class="text-sm text-gray-500">
                                 {{ Auth::user()?->name }}

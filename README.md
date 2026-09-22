@@ -59,10 +59,10 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Users management (local) | ✅ Done — admin only |
 | Attachments Upload | ✅ Done — validated, logged |
 | Activity Log page | ✅ Done — filter + pagination |
-| Microsoft Entra ID SSO | ⬜ Pending |
-| Microsoft Graph / SharePoint integration | ⬜ Pending |
-| Reports page | ⬜ Pending |
-| CI/CD | ⬜ Pending (after local MVP is stable) |
+| Microsoft Entra ID SSO | ✅ Done — OAuth/OIDC code flow, auto-provision, config-gated (set `ENTRA_ENABLED=true`) |
+| Microsoft Graph / SharePoint integration | 🟡 Graph profile sync done (SSO); file storage to SharePoint pending |
+| Reports page | ✅ Done — summary, breakdowns, audit coverage, CSV export |
+| CI/CD | ✅ CI done (GitHub Actions: PHPUnit + Pint); CD to VPS pending go-live |
 
 ## Tests
 
