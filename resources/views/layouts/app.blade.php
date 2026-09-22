@@ -44,6 +44,7 @@
                         @can('export-assets')
                             <a href="{{ route('reports.index') }}" class="text-gray-600 hover:text-gray-900">Reports</a>
                         @endcan
+                        <a href="{{ route('barcode.form') }}" class="text-gray-600 hover:text-gray-900">Scan</a>
                         @auth
                             <span class="text-sm text-gray-500">
                                 {{ Auth::user()?->name }}
