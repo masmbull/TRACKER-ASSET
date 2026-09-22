@@ -122,7 +122,10 @@
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-xl font-semibold">Documents</h2>
         @can('generateDocument', $asset)
-            <a href="{{ route('documents.create', $asset) }}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">+ Add Document</a>
+            <div class="flex gap-2">
+                <a href="{{ route('documents.generate', $asset) }}" class="bg-green-600 text-white px-3 py-1 rounded text-sm">+ Generate FAT / BAST</a>
+                <a href="{{ route('documents.create', $asset) }}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">+ Add Document</a>
+            </div>
         @endcan
     </div>
     @if($asset->documents->count() > 0)
@@ -140,7 +143,7 @@
         <tbody>
             @foreach($asset->documents as $document)
             <tr class="border-b">
-                <td class="py-2 px-4">{{ $document->document_number }}</td>
+                <td class="py-2 px-4"><a href="{{ route('documents.preview', $document) }}" class="text-blue-600">{{ $document->document_number }}</a></td>
                 <td class="py-2 px-4">{{ $document->document_type }}</td>
                 <td class="py-2 px-4">{{ $document->title }}</td>
                 <td class="py-2 px-4">{{ $document->generated_date?->format('Y-m-d') }}</td>

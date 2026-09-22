@@ -51,9 +51,9 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Activity Log (immutable trail on every mutation) | ✅ Done (dedicated page pending) |
 | Repair History | ✅ Done |
 | Document Templates | ✅ Done (CRUD) |
-| Document Generation (auto-populate) | 🟡 Partial (manual entry) |
-| Audit Comparison (server-side MATCH/MISMATCH) | ⬜ Pending |
-| FAT / BAST PDF | ⬜ Pending |
+| Audit (server-side MATCH/MISMATCH comparison, mismatch detail) | ✅ Done — result computed by the system |
+| FAT / BAST (auto-populate, configurable numbering, A4 PDF, preview/download/print) | ✅ Done — see `docs/document-workflow.md` |
+| Document Generation (auto-populate) | ✅ Done |
 | QR Code | ⬜ Pending |
 | Master Data CRUD (Companies/Locations/Categories/Users/Statuses) | ⬜ Pending |
 | Attachments Upload | ⬜ Pending |

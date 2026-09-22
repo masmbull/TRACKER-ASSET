@@ -13,14 +13,16 @@ class AssetAudit extends Model
 
     protected $fillable = [
         'asset_id', 'audit_date', 'auditor_id', 'device_hostname', 'device_serial',
-        'device_processor', 'device_ram', 'device_storage', 'device_os',
-        'device_mac', 'device_ip', 'result', 'notes', 'photo_path', 'status',
+        'device_brand', 'device_model', 'device_processor', 'device_ram', 'device_storage',
+        'device_os', 'device_mac', 'device_ip', 'result', 'mismatches', 'notes',
+        'photo_path', 'status',
     ];
 
     protected function casts(): array
     {
         return [
             'audit_date' => 'datetime',
+            'mismatches' => 'array',
         ];
     }
 

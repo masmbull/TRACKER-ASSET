@@ -27,14 +27,26 @@
             <tr class="border-b">
                 <th class="text-left py-2 px-4">Date</th>
                 <th class="text-left py-2 px-4">Result</th>
+                <th class="text-left py-2 px-4">Mismatches</th>
                 <th class="text-left py-2 px-4">Auditor</th>
             </tr>
         </thead>
         <tbody>
             @foreach($asset->audits as $audit)
-            <tr class="border-b">
+            <tr class="border-b align-top">
                 <td class="py-2 px-4">{{ $audit->audit_date->format('Y-m-d H:i') }}</td>
-                <td class="py-2 px-4"><span class="px-2 py-1 text-xs rounded {{ $audit->result === 'MATCH' ? 'bg-green-200' : 'bg-red-200' }}">{{ $audit->result }}</span></td>
+                <td class="py-2 px-4"><span class="px-2 py-1 text-xs rounded {{ $audit->result === 'MATCH' ? 'bg-green-200' : ($audit->result === 'MISMATCH' ? 'bg-red-200' : 'bg-gray-200') }}">{{ $audit->result }}</span></td>
+                <td class="py-2 px-4 text-xs">
+                    @if(!empty($audit->mismatches))
+                        <ul class="list-disc ml-4">
+                            @foreach($audit->mismatches as $field => $values)
+                                <li><strong>{{ $field }}</strong>: registered "{{ $values['registered'] }}" / actual "{{ $values['actual'] }}"</li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <span class="text-gray-400">—</span>
+                    @endif
+                </td>
                 <td class="py-2 px-4">{{ $audit->auditor?->name }}</td>
             </tr>
             @endforeach
@@ -47,6 +59,7 @@
     @csrf
 
     <h2 class="text-lg font-semibold">Enter Actual Device Data</h2>
+    <p class="text-sm text-gray-500">The result (MATCH / MISMATCH / INCOMPLETE) is computed by the system from your input — it cannot be chosen manually.</p>
 
     <div class="grid grid-cols-2 gap-4">
         <div>
@@ -56,6 +69,17 @@
         <div>
             <label class="block text-sm font-medium">Device Serial Number *</label>
             <input type="text" name="device_serial" required value="{{ old('device_serial', $asset->serial_number) }}" class="w-full border rounded px-3 py-2">
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-medium">Brand</label>
+            <input type="text" name="device_brand" value="{{ old('device_brand', $asset->brand) }}" class="w-full border rounded px-3 py-2">
+        </div>
+        <div>
+            <label class="block text-sm font-medium">Model</label>
+            <input type="text" name="device_model" value="{{ old('device_model', $asset->model) }}" class="w-full border rounded px-3 py-2">
         </div>
     </div>
 
@@ -90,17 +114,6 @@
             <label class="block text-sm font-medium">IP Address</label>
             <input type="text" name="device_ip" value="{{ old('device_ip', $asset->static_ip) }}" class="w-full border rounded px-3 py-2">
         </div>
-    </div>
-
-    <div>
-        <label class="block text-sm font-medium">Audit Result *</label>
-        <select name="result" required class="w-full border rounded px-3 py-2">
-            <option value="MATCH">MATCH</option>
-            <option value="MISMATCH">MISMATCH</option>
-            <option value="NEW DEVICE">NEW DEVICE</option>
-            <option value="UNKNOWN DEVICE">UNKNOWN DEVICE</option>
-            <option value="INCOMPLETE">INCOMPLETE</option>
-        </select>
     </div>
 
     <div>
