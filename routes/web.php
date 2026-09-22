@@ -42,6 +42,11 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('assets/{asset}/documents', DocumentController::class)->only(['create', 'store', 'destroy']);
 
+    Route::get('/assets/{asset}/documents/generate', [DocumentController::class, 'generate'])->name('documents.generate');
+    Route::post('/assets/{asset}/documents/generate', [DocumentController::class, 'storeGenerated'])->name('documents.generate.store');
+    Route::get('/documents/{document}', [DocumentController::class, 'preview'])->name('documents.preview');
+    Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
+
     Route::middleware('can:manage-master-data')->group(function () {
         Route::resource('templates', TemplateController::class)->except(['show', 'edit', 'update']);
         Route::put('/templates/{template}/toggle', [TemplateController::class, 'toggle'])->name('templates.toggle');

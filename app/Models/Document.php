@@ -12,13 +12,15 @@ class Document extends Model
 
     protected $fillable = [
         'asset_id', 'transfer_id', 'document_type', 'document_number', 'title',
-        'template_id', 'file_path', 'file_type', 'generated_date', 'generated_by', 'status',
+        'template_id', 'payload', 'file_path', 'file_type', 'generated_date',
+        'generated_by', 'status',
     ];
 
     protected function casts(): array
     {
         return [
             'generated_date' => 'date',
+            'payload' => 'array',
         ];
     }
 

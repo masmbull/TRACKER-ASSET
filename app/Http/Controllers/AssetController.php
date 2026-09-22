@@ -14,6 +14,7 @@ use App\Models\AssetTransfer;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\AuditComparisonService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -278,21 +279,28 @@ class AssetController extends Controller
         $validated = $request->validate([
             'device_hostname' => 'required|string',
             'device_serial' => 'required|string',
+            'device_brand' => 'nullable|string',
+            'device_model' => 'nullable|string',
             'device_processor' => 'nullable|string',
             'device_ram' => 'nullable|string',
             'device_storage' => 'nullable|string',
             'device_os' => 'nullable|string',
             'device_mac' => 'nullable|string',
             'device_ip' => 'nullable|string',
-            'result' => 'required|in:MATCH,MISMATCH,NEW DEVICE,UNKNOWN DEVICE,INCOMPLETE',
             'notes' => 'nullable|string',
         ]);
+
+        // The result is computed by the system — never chosen by the auditor (PRD §28/§29).
+        $comparison = app(AuditComparisonService::class)->compare($asset, $validated);
 
         $audit = AssetAudit::create([
             'asset_id' => $asset->id,
             'audit_date' => now(),
             'auditor_id' => Auth::id(),
             ...$validated,
+            'result' => $comparison['result'],
+            'mismatches' => $comparison['mismatches'],
+            'status' => 'submitted',
         ]);
 
         ActivityLog::create([
@@ -301,12 +309,24 @@ class AssetController extends Controller
             'entity_type' => 'asset_audits',
             'entity_id' => $audit->id,
             'entity_identifier' => $asset->asset_id,
-            'old_value' => json_encode($asset->only(['hostname', 'serial_number', 'mac_address', 'processor', 'ram', 'storage', 'os_version'])),
+            'old_value' => json_encode($asset->only(['hostname', 'serial_number', 'brand', 'model', 'mac_address', 'processor', 'ram', 'storage', 'os_version', 'static_ip'])),
             'new_value' => json_encode($validated),
+            'metadata' => ['result' => $comparison['result'], 'mismatches' => $comparison['mismatches']],
             'source' => 'Asset Audit',
         ]);
 
-        return redirect()->route('assets.show', $asset)->with('success', 'Audit submitted.');
+        $detail = $comparison['mismatches'] === [] ? '' : ' — '.implode('; ', array_map(
+            fn (string $field, array $values) => "{$field}: registered \"{$values['registered']}\" vs actual \"{$values['actual']}\"",
+            array_keys($comparison['mismatches']),
+            $comparison['mismatches'],
+        ));
+
+        return redirect()
+            ->route('assets.audit', $asset)
+            ->with(
+                $comparison['result'] === AuditComparisonService::MATCH ? 'success' : 'warning',
+                "Audit submitted: {$comparison['result']}{$detail}"
+            );
     }
 
     public function transfer(Asset $asset)
