@@ -176,7 +176,7 @@ class AssetController extends Controller
     {
         $this->authorize('view', $asset);
 
-        $asset->load(['category', 'status', 'location', 'currentUser', 'company', 'assignments', 'audits', 'repairs', 'transfers', 'documents', 'attachments', 'activityLogs']);
+        $asset->load(['category', 'status', 'location', 'currentUser', 'company', 'assignments', 'audits', 'repairs', 'transfers', 'documents', 'attachments.uploader', 'activityLogs']);
 
         return view('assets.show', compact('asset'));
     }
