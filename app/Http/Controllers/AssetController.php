@@ -363,7 +363,7 @@ class AssetController extends Controller
                 ->first();
 
             if ($oldAssignment) {
-                $oldAssignment->update(['returned_date' => $validated['transfer_date']]);
+                $oldAssignment->close($validated['transfer_date']);
             }
 
             $transfer = AssetTransfer::create([

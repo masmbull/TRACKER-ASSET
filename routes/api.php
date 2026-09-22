@@ -16,4 +16,3 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/audits', [AuditApiController::class, 'submit'])
     ->middleware(AuthenticateAuditAgent::class);
-

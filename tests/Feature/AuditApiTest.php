@@ -2,14 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\ActivityLog;
 use App\Models\AgentApiToken;
 use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -39,7 +37,7 @@ class AuditApiTest extends TestCase
             'ram' => '8 GB',
         ]);
 
-        $this->token = 'tat_' . Str::random(48);
+        $this->token = 'tat_'.Str::random(48);
 
         AgentApiToken::create([
             'name' => 'test-agent',
@@ -49,7 +47,7 @@ class AuditApiTest extends TestCase
 
     private function agentHeaders(): array
     {
-        return ['Authorization' => 'Bearer ' . $this->token];
+        return ['Authorization' => 'Bearer '.$this->token];
     }
 
     public function test_unauthenticated_requests_are_rejected(): void

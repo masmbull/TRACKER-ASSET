@@ -24,6 +24,35 @@ class AssetAssignment extends Model
         ];
     }
 
+    /**
+     * An assignment is open (current holder) while it has no return date.
+     */
+    public function isOpen(): bool
+    {
+        return $this->returned_date === null;
+    }
+
+    /**
+     * Close an assignment at the given date. A closed assignment can never
+     * be reopened — ownership moves forward only.
+     */
+    public function close(\DateTimeInterface|string $returnedDate): static
+    {
+        $this->update(['returned_date' => $returnedDate]);
+
+        return $this;
+    }
+
+    /**
+     * Days between assignment and return / today. Pure helper, no queries.
+     */
+    public function heldDays(?\DateTimeInterface $asOf = null): int
+    {
+        $end = $this->returned_date ?? ($asOf ? \Carbon\Carbon::instance($asOf)->startOfDay() : now()->startOfDay());
+
+        return max(0, (int) $this->assigned_date->diffInDays($end, false)) + 1;
+    }
+
     public function asset(): BelongsTo
     {
         return $this->belongsTo(Asset::class);

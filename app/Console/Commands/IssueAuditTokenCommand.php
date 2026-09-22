@@ -24,7 +24,7 @@ class IssueAuditTokenCommand extends Command
             return self::FAILURE;
         }
 
-        $plainText = 'tat_' . Str::random(48);
+        $plainText = 'tat_'.Str::random(48);
 
         AgentApiToken::create([
             'name' => $name,

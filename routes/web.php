@@ -5,6 +5,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetImportController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\IkeBastInspectionController;
@@ -74,6 +75,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports/export', [ReportController::class, 'export'])
         ->name('reports.export')
         ->middleware('can:export-assets');
+
+    Route::get('/barcode', [BarcodeController::class, 'form'])->name('barcode.form');
+    Route::post('/barcode', [BarcodeController::class, 'resolve'])->name('barcode.resolve');
 
     Route::middleware('can:manage-master-data')->group(function () {
         Route::get('/master/{type}', [MasterDataController::class, 'index'])->name('master.index');
