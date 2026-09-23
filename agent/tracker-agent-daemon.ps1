@@ -36,25 +36,37 @@ $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $workDir = Join-Path $env:LOCALAPPDATA 'TRACKER'
 $selfName = 'tracker-agent-daemon.ps1'
 
-# --- piped bootstrap ---------------------------------------------------------
-# When the user pastes ONE line from the web (iex), this script has no file.
-# Save a copy to %LOCALAPPDATA%, register autostart, then start the saved copy.
-if (-not $PSCommandPath) {
-    New-Item -ItemType Directory -Force -Path $workDir | Out-Null
-    $dest = Join-Path $workDir $selfName
-    $text = $MyInvocation.MyCommand.ScriptBlock.ToString()
-    if ([string]::IsNullOrWhiteSpace($text)) { throw 'Could not capture script body.' }
-    Set-Content -Path $dest -Value $text -Encoding UTF8
-    $cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $dest + '"'
-    Set-ItemProperty -Path $runKey -Name $runName -Value $cmd -Force
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $dest
-    exit 0
-}
+$dest = Join-Path $workDir $selfName
+$runningFromInstalledCopy = $PSCommandPath -and ($PSCommandPath -eq $dest)
 
-# --- uninstall ---------------------------------------------------------------
 if ($Uninstall) {
     Remove-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue
     Write-Host 'Daemon removed from autostart.'
+    exit 0
+}
+
+New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+
+if (-not $runningFromInstalledCopy) {
+    # Not the installed copy yet: persist ourselves.
+    if ($PSCommandPath) {
+        Copy-Item -Force -Path $PSCommandPath -Destination $dest
+    } else {
+        # Piped through iex: capture our own source text.
+        $text = $MyInvocation.MyCommand.ScriptBlock.ToString()
+        if ([string]::IsNullOrWhiteSpace($text)) { throw 'Could not capture script body.' }
+        Set-Content -Path $dest -Value $text -Encoding UTF8
+    }
+}
+
+# Autostart registration is idempotent and always enforced - even when the
+# daemon was started by hand from the installed path.
+$cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $dest + '"'
+Set-ItemProperty -Path $runKey -Name $runName -Value $cmd -Force
+
+if (-not $runningFromInstalledCopy) {
+    # Hand over to the installed copy (hidden) and exit this bootstrap instance.
+    Start-Process powershell.exe -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $dest + '"') -WindowStyle Hidden
     exit 0
 }
 

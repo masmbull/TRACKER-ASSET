@@ -155,6 +155,27 @@ class ResidentDaemonTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_daemon_script_registers_hidden_autostart()
+    {
+        $body = $this->get(route('agent.daemon', ['token' => $this->token]))->getContent();
+
+        // Starts hidden, registers HKCU Run autostart, polls the inbox, self-updates.
+        $this->assertStringContainsString('-WindowStyle Hidden', $body);
+        $this->assertStringContainsString('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', $body);
+        $this->assertStringContainsString('/api/agent/inbox', $body);
+        $this->assertStringContainsString('Update-Self', $body);
+        $this->assertStringContainsString('LOCALAPPDATA', $body);
+    }
+
+    public function test_daemon_script_is_ascii_only()
+    {
+        // PowerShell 5.1 parses BOM-less files as ANSI: a stray multi-byte
+        // character (e.g. an em dash) breaks the script on older clients.
+        $body = $this->get(route('agent.daemon', ['token' => $this->token]))->getContent();
+
+        $this->assertSame(0, preg_match('/[^\x00-\x7F]/', $body));
+    }
+
     public function test_commands_page_renders_for_admin()
     {
         $admin = User::factory()->create(['role' => 'admin']);
