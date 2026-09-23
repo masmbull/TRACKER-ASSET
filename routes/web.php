@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\AgentScriptController;
+use App\Http\Controllers\AgentTokenController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetImportController;
 use App\Http\Controllers\AttachmentController;
@@ -24,6 +26,10 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middl
 Route::get('/auth/microsoft', [AuthController::class, 'microsoftRedirect'])->name('auth.microsoft')->middleware('guest');
 Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallback'])->name('auth.microsoft.callback');
 
+// Audit agent bootstrap script (PRD §11). The token in the query string is the
+// credential — target laptops have no session, so this endpoint is public.
+Route::get('/agent/run.ps1', [AgentScriptController::class, 'script'])->name('agent.run');
+
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -46,6 +52,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/assets/{asset}/audit', [AssetController::class, 'audit'])->name('assets.audit');
     Route::post('/assets/{asset}/audit', [AssetController::class, 'submitAudit'])->name('assets.audit.submit');
+    Route::get('/assets/{asset}/audit-device', [AssetController::class, 'auditDevice'])->name('assets.audit.device');
+    Route::post('/assets/{asset}/audit-device', [AssetController::class, 'submitAuditDevice'])->name('assets.audit.device.submit');
     Route::get('/assets/{asset}/transfer', [AssetController::class, 'transfer'])->name('assets.transfer');
     Route::post('/assets/{asset}/transfer', [AssetController::class, 'submitTransfer'])->name('assets.transfer.submit');
     Route::get('/assets/{asset}/repair/create', [AssetController::class, 'createRepair'])->name('assets.repair.create');
@@ -78,6 +86,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/barcode', [BarcodeController::class, 'form'])->name('barcode.form');
     Route::post('/barcode', [BarcodeController::class, 'resolve'])->name('barcode.resolve');
+
+    Route::middleware('can:manage-agents')->group(function () {
+        Route::get('/agent', [AgentTokenController::class, 'index'])->name('agent.index');
+        Route::post('/agent', [AgentTokenController::class, 'store'])->name('agent.store');
+        Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
+    });
 
     Route::middleware('can:manage-master-data')->group(function () {
         Route::get('/master/{type}', [MasterDataController::class, 'index'])->name('master.index');

@@ -46,6 +46,8 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('manage-users', fn (User $user) => $user->isAdmin());
 
+        Gate::define('manage-agents', fn (User $user) => $user->isAdmin());
+
         Gate::define('view-activity-log', fn (User $user) => $user->hasRole('admin', 'support', 'technician'));
     }
 }

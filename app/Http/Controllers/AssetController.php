@@ -272,6 +272,106 @@ class AssetController extends Controller
         return view('assets.audit', compact('asset'));
     }
 
+    /**
+     * Browser-based device scan (PRD §10 web replacement of the legacy EXE
+     * "Scan" button). Open this page ON the device being audited.
+     */
+    public function auditDevice(Asset $asset)
+    {
+        $this->authorize('audit', $asset);
+
+        $asset->load(['category', 'status', 'location', 'currentUser', 'company', 'audits']);
+
+        return view('assets.audit-device', compact('asset'));
+    }
+
+    /**
+     * Submit a browser-collected audit (PRD §10/§11 web replacement of the
+     * legacy EXE "Scan" button). The browser reports only what it can truthfully
+     * read from its sandbox; server-side comparison logic is unchanged.
+     */
+    public function submitAuditDevice(Request $request, Asset $asset)
+    {
+        $this->authorize('audit', $asset);
+
+        $validated = $request->validate([
+            'browser_os' => 'nullable|string|max:255',
+            'browser_ram' => 'nullable|string|max:255',
+            'browser_processor' => 'nullable|string|max:255',
+            'browser_storage' => 'nullable|string|max:255',
+            'browser_gpu' => 'nullable|string|max:255',
+            'manual_serial' => 'nullable|string|max:255',
+            'manual_hostname' => 'nullable|string|max:255',
+            'manual_mac' => 'nullable|string|max:255',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        $notes = trim(
+            ($validated['notes'] !== '' && $validated['notes'] !== null ? $validated['notes'] . "\n" : '')
+            . 'Browser scan - GPU: ' . ($validated['browser_gpu'] ?: 'n/a')
+            . '; UA: ' . substr($request->userAgent() ?? '', 0, 300)
+        );
+
+        $actual = [
+            // Identity is typed from the device label when available; the browser
+            // sandbox cannot read serial/MAC/hostname (skipped when empty).
+            'device_serial' => $validated['manual_serial'] ?: null,
+            'device_hostname' => $validated['manual_hostname'] ?: null,
+            'device_mac' => $validated['manual_mac'] ?: null,
+            'device_os' => $validated['browser_os'] ?: null,
+            'device_ram' => $validated['browser_ram'] ?: null,
+            'device_processor' => $validated['browser_processor'] ?: null,
+            'device_storage' => $validated['browser_storage'] ?: null,
+            'device_ip' => $request->ip() ?: null,
+        ];
+
+        // Only the IP is guaranteed from the browser scan — identity may be absent.
+        $result = app(AuditComparisonService::class)->compare($asset, $actual, ['device_ip']);
+
+        $audit = AssetAudit::create([
+            'asset_id' => $asset->id,
+            'audit_date' => now(),
+            'auditor_id' => Auth::id(),
+            ...$actual,
+            'result' => $result['result'],
+            'mismatches' => $result['mismatches'],
+            'status' => 'submitted',
+            'notes' => $notes,
+        ]);
+
+        ActivityLog::create([
+            'actor_id' => Auth::id(),
+            'action' => 'AUDIT',
+            'entity_type' => 'asset_audits',
+            'entity_id' => $audit->id,
+            'entity_identifier' => $asset->asset_id,
+            'old_value' => json_encode($asset->only([
+                'hostname', 'serial_number', 'brand', 'model',
+                'processor', 'ram', 'storage', 'os_version', 'mac_address', 'static_ip',
+            ])),
+            'new_value' => json_encode($actual),
+            'metadata' => [
+                'result' => $result['result'],
+                'mismatches' => $result['mismatches'],
+                'via' => 'browser-scan',
+            ],
+            'source' => 'Asset Audit',
+        ]);
+
+        $detail = $result['mismatches'] === [] ? '' : ' — ' . implode('; ', array_map(
+            fn (string $field, array $values) => "{$field}: registered \"{$values['registered']}\" vs actual \"{$values['actual']}\"",
+            array_keys($result['mismatches']),
+            $result['mismatches'],
+        ));
+
+        return redirect()
+            ->route('assets.audit', $asset)
+            ->with(
+                $result['result'] === AuditComparisonService::MATCH ? 'success' : 'warning',
+                "Device scan submitted: {$result['result']}{$detail}"
+            );
+    }
+
     public function submitAudit(Request $request, Asset $asset)
     {
         $this->authorize('audit', $asset);
