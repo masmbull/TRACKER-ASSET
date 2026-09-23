@@ -1,18 +1,22 @@
-<?php
-
 use App\Http\Controllers\Api\AuditApiController;
+use App\Http\Controllers\Api\AgentCommandApiController;
 use App\Http\Middleware\AuthenticateAuditAgent;
 use Illuminate\Support\Facades\Route;
 
 /*
-|--------------------------------------------------------------------------
-| Audit Agent API (PRD §11 — preferred audit architecture)
-|--------------------------------------------------------------------------
+|---------------------------------------------------------------------------
+| Audit Agent API (PRD section 11)
+|---------------------------------------------------------------------------
 |
-| Lightweight client posts device JSON; all logic stays in Laravel.
-| Authenticates with a Bearer token issued via `php artisan audit:token`.
+| Resident daemon polls GET /api/agent/inbox every N seconds, acks commands.
+| Browser audit POST /api/audits (one-shot collector).
+| All endpoints use Bearer tokens issued via /agent page.
 |
 */
 
-Route::post('/audits', [AuditApiController::class, 'submit'])
-    ->middleware(AuthenticateAuditAgent::class);
+Route::middleware(AuthenticateAuditAgent::class)->group(function () {
+    Route::post('/audits', [AuditApiController::class, 'submit']);
+
+    Route::get('/agent/inbox', [AgentCommandApiController::class, 'inbox']);
+    Route::post('/agent/commands/{command}/ack', [AgentCommandApiController::class, 'ack']);
+});
