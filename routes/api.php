@@ -1,7 +1,7 @@
-﻿<?php
+<?php
 
-use App\Http\Controllers\Api\AuditApiController;
 use App\Http\Controllers\Api\AgentCommandApiController;
+use App\Http\Controllers\Api\AuditApiController;
 use App\Http\Middleware\AuthenticateAuditAgent;
 use Illuminate\Support\Facades\Route;
 
