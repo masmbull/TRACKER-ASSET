@@ -18,7 +18,7 @@ class AgentDistributionTest extends TestCase
 
     private function issueToken(string $name = 'lab-agent'): string
     {
-        $plain = 'tat_' . Str::random(48);
+        $plain = sprintf('tat_%s', Str::random(48));
 
         AgentApiToken::create([
             'name' => $name,
@@ -30,6 +30,9 @@ class AgentDistributionTest extends TestCase
 
     public function test_admin_can_manage_agents_and_others_cannot(): void
     {
+        // Guests are bounced to the login screen first (no session = no acting user).
+        $this->get(route('agent.index'))->assertRedirect('/login');
+
         $admin = User::factory()->create(['role' => 'admin']);
         $support = User::factory()->create(['role' => 'support']);
 
@@ -37,7 +40,6 @@ class AgentDistributionTest extends TestCase
 
         $this->actingAs($support)->get(route('agent.index'))->assertForbidden();
         $this->actingAs($support)->post(route('agent.store'), ['name' => 'x'])->assertForbidden();
-        $this->get(route('agent.index'))->assertRedirect('/login');
     }
 
     public function test_creating_token_returns_one_liner_commands_once(): void
@@ -75,8 +77,8 @@ class AgentDistributionTest extends TestCase
         $response->assertOk();
         $body = $response->getContent();
 
-        $this->assertStringContainsString("'" . rtrim($url, '/') . "'", $body);
-        $this->assertStringContainsString("'" . $plain . "'", $body);
+        $this->assertStringContainsString(sprintf("'%s'", rtrim($url, '/')), $body);
+        $this->assertStringContainsString(sprintf("'%s'", $plain), $body);
         $this->assertStringContainsString('Get-CimInstance Win32_ComputerSystem', $body); // real collector
         $this->assertStringNotContainsString('$env:TRACKER_AUDIT_TOKEN', $body);
     }

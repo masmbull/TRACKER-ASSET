@@ -306,22 +306,25 @@ class AssetController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $notes = trim(
-            ($validated['notes'] !== '' && $validated['notes'] !== null ? $validated['notes'] . "\n" : '')
-            . 'Browser scan - GPU: ' . ($validated['browser_gpu'] ?: 'n/a')
-            . '; UA: ' . substr($request->userAgent() ?? '', 0, 300)
-        );
+        // Build the note without string concatenation (style-safe, easy to read).
+        $parts = [];
+        if (! empty($validated['notes'])) {
+            $parts[] = $validated['notes'];
+        }
+        $parts[] = sprintf('Browser scan - GPU: %s', $validated['browser_gpu'] ?? 'n/a');
+        $parts[] = sprintf('UA: %s', substr((string) $request->userAgent(), 0, 300));
+        $notes = implode("\n", $parts);
 
         $actual = [
             // Identity is typed from the device label when available; the browser
             // sandbox cannot read serial/MAC/hostname (skipped when empty).
-            'device_serial' => $validated['manual_serial'] ?: null,
-            'device_hostname' => $validated['manual_hostname'] ?: null,
-            'device_mac' => $validated['manual_mac'] ?: null,
-            'device_os' => $validated['browser_os'] ?: null,
-            'device_ram' => $validated['browser_ram'] ?: null,
-            'device_processor' => $validated['browser_processor'] ?: null,
-            'device_storage' => $validated['browser_storage'] ?: null,
+            'device_serial' => $validated['manual_serial'] ?? null,
+            'device_hostname' => $validated['manual_hostname'] ?? null,
+            'device_mac' => $validated['manual_mac'] ?? null,
+            'device_os' => $validated['browser_os'] ?? null,
+            'device_ram' => $validated['browser_ram'] ?? null,
+            'device_processor' => $validated['browser_processor'] ?? null,
+            'device_storage' => $validated['browser_storage'] ?? null,
             'device_ip' => $request->ip() ?: null,
         ];
 
