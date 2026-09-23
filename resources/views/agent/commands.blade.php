@@ -3,7 +3,12 @@
 @section('title', 'Fleet Commands')
 
 @section('content')
-<h1 class="text-2xl font-bold mb-6">Fleet Command Center</h1>
+@php $pendingCount = $commands->where('status', 'pending')->count(); @endphp
+
+<h1 class="text-2xl font-bold mb-2">Fleet Command Center</h1>
+<p class="text-sm text-gray-500 mb-6">
+    Agents poll every 10 seconds. Pending commands run automatically and results appear here.
+</p>
 
 <div class="bg-white p-6 rounded shadow mb-6">
     <div class="flex justify-between items-center mb-4">
@@ -108,4 +113,11 @@
         </tbody>
     </table>
 </div>
+
+{{-- Auto-refresh while work is in flight, so admins watch commands complete live. --}}
+@if($pendingCount > 0)
+    <script>
+        setTimeout(function () { window.location.reload(); }, 10000);
+    </script>
+@endif
 @endsection

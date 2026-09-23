@@ -63,6 +63,7 @@
                 'missing_asset_id' => ['Missing Asset ID', 'text-red-500'],
                 'duplicate_serial' => ['Duplicate Serial', 'text-red-700'],
                 'retirement_due' => ['Retirement Due', 'text-gray-700'],
+                'audit_stale' => ['Audit Older Than 6 Months', 'text-yellow-700'],
             ];
         @endphp
         @foreach($warningLabels as $key => $meta)
@@ -72,6 +73,40 @@
             </div>
         @endforeach
     </div>
+</div>
+
+<div class="bg-white p-6 rounded shadow mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold">Agent Fleet</h2>
+        <div class="flex gap-2 text-sm">
+            @can('manage-agents')
+                <a href="{{ route('agent.commands') }}" class="text-blue-600">Command Center</a>
+                <form method="POST" action="{{ route('agent.scanAll') }}" class="inline">
+                    @csrf
+                    <button type="submit" class="text-green-700 font-medium">Scan All Laptops</button>
+                </form>
+            @endcan
+        </div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="border rounded p-3">
+            <p class="text-xs text-gray-500">Agents Online</p>
+            <p class="text-xl font-bold text-green-600">{{ $fleet['online'] }}</p>
+        </div>
+        <div class="border rounded p-3">
+            <p class="text-xs text-gray-500">Stale (&gt; 5 min)</p>
+            <p class="text-xl font-bold text-yellow-600">{{ $fleet['stale'] }}</p>
+        </div>
+        <div class="border rounded p-3">
+            <p class="text-xs text-gray-500">Never Reported</p>
+            <p class="text-xl font-bold text-gray-500">{{ $fleet['offline'] }}</p>
+        </div>
+        <div class="border rounded p-3">
+            <p class="text-xs text-gray-500">Pending Commands</p>
+            <p class="text-xl font-bold {{ $fleet['pending_commands'] > 0 ? 'text-orange-600' : 'text-gray-700' }}">{{ $fleet['pending_commands'] }}</p>
+        </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-3">Agent audits in the last 24 hours: <strong>{{ $fleet['recent_audits'] }}</strong></p>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
