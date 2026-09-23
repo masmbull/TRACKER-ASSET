@@ -1,3 +1,5 @@
+﻿<?php
+
 use App\Http\Controllers\Api\AuditApiController;
 use App\Http\Controllers\Api\AgentCommandApiController;
 use App\Http\Middleware\AuthenticateAuditAgent;
