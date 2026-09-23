@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\Asset;
 use App\Models\AssetAudit;
 use App\Models\AssetRepair;
@@ -41,6 +43,8 @@ class DashboardController extends Controller
 
         $warnings = $this->warnings();
 
+        $fleet = $this->fleetStatus();
+
         $recentActivity = ActivityLog::with('actor')
             ->orderByDesc('created_at')
             ->limit(10)
@@ -51,8 +55,43 @@ class DashboardController extends Controller
             'retiredAssets', 'disposedAssets',
             'openRepairs', 'totalRepairs', 'recentTransfers',
             'assetsByCategory', 'assetsByLocation', 'assetsByCompany', 'statusCounts',
-            'warnings', 'recentActivity'
+            'warnings', 'fleet', 'recentActivity'
         ));
+    }
+
+    /**
+     * Agent fleet health (PRD §11): how many resident agents are reporting.
+     *
+     * @return array{online:int, stale:int, offline:int, pending_commands:int, recent_audits:int}
+     */
+    private function fleetStatus(): array
+    {
+        $tokens = AgentApiToken::where('is_active', true)->get(['id', 'last_used_at']);
+
+        $online = 0;
+        $stale = 0;
+
+        foreach ($tokens as $token) {
+            if ($token->last_used_at === null) {
+                continue;
+            }
+
+            if ($token->last_used_at->gt(now()->subMinutes(5))) {
+                $online++;
+            } else {
+                $stale++;
+            }
+        }
+
+        return [
+            'online' => $online,
+            'stale' => $stale,
+            'offline' => $tokens->count() - $online - $stale,
+            'pending_commands' => AgentCommand::where('status', 'pending')->count(),
+            'recent_audits' => ActivityLog::where('source', 'Audit Agent')
+                ->where('created_at', '>=', now()->subDay())
+                ->count(),
+        ];
     }
 
     /**
@@ -95,6 +134,9 @@ class DashboardController extends Controller
             'duplicate_serial' => $duplicateSerials->count(),
             'retirement_due' => Asset::whereNotNull('purchase_year')
                 ->whereRaw('(purchase_year + coalesce(useful_life_years, 0)) <= ?', [now()->year])
+                ->count(),
+            'audit_stale' => Asset::has('audits')
+                ->whereDoesntHave('audits', fn ($q) => $q->where('audit_date', '>=', now()->subMonths(6)))
                 ->count(),
         ];
     }

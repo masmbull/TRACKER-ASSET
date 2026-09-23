@@ -186,4 +186,26 @@ class ResidentDaemonTest extends TestCase
             ->assertSee('Scan All Laptops')
             ->assertSee('Update All Agents');
     }
+
+    public function test_commands_page_autorefreshes_while_pending()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        AgentCommand::create(['agent_token_id' => $this->apiToken->id, 'command' => 'scan']);
+
+        $this->actingAs($admin)->get(route('agent.commands'))
+            ->assertOk()
+            ->assertSee('window.location.reload()', false);
+    }
+
+    public function test_dashboard_shows_fleet_health()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->apiToken->update(['last_used_at' => now()]);
+        AgentCommand::create(['agent_token_id' => $this->apiToken->id, 'command' => 'scan']);
+
+        $this->actingAs($admin)->get('/')
+            ->assertOk()
+            ->assertSee('Agent Fleet')
+            ->assertViewHas('fleet', fn (array $fleet) => $fleet['online'] === 1 && $fleet['pending_commands'] === 1);
+    }
 }
