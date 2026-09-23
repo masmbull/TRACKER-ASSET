@@ -26,15 +26,14 @@ class AgentTokenController extends Controller
             'expires_days' => 'nullable|integer|min:1|max:3650',
         ]);
 
-        $plainText = 'tat_' . Str::random(48);
+        $plainText = sprintf('tat_%s', Str::random(48));
+        $expiresDays = $validated['expires_days'] ?? null;
 
         AgentApiToken::create([
             'name' => $validated['name'],
             'token_hash' => hash('sha256', $plainText),
             'abilities' => ['audit:submit', 'assets:lookup'],
-            'expires_at' => ! empty($validated['expires_days'])
-                ? now()->addDays((int) $validated['expires_days'])
-                : null,
+            'expires_at' => $expiresDays ? now()->addDays((int) $expiresDays) : null,
         ]);
 
         $agentUrl = route('agent.run', ['token' => $plainText]);

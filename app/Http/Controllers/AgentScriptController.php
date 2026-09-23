@@ -33,14 +33,14 @@ class AgentScriptController extends Controller
 
         $script = str_replace(
             '$env:TRACKER_API_URL',
-            "'" . $url . "'",
+            sprintf("'%s'", $url),
             $script,
             $countApiUrl
         );
 
         $script = str_replace(
             '$env:TRACKER_AUDIT_TOKEN',
-            "'" . $token . "'",
+            sprintf("'%s'", $token),
             $script,
             $countToken
         );
