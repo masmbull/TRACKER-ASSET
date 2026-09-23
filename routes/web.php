@@ -97,6 +97,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
         Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');
         Route::post('/agent/update-all', [AgentFleetController::class, 'updateAll'])->name('agent.updateAll');
+        Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
     });
 
     Route::middleware('can:manage-master-data')->group(function () {

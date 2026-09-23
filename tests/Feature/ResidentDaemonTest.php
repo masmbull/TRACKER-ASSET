@@ -176,15 +176,13 @@ class ResidentDaemonTest extends TestCase
         $this->assertSame(0, preg_match('/[^\x00-\x7F]/', $body));
     }
 
-    public function test_commands_page_renders_for_admin()
+    public function test_commands_page_renders_with_sweep_button()
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
         $this->actingAs($admin)->get(route('agent.commands'))
             ->assertOk()
-            ->assertSee('Fleet Command Center')
-            ->assertSee('Scan All Laptops')
-            ->assertSee('Update All Agents');
+            ->assertSee('Sweep Now');
     }
 
     public function test_commands_page_autorefreshes_while_pending()
@@ -207,5 +205,61 @@ class ResidentDaemonTest extends TestCase
             ->assertOk()
             ->assertSee('Agent Fleet')
             ->assertViewHas('fleet', fn (array $fleet) => $fleet['online'] === 1 && $fleet['pending_commands'] === 1);
+    }
+
+    public function test_audit_sweep_queues_scan_per_active_token()
+    {
+        $second = AgentApiToken::create(['name' => 'other', 'token_hash' => hash('sha256', 'bogus')]);
+
+        $this->artisan('audit:sweep')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('queued 2, skipped 0');
+
+        $this->assertDatabaseCount('agent_commands', 2);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'scan',
+            'agent_token_id' => $this->apiToken->id,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $second->id,
+        ]);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'AUDIT_SWEEP']);
+    }
+
+    public function test_audit_sweep_skips_agents_with_pending_or_recent_scan()
+    {
+        AgentCommand::create(['agent_token_id' => $this->apiToken->id, 'command' => 'scan']);
+
+        $this->artisan('audit:sweep')->assertExitCode(0);
+
+        // No second command queued for the busy token.
+        $this->assertCount(1, AgentCommand::where('agent_token_id', $this->apiToken->id)->get());
+    }
+
+    public function test_audit_sweep_accepts_single_token_filter()
+    {
+        AgentApiToken::create(['name' => 'skipped', 'token_hash' => hash('sha256', 'other')]);
+
+        $this->artisan('audit:sweep', ['--token' => 'laptop-dev', '--force' => true])
+            ->assertExitCode(0);
+
+        $this->assertDatabaseCount('agent_commands', 1);
+    }
+
+    public function test_manual_sweep_queues_for_idle_agents_only()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $busy = AgentApiToken::create(['name' => 'busy', 'token_hash' => hash('sha256', 'busy-secret')]);
+        AgentCommand::create(['agent_token_id' => $busy->id, 'command' => 'scan']);
+
+        $response = $this->actingAs($admin)->post(route('agent.sweep'));
+
+        $response->assertRedirect()->assertSessionHas('success');
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'scan',
+            'agent_token_id' => $this->apiToken->id,
+        ]);
+        $this->assertCount(1, AgentCommand::where('agent_token_id', $busy->id)->get());
     }
 }

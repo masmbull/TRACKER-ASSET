@@ -22,6 +22,10 @@
                 @csrf
                 <button type="submit" class="bg-purple-600 text-white px-4 py-2 rounded text-sm">Update All Agents</button>
             </form>
+            <form method="POST" action="{{ route('agent.sweep') }}">
+                @csrf
+                <button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded text-sm" title="Queue a scan for every active agent (skips busy or recently-swept)">Sweep Now</button>
+            </form>
         </div>
     </div>
 
