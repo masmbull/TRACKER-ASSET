@@ -61,6 +61,7 @@ Seeded local accounts (password `password`): `shohibul.anwar@mito.co.id` (admin)
 | Activity Log page | ✅ Done — filter + pagination |
 | IKE_BAST Inspection Table | ✅ Done — multi-line receiving inspection per asset, approve/reject, print-friendly — see `docs/ike-bast-inspection.md` |
 | Audit Agent API | ✅ Done — token-authed JSON endpoint for the lightweight Windows collector — see `docs/audit-api.md` |
+| Audit Agent client | ✅ Done — `agent/tracker-audit-agent.ps1` (WMI/CIM collector, run with `-Token`, package to `.exe` via ps2exe) |
 | Barcode / QR Scan page | ✅ Done — resolves barcode / QR / Asset ID / serial / hostname to the asset detail |
 | Microsoft Entra ID SSO | ✅ Done — OAuth/OIDC code flow, auto-provision, config-gated (set `ENTRA_ENABLED=true`) |
 | Microsoft Graph / SharePoint integration | 🟡 Graph profile sync done (SSO); file storage to SharePoint pending |
