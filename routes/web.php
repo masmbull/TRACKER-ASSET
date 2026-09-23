@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\AgentFleetController;
 use App\Http\Controllers\AgentScriptController;
 use App\Http\Controllers\AgentTokenController;
 use App\Http\Controllers\AssetController;
@@ -26,9 +27,9 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middl
 Route::get('/auth/microsoft', [AuthController::class, 'microsoftRedirect'])->name('auth.microsoft')->middleware('guest');
 Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallback'])->name('auth.microsoft.callback');
 
-// Audit agent bootstrap script (PRD §11). The token in the query string is the
-// credential — target laptops have no session, so this endpoint is public.
+// Audit agent scripts (PRD §11) — public, token in query is the credential.
 Route::get('/agent/run.ps1', [AgentScriptController::class, 'script'])->name('agent.run');
+Route::get('/agent/daemon.ps1', [AgentScriptController::class, 'daemon'])->name('agent.daemon');
 
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
@@ -91,6 +92,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/agent', [AgentTokenController::class, 'index'])->name('agent.index');
         Route::post('/agent', [AgentTokenController::class, 'store'])->name('agent.store');
         Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
+
+        Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
+        Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
+        Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');
+        Route::post('/agent/update-all', [AgentFleetController::class, 'updateAll'])->name('agent.updateAll');
     });
 
     Route::middleware('can:manage-master-data')->group(function () {

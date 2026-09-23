@@ -6,52 +6,41 @@ use App\Models\AgentApiToken;
 use Illuminate\Http\Request;
 
 /**
- * Serves the audit agent PowerShell script (PRD §11) with the server URL and
- * a pre-issued token baked in, so fleet rollout is a single paste on each
- * laptop — no .exe, no install, revocable from the web.
+ * Serves the audit agent PowerShell scripts with server URL + token baked in.
  *
- * GET /agent/run.ps1              → script with the requested token
- * GET /agent/run.ps1?token=...&install=1 → same, pre-set to register the
- *                                          daily scheduled task
+ * GET /agent/run.ps1   → one-shot collector
+ * GET /agent/daemon.ps1 → resident background daemon
  */
 class AgentScriptController extends Controller
 {
-    public function script(Request $request)
+    private function serveAgent(string $file, Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $token = (string) $request->query('token', '');
 
         if ($token !== '') {
             $model = AgentApiToken::where('token_hash', hash('sha256', $token))->first();
-
             abort_unless($model?->isUsable() ?? false, 404, 'Unknown or revoked agent token.');
         }
 
-        $script = (string) file_get_contents(base_path('agent/tracker-audit-agent.ps1'));
-
-        // The script is static; these two bindings make it deployment-specific.
+        $script = (string) file_get_contents(base_path(sprintf('agent/%s', $file)));
         $url = rtrim((string) config('app.url'), '/');
 
-        $script = str_replace(
-            '$env:TRACKER_API_URL',
-            sprintf("'%s'", $url),
-            $script,
-            $countApiUrl
-        );
-
-        $script = str_replace(
-            '$env:TRACKER_AUDIT_TOKEN',
-            sprintf("'%s'", $token),
-            $script,
-            $countToken
-        );
-
-        if ($request->boolean('install')) {
-            $script = str_replace('[switch]$Install,', '[switch]$Install = $true,', $script, $countInstall);
-        }
+        $script = str_replace('$env:TRACKER_API_URL', sprintf("'%s'", $url), $script);
+        $script = str_replace('$env:TRACKER_AUDIT_TOKEN', sprintf("'%s'", $token), $script);
 
         return response($script, 200, [
             'Content-Type' => 'text/plain; charset=UTF-8',
-            'Content-Disposition' => 'inline; filename="tracker-audit-agent.ps1"',
+            'Content-Disposition' => sprintf('inline; filename="%s"', $file),
         ]);
+    }
+
+    public function script(Request $request)
+    {
+        return $this->serveAgent('tracker-audit-agent.ps1', $request);
+    }
+
+    public function daemon(Request $request)
+    {
+        return $this->serveAgent('tracker-agent-daemon.ps1', $request);
     }
 }

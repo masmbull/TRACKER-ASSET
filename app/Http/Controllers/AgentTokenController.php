@@ -36,16 +36,17 @@ class AgentTokenController extends Controller
             'expires_at' => $expiresDays ? now()->addDays((int) $expiresDays) : null,
         ]);
 
-        $agentUrl = route('agent.run', ['token' => $plainText]);
-        $installUrl = route('agent.run', ['token' => $plainText, 'install' => 1]);
+        $daemonUrl = route('agent.daemon', ['token' => $plainText]);
 
         return redirect()
             ->route('agent.index')
             ->with('created_token', [
                 'name' => $validated['name'],
                 'plain_text' => $plainText,
-                'run_once' => "powershell -NoProfile -ExecutionPolicy Bypass -Command \"iwr '$agentUrl' | iex\"",
-                'install' => "powershell -NoProfile -ExecutionPolicy Bypass -Command \"iwr '$installUrl' | iex\"",
+                'install' => sprintf(
+                    "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"iwr '%s' -OutFile '%%LOCALAPPDATA%%\\TRACKER\\daemon.ps1'; powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '%%LOCALAPPDATA%%\\TRACKER\\daemon.ps1'\"",
+                    $daemonUrl,
+                ),
             ]);
     }
 
