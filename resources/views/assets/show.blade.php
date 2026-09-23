@@ -347,7 +347,17 @@
         <a href="{{ route('ike-bast.inspection.create', $asset) }}" class="bg-purple-600 text-white px-4 py-2 rounded ml-2">IKE_BAST Inspection</a>
     @endcan
     @can('transfer', $asset)
-        <a href="{{ route('assets.transfer', $asset) }}" class="bg-green-600 text-white px-4 py-2 rounded ml-2">Transfer Asset</a>
+        <a href="{{ route('assets.transfer', $asset) }}" class="bg-green-600 text-white px-4 py-2 rounded ml-2">Transfer</a>
+    @endcan
+    @can('archive', $asset)
+        <form method="POST" action="{{ route('assets.retire', $asset) }}" class="inline ml-2" onsubmit="return confirm('Retire this asset?')">
+            @csrf
+            <button type="submit" class="bg-yellow-600 text-white px-4 py-2 rounded">Retire</button>
+        </form>
+        <form method="POST" action="{{ route('assets.dispose', $asset) }}" class="inline ml-1" onsubmit="return confirm('Dispose this asset?')">
+            @csrf
+            <button type="submit" class="bg-red-700 text-white px-4 py-2 rounded">Dispose</button>
+        </form>
     @endcan
 </div>
 @endsection
