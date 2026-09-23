@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,7 +49,7 @@ class AssetAssignment extends Model
      */
     public function heldDays(?\DateTimeInterface $asOf = null): int
     {
-        $end = $this->returned_date ?? ($asOf ? \Carbon\Carbon::instance($asOf)->startOfDay() : now()->startOfDay());
+        $end = $this->returned_date ?? ($asOf ? Carbon::instance($asOf)->startOfDay() : now()->startOfDay());
 
         return max(0, (int) $this->assigned_date->diffInDays($end, false)) + 1;
     }

@@ -30,3 +30,5 @@ storage/app/documents/
 storage/app/attachments/
 # Real company asset data must never enter the repository.
 IT Assets.xlsx
+# Legacy Windows audit app (reference only, never distributed via repo)
+ITAuditMITOGroup-NEW.exe

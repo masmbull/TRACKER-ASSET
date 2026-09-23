@@ -60,3 +60,32 @@ and revocation (`is_active = false`).
 
 See `tests/Feature/AuditApiTest.php` — auth rejection, MATCH, MISMATCH with
 field detail, UNKNOWN DEVICE immutability, inactive/expired tokens.
+
+## Agent Client (PRD §11 — lightweight audit agent)
+
+`agent/tracker-audit-agent.ps1` collects hardware identity from any Windows
+machine via WMI/CIM and posts it to this API. Nothing is collected beyond the
+identity fields listed above.
+
+```powershell
+# Run once (token issued via php artisan audit:token)
+.\agent\tracker-audit-agent.ps1 -ApiUrl https://your-domain -Token tat_xxx
+
+# Or via environment variables
+$env:TRACKER_AUDIT_TOKEN = 'tat_xxx'
+$env:TRACKER_API_URL     = 'https://your-domain'
+.\agent\tracker-audit-agent.ps1
+```
+
+### Package as `.exe` (optional, for distribution)
+
+```powershell
+Install-Module ps2exe -Scope CurrentUser
+Invoke-ps2exe .\agent\tracker-audit-agent.ps1 .\agent\tracker-audit-agent.exe `
+    -noConsole:$false -requireAdmin:$false
+```
+
+Distribute `tracker-audit-agent.exe` with the token pre-configured
+(e.g. via env var set by deployment tooling). Revoke any token any time with
+`is_active = false` on `agent_api_tokens`.
+
