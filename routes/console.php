@@ -24,4 +24,3 @@ Schedule::command('audit:sweep')
     ->weeklyOn(1, '06:00')
     ->withoutOverlapping()
     ->when(fn () => AgentApiToken::where('is_active', true)->exists());
-
