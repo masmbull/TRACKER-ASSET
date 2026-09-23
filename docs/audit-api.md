@@ -65,43 +65,88 @@ field detail, UNKNOWN DEVICE immutability, inactive/expired tokens.
 
 Admin-only page (`/agent`, nav → Master Data → Audit Agents):
 
-1. Create a token (name + expiry) → get two copy-ready one-liners:
-   - **Run once** — `powershell -c "iwr '<site>/agent/run.ps1?token=TAT' | iex"`
-   - **Install** — same URL with `&install=1` → registers a **daily Scheduled
-     Task** (`TRACKER Audit Agent`, 10:17) so the laptop audits itself forever.
-2. The script endpoint `/agent/run.ps1` injects the site URL and token into the
-  static collector script — target laptops never need a file download.
-3. **Revoke** any token on the spot: affected laptops get `401` at their next run.
-4. `last_used_at` in the token table shows which laptops are actually reporting.
+1. Create a token (name + expiry) → copy the **one-line install command**. It
+   downloads `/agent/daemon.ps1` (with site URL + token already baked in),
+   saves it to `%LOCALAPPDATA%\TRACKER\`, registers autostart and starts it
+   **hidden** — no window, no tray, no popup.
+2. The script endpoint validates the token on every download: unknown or
+   revoked tokens get `404`, so a leaked/removed token cannot pull the script.
+3. **Revoke** any token on the spot: affected laptops get `401` on their next poll.
+4. `last_used_at` refreshes on every inbox poll and powers the online indicator
+   on `/agent/commands`.
 
 Only the SHA-256 hash is stored; plaintext appears once at creation.
 
 
-## Agent Client (PRD §11 — lightweight audit agent)
 
-`agent/tracker-audit-agent.ps1` collects hardware identity from any Windows
-machine via WMI/CIM and posts it to this API. Nothing is collected beyond the
-identity fields listed above.
+## Agent Client (PRD §11 — resident daemon, no .exe)
+
+`agent/tracker-agent-daemon.ps1` is a **resident** background collector:
+
+- Runs **hidden** — no console window, no tray icon, no popup
+- Polls the command inbox every 10 seconds
+- Executes `scan` (collect hardware via WMI/CIM → `POST /api/audits`) and
+  `update` (re-pull itself from the server, replace, restart) commands
+- Autostarts via the `HKCU\...\Run` key — **no admin rights, no installer**
+- Idle footprint ≈ 55–70 MB RAM (script runs in a hosted PowerShell process)
+
+### Install (one line, generated on `/agent`)
 
 ```powershell
-# Run once (token issued via php artisan audit:token)
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "iwr '<site>/agent/daemon.ps1?token=TAT' -OutFile '%LOCALAPPDATA%\TRACKER\daemon.ps1'; powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '%LOCALAPPDATA%\TRACKER\daemon.ps1'"
+```
+
+The daemon saves itself to `%LOCALAPPDATA%\TRACKER\`, registers autostart and
+keeps polling. Token + server URL are already baked into the served script.
+
+### Remove
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\TRACKER\daemon.ps1" -Uninstall
+```
+
+Or revoke the token on `/agent` — the daemon then gets `401` on every poll.
+
+### One-shot collector (no daemon)
+
+`agent/tracker-audit-agent.ps1` collects and posts once, then exits — useful for
+spot checks or packaging to `.exe` with ps2exe:
+
+```powershell
 .\agent\tracker-audit-agent.ps1 -ApiUrl https://your-domain -Token tat_xxx
-
-# Or via environment variables
-$env:TRACKER_AUDIT_TOKEN = 'tat_xxx'
-$env:TRACKER_API_URL     = 'https://your-domain'
-.\agent\tracker-audit-agent.ps1
 ```
 
-### Package as `.exe` (optional, for distribution)
+## Fleet Command Center — `/agent/commands`
 
-```powershell
-Install-Module ps2exe -Scope CurrentUser
-Invoke-ps2exe .\agent\tracker-audit-agent.ps1 .\agent\tracker-audit-agent.exe `
-    -noConsole:$false -requireAdmin:$false
-```
+Admin-only. The page shows agent online status (poll within 90 s = 🟢 online)
+and provides 1-click fleet actions:
 
-Distribute `tracker-audit-agent.exe` with the token pre-configured
-(e.g. via env var set by deployment tooling). Revoke any token any time with
-`is_active = false` on `agent_api_tokens`.
+| Action | Effect |
+|---|---|
+| **Scan Now** (per laptop) | queues a `scan` command for that token only |
+| **Scan All Laptops** | broadcast `scan` (`agent_token_id = null` → every daemon) |
+| **Update All Agents** | broadcast `update`; each daemon re-pulls `/agent/daemon.ps1`, swaps the file and restarts hidden |
+
+### Command API (Bearer token)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/agent/inbox` | returns up to 10 pending commands for this token (plus broadcasts) |
+| `POST /api/agent/commands/{id}/ack` | body `{"status":"done"\|"failed","result":{...}}` |
+
+Each daemon poll also refreshes `last_used_at`, which powers the online/offline
+indicator. Commands are never delivered twice: the daemon acks each one.
+
+### Timing
+
+Click → data visible:
+
+| Phase | Time |
+|---|---|
+| Dashboard click → command queued | instant |
+| Daemon picks it up (10 s poll) | 0–10 s |
+| WMI/CIM hardware collection | 2–4 s |
+| POST + server comparison + render | < 1 s |
+| **Total (typical)** | **≈ 6–12 s** |
+
 
