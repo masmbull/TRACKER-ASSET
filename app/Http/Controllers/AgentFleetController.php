@@ -58,6 +58,36 @@ class AgentFleetController extends Controller
         return back()->with('success', 'Update broadcast to all agents — each re-pulls the latest script and restarts.');
     }
 
+    /**
+     * Manual sweep (same logic as the scheduled `audit:sweep`): queue a scan
+     * for every active, non-busy agent, skipping recently-swept ones.
+     */
+    public function sweep()
+    {
+        $tokens = AgentApiToken::where('is_active', true)->get();
+
+        $queued = 0;
+
+        foreach ($tokens as $token) {
+            $busy = AgentCommand::query()
+                ->where('agent_token_id', $token->id)
+                ->where('command', 'scan')
+                ->where(fn ($q) => $q
+                    ->where('status', 'pending')
+                    ->orWhere('created_at', '>=', now()->subMinutes(30)))
+                ->exists();
+
+            if ($busy) {
+                continue;
+            }
+
+            $this->enqueue($token->id, 'scan', ['source' => 'manual-sweep']);
+            $queued++;
+        }
+
+        return back()->with('success', sprintf('Sweep queued %d agent(s).', $queued));
+    }
+
     private function enqueue(?int $tokenId, string $command, array $payload = []): void
     {
         AgentCommand::create([
