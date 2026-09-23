@@ -361,7 +361,7 @@ class AssetController extends Controller
             'source' => 'Asset Audit',
         ]);
 
-        $detail = $result['mismatches'] === [] ? '' : ' — ' . implode('; ', array_map(
+        $detail = $result['mismatches'] === [] ? '' : ' — '.implode('; ', array_map(
             fn (string $field, array $values) => "{$field}: registered \"{$values['registered']}\" vs actual \"{$values['actual']}\"",
             array_keys($result['mismatches']),
             $result['mismatches'],
