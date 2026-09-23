@@ -60,6 +60,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/assets/{asset}/repair/create', [AssetController::class, 'createRepair'])->name('assets.repair.create');
     Route::post('/assets/{asset}/repair', [AssetController::class, 'storeRepair'])->name('assets.repair.store');
     Route::delete('/assets/{asset}/repair/{repair}', [AssetController::class, 'destroyRepair'])->name('assets.repair.destroy');
+    Route::post('/assets/{asset}/retire', [AssetController::class, 'retire'])->name('assets.retire');
+    Route::post('/assets/{asset}/dispose', [AssetController::class, 'dispose'])->name('assets.dispose');
 
     Route::resource('assets/{asset}/documents', DocumentController::class)->only(['create', 'store', 'destroy']);
 

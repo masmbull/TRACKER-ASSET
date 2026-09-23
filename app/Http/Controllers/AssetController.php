@@ -263,6 +263,100 @@ class AssetController extends Controller
         return redirect()->route('assets.index')->with('success', 'Asset archived.');
     }
 
+    /**
+     * Retire an asset (PRD §G3): sets the Retired status, stamps retire_date
+     * when the record has none, closes the open assignment and releases the
+     * holder — all inside one transaction so history survives intact.
+     */
+    /**
+     * Retire an asset (PRD §G3): sets the Retired status, stamps retire_date
+     * when the record has none, closes the open assignment and releases the
+     * holder — all inside one transaction so history survives intact.
+     */
+    public function retire(Request $request, Asset $asset)
+    {
+        $this->authorize('archive', $asset);
+
+        $validated = $request->validate([
+            'retire_date' => 'nullable|date|before_or_equal:today',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        $status = AssetStatus::where('name', 'Retired')->firstOrFail();
+        $retireDate = $validated['retire_date'] ?? now()->toDateString();
+
+        DB::transaction(function () use ($asset, $status, $retireDate) {
+            $openAssignment = $asset->assignments()->whereNull('returned_date')->latest('assigned_date')->first();
+            if ($openAssignment) {
+                $openAssignment->close(now()->toDateString());
+            }
+
+            $asset->update([
+                'asset_status_id' => $status->id,
+                'retire_date' => $retireDate,
+                'current_user_id' => null,
+            ]);
+        });
+
+        ActivityLog::create([
+            'actor_id' => Auth::id(),
+            'action' => 'RETIRE',
+            'entity_type' => 'assets',
+            'entity_id' => $asset->id,
+            'entity_identifier' => $asset->asset_id,
+            'old_value' => json_encode(['status' => $asset->getOriginal('asset_status_id')]),
+            'new_value' => json_encode(['status' => $status->id, 'retire_date' => $retireDate]),
+            'metadata' => ['notes' => $validated['notes'] ?? null],
+            'source' => 'Web UI',
+        ]);
+
+        return redirect()->route('assets.show', $asset)->with('success', 'Asset retired.');
+    }
+
+    /**
+     * Dispose an asset (PRD §G3): same guarantees as retire(), with the
+     * Disposed status. Retired/disposed assets can be relisted via edit.
+     */
+    public function dispose(Request $request, Asset $asset)
+    {
+        $this->authorize('archive', $asset);
+
+        $validated = $request->validate([
+            'retire_date' => 'nullable|date|before_or_equal:today',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        $status = AssetStatus::where('name', 'Disposed')->firstOrFail();
+        $retireDate = $validated['retire_date'] ?? now()->toDateString();
+
+        DB::transaction(function () use ($asset, $status, $retireDate) {
+            $openAssignment = $asset->assignments()->whereNull('returned_date')->latest('assigned_date')->first();
+            if ($openAssignment) {
+                $openAssignment->close(now()->toDateString());
+            }
+
+            $asset->update([
+                'asset_status_id' => $status->id,
+                'retire_date' => $retireDate,
+                'current_user_id' => null,
+            ]);
+        });
+
+        ActivityLog::create([
+            'actor_id' => Auth::id(),
+            'action' => 'DISPOSE',
+            'entity_type' => 'assets',
+            'entity_id' => $asset->id,
+            'entity_identifier' => $asset->asset_id,
+            'old_value' => json_encode(['status' => $asset->getOriginal('asset_status_id')]),
+            'new_value' => json_encode(['status' => $status->id, 'retire_date' => $retireDate]),
+            'metadata' => ['notes' => $validated['notes'] ?? null],
+            'source' => 'Web UI',
+        ]);
+
+        return redirect()->route('assets.show', $asset)->with('success', 'Asset disposed.');
+    }
+
     public function audit(Asset $asset)
     {
         $this->authorize('audit', $asset);

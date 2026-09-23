@@ -83,6 +83,29 @@ class Asset extends Model
         return $this->hasMany(AssetTransfer::class);
     }
 
+    /**
+     * Retire or dispose an asset (PRD §G3): sets the terminal status, records
+     * the retirement date, closes the open assignment and releases the holder.
+     * History is preserved — the asset is never deleted.
+     */
+    public function retire(string $action): static
+    {
+        $status = AssetStatus::where('name', $action)->firstOrFail();
+
+        $openAssignment = $this->assignments()->whereNull('returned_date')->latest('assigned_date')->first();
+
+        if ($openAssignment) {
+            $openAssignment->close(now()->toDateString());
+        }
+
+        $this->asset_status_id = $status->id;
+        $this->retire_date = $this->retire_date ?? now()->toDateString();
+        $this->current_user_id = null;
+        $this->save();
+
+        return $this;
+    }
+
     public function inspectionSessions(): HasMany
     {
         return $this->hasMany(IkeBastInspectionSession::class);
