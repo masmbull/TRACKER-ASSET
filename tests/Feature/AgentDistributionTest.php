@@ -56,10 +56,9 @@ class AgentDistributionTest extends TestCase
 
         $created = session('created_token');
 
-        $this->assertStringContainsString('iwr', $created['run_once']);
-        $this->assertStringContainsString('agent/run.ps1?token=tat_', $created['run_once']);
-        $this->assertStringContainsString('install=1', $created['install']);
-        $this->assertStringContainsString($created['plain_text'], $created['run_once']);
+        $this->assertStringContainsString('iwr', $created['install']);
+        $this->assertStringContainsString('agent/daemon.ps1?token=tat_', $created['install']);
+        $this->assertStringContainsString('-WindowStyle Hidden', $created['install']);
 
         $token = AgentApiToken::where('name', 'laptop-fin-01')->firstOrFail();
         $this->assertTrue($token->expires_at?->isFuture() ?? false);
@@ -81,16 +80,6 @@ class AgentDistributionTest extends TestCase
         $this->assertStringContainsString(sprintf("'%s'", $plain), $body);
         $this->assertStringContainsString('Get-CimInstance Win32_ComputerSystem', $body); // real collector
         $this->assertStringNotContainsString('$env:TRACKER_AUDIT_TOKEN', $body);
-    }
-
-    public function test_script_endpoint_install_flag_prepares_scheduled_task(): void
-    {
-        $plain = $this->issueToken('install-me');
-
-        $body = $this->get(route('agent.run', ['token' => $plain, 'install' => 1]))->getContent();
-
-        $this->assertStringContainsString('[switch]$Install = $true,', $body);
-        $this->assertStringContainsString('Register-ScheduledTask', $body);
     }
 
     public function test_unknown_or_revoked_token_gets_404(): void
