@@ -47,7 +47,8 @@ class ResidentDaemonTest extends TestCase
 
         $response = $this->withHeaders($this->bearer())->getJson('/api/agent/inbox');
 
-        $response->assertOk()->assertJsonCount(2, 'commands');
+        $response->assertOk();
+        $this->assertCount(2, $response->json('commands'));
     }
 
     public function test_ack_marks_command_done()
@@ -72,14 +73,14 @@ class ResidentDaemonTest extends TestCase
         $this->withHeaders(['Authorization' => sprintf('Bearer %s', $otherToken)])
             ->postJson(sprintf('/api/agent/commands/%s/ack', $command->id), ['status' => 'done'])
             ->assertForbidden();
+
+        $this->assertSame('pending', $command->fresh()->status);
     }
 
     public function test_inbox_without_token_returns_401()
     {
         $this->getJson('/api/agent/inbox')->assertUnauthorized();
     }
-
-    // --- Web fleet control ---------------------------------------------------
 
     public function test_scan_now_enqueues_command()
     {
@@ -88,10 +89,12 @@ class ResidentDaemonTest extends TestCase
         $this->actingAs($admin)->post(route('agent.scan', $this->apiToken))
             ->assertRedirect();
 
-        AgentCommand::where('command', 'scan')
-            ->where('agent_token_id', $this->apiToken->id)
-            ->where('status', 'pending')
-            ->assertCount(1);
+        $this->assertDatabaseCount('agent_commands', 1);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'scan',
+            'agent_token_id' => $this->apiToken->id,
+            'status' => 'pending',
+        ]);
     }
 
     public function test_scan_all_broadcasts_to_null()
@@ -100,10 +103,12 @@ class ResidentDaemonTest extends TestCase
 
         $this->actingAs($admin)->post(route('agent.scanAll'))->assertRedirect();
 
-        AgentCommand::whereNull('agent_token_id')
-            ->where('command', 'scan')
-            ->where('status', 'pending')
-            ->assertCount(1);
+        $this->assertDatabaseCount('agent_commands', 1);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'scan',
+            'agent_token_id' => null,
+            'status' => 'pending',
+        ]);
     }
 
     public function test_update_all_broadcasts_to_null()
@@ -112,10 +117,12 @@ class ResidentDaemonTest extends TestCase
 
         $this->actingAs($admin)->post(route('agent.updateAll'))->assertRedirect();
 
-        AgentCommand::whereNull('agent_token_id')
-            ->where('command', 'update')
-            ->where('status', 'pending')
-            ->assertCount(1);
+        $this->assertDatabaseCount('agent_commands', 1);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'update',
+            'agent_token_id' => null,
+            'status' => 'pending',
+        ]);
     }
 
     public function test_viewer_cannot_enqueue()
@@ -134,8 +141,8 @@ class ResidentDaemonTest extends TestCase
 
         $this->get(route('agent.daemon', ['token' => $this->token]))
             ->assertOk()
-            ->assertSee($url)
-            ->assertSee($this->token)
+            ->assertSee($url, false)
+            ->assertSee($this->token, false)
             ->assertDontSee('$env:TRACKER_API_URL')
             ->assertDontSee('$env:TRACKER_AUDIT_TOKEN')
             ->assertSee('Invoke-Scan')
@@ -144,7 +151,8 @@ class ResidentDaemonTest extends TestCase
 
     public function test_daemon_script_rejects_invalid_token()
     {
-        $this->get(route('agent.daemon', ['token' => 'tat_bogus']))->assertNotFound();
+        $this->get(route('agent.daemon', ['token' => 'tat_bogus']))
+            ->assertNotFound();
     }
 
     public function test_commands_page_renders_for_admin()
@@ -153,6 +161,8 @@ class ResidentDaemonTest extends TestCase
 
         $this->actingAs($admin)->get(route('agent.commands'))
             ->assertOk()
-            ->assertSee('Fleet Command Center');
+            ->assertSee('Fleet Command Center')
+            ->assertSee('Scan All Laptops')
+            ->assertSee('Update All Agents');
     }
 }
