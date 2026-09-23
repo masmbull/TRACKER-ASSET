@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Serves the audit agent PowerShell scripts with server URL + token baked in.
@@ -13,7 +14,7 @@ use Illuminate\Http\Request;
  */
 class AgentScriptController extends Controller
 {
-    private function serveAgent(string $file, Request $request): \Symfony\Component\HttpFoundation\Response
+    private function serveAgent(string $file, Request $request): Response
     {
         $token = (string) $request->query('token', '');
 
