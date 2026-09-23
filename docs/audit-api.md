@@ -61,6 +61,22 @@ and revocation (`is_active = false`).
 See `tests/Feature/AuditApiTest.php` — auth rejection, MATCH, MISMATCH with
 field detail, UNKNOWN DEVICE immutability, inactive/expired tokens.
 
+## Fleet rollout (web, no .exe) — `/agent`
+
+Admin-only page (`/agent`, nav → Master Data → Audit Agents):
+
+1. Create a token (name + expiry) → get two copy-ready one-liners:
+   - **Run once** — `powershell -c "iwr '<site>/agent/run.ps1?token=TAT' | iex"`
+   - **Install** — same URL with `&install=1` → registers a **daily Scheduled
+     Task** (`TRACKER Audit Agent`, 10:17) so the laptop audits itself forever.
+2. The script endpoint `/agent/run.ps1` injects the site URL and token into the
+  static collector script — target laptops never need a file download.
+3. **Revoke** any token on the spot: affected laptops get `401` at their next run.
+4. `last_used_at` in the token table shows which laptops are actually reporting.
+
+Only the SHA-256 hash is stored; plaintext appears once at creation.
+
+
 ## Agent Client (PRD §11 — lightweight audit agent)
 
 `agent/tracker-audit-agent.ps1` collects hardware identity from any Windows

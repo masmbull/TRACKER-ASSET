@@ -341,6 +341,7 @@
 <div class="mt-6">
     @can('audit', $asset)
         <a href="{{ route('assets.audit', $asset) }}" class="bg-blue-600 text-white px-4 py-2 rounded">Start Audit</a>
+        <a href="{{ route('assets.audit.device', $asset) }}" class="bg-indigo-600 text-white px-4 py-2 rounded ml-2">Device Scan</a>
     @endcan
     @can('manageAttachments', $asset)
         <a href="{{ route('ike-bast.inspection.create', $asset) }}" class="bg-purple-600 text-white px-4 py-2 rounded ml-2">IKE_BAST Inspection</a>

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    tracker-audit-agent — lightweight Windows hardware collector for TRACKER-ASSET (PRD §11).
+    tracker-audit-agent - lightweight Windows hardware collector for TRACKER-ASSET (PRD section 11).
 
 .DESCRIPTION
     Collects hardware identity from the local machine (WMI/CIM) and POSTs it to
@@ -17,6 +17,7 @@ param(
     [string]$ApiUrl = $env:TRACKER_API_URL,
     [string]$Token = $env:TRACKER_AUDIT_TOKEN,
     [string]$AssetId = "",
+    [switch]$Install,
     [switch]$Quiet
 )
 
@@ -109,4 +110,31 @@ if ($response.mismatches -and $response.mismatches.PSObject.Properties.Count -gt
 }
 
 Write-Host $response.message -ForegroundColor $color
+
+# --- optional: register a daily scheduled task (fleet rollout, PRD section 11) ------
+if ($Install) {
+    $taskName = 'TRACKER Audit Agent'
+    try {
+        # Save our own source (works whether piped via iex or run as a file),
+        # so the scheduled task runs a local copy with URL/token already baked in.
+        $scriptText = $MyInvocation.MyCommand.ScriptBlock.Ast.Extent.Text
+        if (-not $scriptText) { throw 'Cannot capture the running script text.' }
+        $bootFile = Join-Path $env:LOCALAPPDATA 'TRACKER-audit-agent.ps1'
+        Set-Content -Path $bootFile -Value $scriptText -Encoding UTF8
+
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $bootFile + '"')
+        $trigger = New-ScheduledTaskTrigger -Daily -At 10:17am
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force | Out-Null
+
+        Write-Host "[OK] Scheduled task '$taskName' registered - audits run daily at 10:17." -ForegroundColor Green
+        Write-Host "[i] Agent saved to: $bootFile" -ForegroundColor Cyan
+        Write-Host "[i] Run it now with: Start-ScheduledTask -TaskName '$taskName'" -ForegroundColor Cyan
+    }
+    catch {
+        Write-Host "[X] Could not register scheduled task: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host '[i] Tip: run PowerShell as your user (elevation may be required).' -ForegroundColor Yellow
+        exit 3
+    }
+}
+
 exit 0

@@ -43,11 +43,14 @@ class AuditComparisonService
     private const REQUIRED_ACTUAL = ['device_hostname', 'device_serial'];
 
     /**
+     * @param  array<string, string|null>  $actual
+     * @param  list<string>|null  $required  Fields that must be collected to count
+     *                                       as audited; defaults to identity fields.
      * @return array{result:string, mismatches:array<string, array{registered:?string, actual:?string}>}
      */
-    public function compare(Asset $asset, array $actual): array
+    public function compare(Asset $asset, array $actual, ?array $required = null): array
     {
-        foreach (self::REQUIRED_ACTUAL as $field) {
+        foreach ($required ?? self::REQUIRED_ACTUAL as $field) {
             if ($this->clean($actual[$field] ?? null) === null) {
                 return ['result' => self::INCOMPLETE, 'mismatches' => []];
             }

@@ -5,6 +5,12 @@
 @section('content')
 <h1 class="text-2xl font-bold mb-6">Audit Asset {{ $asset->asset_id }}</h1>
 
+<div class="mb-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm">
+    <strong>Recommended:</strong> open the page on the device itself and use the
+    <a href="{{ route('assets.audit.device', $asset) }}" class="text-blue-600 font-semibold">Device Scan (1 klik)</a>
+    — browser auto-collects OS/RAM/CPU/GPU and compares automatically.
+</div>
+
 <div class="bg-white p-6 rounded shadow mb-6">
     <h2 class="text-lg font-semibold mb-4">Registered Data</h2>
     <dl class="grid grid-cols-2 gap-2">

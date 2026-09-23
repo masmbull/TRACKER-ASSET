@@ -31,7 +31,10 @@
                                     @can('manage-users')
                                         <a href="{{ route('users.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-t">Users</a>
                                     @endcan
-                                    <a href="{{ route('templates.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Templates</a>
+                                    @can('manage-agents')
+                                <a href="{{ route('agent.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-t">Audit Agents</a>
+                            @endcan
+                            <a href="{{ route('templates.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Templates</a>
                                 </div>
                             </div>
                         @endcan
