@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AgentCommand;
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 

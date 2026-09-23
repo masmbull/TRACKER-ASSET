@@ -17,6 +17,7 @@ class ResidentDaemonTest extends TestCase
     use RefreshDatabase;
 
     private string $token;
+
     private AgentApiToken $apiToken;
 
     protected function setUp(): void
