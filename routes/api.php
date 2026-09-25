@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AgentCommandApiController;
+use App\Http\Controllers\Api\AgentRegistrationController;
 use App\Http\Controllers\Api\AuditApiController;
 use App\Http\Middleware\AuthenticateAuditAgent;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 | All endpoints use Bearer tokens issued via /agent page.
 |
 */
+
+// Public endpoints (no auth required)
+Route::get('/health', fn () => response()->json(['status' => 'ok']));
+Route::post('/agent/register', [AgentRegistrationController::class, 'register']);
 
 Route::middleware(AuthenticateAuditAgent::class)->group(function () {
     Route::post('/audits', [AuditApiController::class, 'submit']);

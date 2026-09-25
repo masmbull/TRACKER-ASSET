@@ -27,6 +27,10 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middl
 Route::get('/auth/microsoft', [AuthController::class, 'microsoftRedirect'])->name('auth.microsoft')->middleware('guest');
 Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallback'])->name('auth.microsoft.callback');
 
+// Public agent download (for installer) - outside auth middleware
+Route::get('/agent/download', [AgentTokenController::class, 'downloadLatest'])->name('agent.download.latest');
+Route::get('/agent/{token}/download', [AgentTokenController::class, 'download'])->name('agent.download');
+
 // Audit agent scripts (PRD §11) — public, token in query is the credential.
 Route::get('/agent/run.ps1', [AgentScriptController::class, 'script'])->name('agent.run');
 Route::get('/agent/daemon.ps1', [AgentScriptController::class, 'daemon'])->name('agent.daemon');
@@ -62,6 +66,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/assets/{asset}/repair/{repair}', [AssetController::class, 'destroyRepair'])->name('assets.repair.destroy');
     Route::post('/assets/{asset}/retire', [AssetController::class, 'retire'])->name('assets.retire');
     Route::post('/assets/{asset}/dispose', [AssetController::class, 'dispose'])->name('assets.dispose');
+    Route::post('/assets/{asset}/agent-scan', [AssetController::class, 'agentScan'])->name('assets.audit.agent.scan');
 
     Route::resource('assets/{asset}/documents', DocumentController::class)->only(['create', 'store', 'destroy']);
 
@@ -92,7 +97,6 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:manage-agents')->group(function () {
         Route::get('/agent', [AgentTokenController::class, 'index'])->name('agent.index');
-        Route::post('/agent', [AgentTokenController::class, 'store'])->name('agent.store');
         Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
 
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');

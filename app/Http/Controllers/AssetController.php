@@ -357,6 +357,28 @@ class AssetController extends Controller
         return redirect()->route('assets.show', $asset)->with('success', 'Asset disposed.');
     }
 
+    public function agentScan(Request $request, Asset $asset)
+    {
+        $this->authorize('audit', $asset);
+
+        if (empty($asset->serial_number)) {
+            return back()->with('error', 'This asset has no serial number. Agent scan requires a serial number to match the device.');
+        }
+
+        ActivityLog::create([
+            'actor_id' => Auth::id(),
+            'action' => 'AGENT_SCAN_REQUEST',
+            'entity_type' => 'assets',
+            'entity_id' => $asset->id,
+            'entity_identifier' => $asset->asset_id,
+            'new_value' => json_encode(['serial_number' => $asset->serial_number]),
+            'metadata' => ['via' => 'agent-scan'],
+            'source' => 'Web UI',
+        ]);
+
+        return back()->with('success', 'Scan command queued. The audit agent on this device will pick it up and send the scan result.');
+    }
+
     public function audit(Asset $asset)
     {
         $this->authorize('audit', $asset);

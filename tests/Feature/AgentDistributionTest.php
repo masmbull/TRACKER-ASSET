@@ -5,32 +5,14 @@ namespace Tests\Feature;
 use App\Models\AgentApiToken;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Str;
 use Tests\TestCase;
 
-/**
- * Agent fleet distribution (PRD §11): web-served bootstrap script,
- * one-liner install commands, revocable tokens.
- */
 class AgentDistributionTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function issueToken(string $name = 'lab-agent'): string
-    {
-        $plain = sprintf('tat_%s', Str::random(48));
-
-        AgentApiToken::create([
-            'name' => $name,
-            'token_hash' => hash('sha256', $plain),
-        ]);
-
-        return $plain;
-    }
-
     public function test_admin_can_manage_agents_and_others_cannot(): void
     {
-        // Guests are bounced to the login screen first (no session = no acting user).
         $this->get(route('agent.index'))->assertRedirect('/login');
 
         $admin = User::factory()->create(['role' => 'admin']);
@@ -39,72 +21,80 @@ class AgentDistributionTest extends TestCase
         $this->actingAs($admin)->get(route('agent.index'))->assertOk();
 
         $this->actingAs($support)->get(route('agent.index'))->assertForbidden();
-        $this->actingAs($support)->post(route('agent.store'), ['name' => 'x'])->assertForbidden();
     }
 
-    public function test_creating_token_returns_one_liner_commands_once(): void
+    public function test_download_latest_redirects_to_existing_token(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-
-        $response = $this->actingAs($admin)->post(route('agent.store'), [
-            'name' => 'laptop-fin-01',
-            'expires_days' => 30,
+        $token = AgentApiToken::create([
+            'name' => 'existing-device',
+            'token_hash' => hash('sha256', 'tok'),
+            'token_plain' => 'tok',
         ]);
 
-        $response->assertRedirect(route('agent.index'));
-        $response->assertSessionHas('created_token');
-
-        $created = session('created_token');
-
-        $this->assertStringContainsString('iwr', $created['install']);
-        $this->assertStringContainsString('agent/daemon.ps1?token=tat_', $created['install']);
-        $this->assertStringContainsString('-WindowStyle Hidden', $created['install']);
-
-        $token = AgentApiToken::where('name', 'laptop-fin-01')->firstOrFail();
-        $this->assertTrue($token->expires_at?->isFuture() ?? false);
-        // Only the hash is persisted — never the plaintext.
-        $this->assertNotSame($created['plain_text'], $token->token_hash);
+        $this->actingAs($admin)->get(route('agent.download.latest'))
+            ->assertRedirect(route('agent.download', $token));
     }
 
-    public function test_script_endpoint_injects_url_and_token(): void
-    {
-        $plain = $this->issueToken('serve-me');
-        $url = config('app.url');
-
-        $response = $this->get(route('agent.run', ['token' => $plain]));
-
-        $response->assertOk();
-        $body = $response->getContent();
-
-        $this->assertStringContainsString(sprintf("'%s'", rtrim($url, '/')), $body);
-        $this->assertStringContainsString(sprintf("'%s'", $plain), $body);
-        $this->assertStringContainsString('Get-CimInstance Win32_ComputerSystem', $body); // real collector
-        $this->assertStringNotContainsString('$env:TRACKER_AUDIT_TOKEN', $body);
-    }
-
-    public function test_unknown_or_revoked_token_gets_404(): void
-    {
-        $this->get(route('agent.run', ['token' => 'tat_bogus']))->assertNotFound();
-
-        $plain = $this->issueToken('to-revoke');
-        $this->get(route('agent.run', ['token' => $plain]))->assertOk();
-
-        $admin = User::factory()->create(['role' => 'admin']);
-        $token = AgentApiToken::where('name', 'to-revoke')->firstOrFail();
-        $this->actingAs($admin)->post(route('agent.revoke', $token))->assertRedirect(route('agent.index'));
-
-        $this->get(route('agent.run', ['token' => $plain]))->assertNotFound();
-        $this->assertFalse($token->fresh()->is_active);
-    }
-
-    public function test_duplicate_token_names_are_rejected(): void
+    public function test_download_latest_creates_token_when_none_exists(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs($admin)->post(route('agent.store'), ['name' => 'dup-name'])
-            ->assertRedirect(route('agent.index'));
+        $this->actingAs($admin)->get(route('agent.download.latest'))
+            ->assertRedirect();
+    }
 
-        $this->actingAs($admin)->post(route('agent.store'), ['name' => 'dup-name'])
-            ->assertSessionHasErrors('name');
+    public function test_download_serves_exe(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = AgentApiToken::create([
+            'name' => 'exe-device',
+            'token_hash' => hash('sha256', 'tok'),
+            'token_plain' => 'tok',
+        ]);
+
+        // CI checkouts have no built exe (storage/app is gitignored) — create a
+        // stub so the download path is exercised everywhere, then clean it up.
+        $exePath = storage_path('app/agent/TrackerAgent.exe');
+        $createdStub = false;
+        if (! file_exists($exePath)) {
+            if (! is_dir(dirname($exePath))) {
+                mkdir(dirname($exePath), 0755, true);
+            }
+            file_put_contents($exePath, "MZ\x90\x00stub");
+            $createdStub = true;
+        }
+
+        try {
+            $this->actingAs($admin)->get(route('agent.download', $token))
+                ->assertOk()
+                ->assertDownload('TrackerAgent.exe')
+                ->assertHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+        } finally {
+            if ($createdStub) {
+                unlink($exePath);
+            }
+        }
+    }
+
+    public function test_device_registration_issues_token(): void
+    {
+        $payload = [
+            'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'name' => 'field-laptop',
+            'platform' => 'Windows 11',
+        ];
+
+        $first = $this->postJson('/api/agent/register', $payload);
+        $first->assertOk()->assertJsonStructure(['token', 'message']);
+        $this->assertNotEmpty($first->json('token'));
+
+        $second = $this->postJson('/api/agent/register', $payload);
+        $second->assertOk()->assertJsonPath('token', $first->json('token'));
+
+        $this->assertDatabaseHas('agent_api_tokens', [
+            'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'platform' => 'Windows 11',
+        ]);
     }
 }

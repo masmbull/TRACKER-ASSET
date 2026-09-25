@@ -7,8 +7,13 @@ use App\Models\ActivityLog;
 use App\Models\AgentApiToken;
 use App\Models\Asset;
 use App\Models\AssetAudit;
+use App\Models\AssetCategory;
+use App\Models\AssetStatus;
+use App\Models\Company;
+use App\Models\Location;
 use App\Services\AuditComparisonService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * API for the lightweight audit agent (PRD §11 — preferred audit architecture).
@@ -126,22 +131,75 @@ class AuditApiController extends Controller
             $token->touch();
         }
 
+        $asset = $this->createUnknownAsset($payload);
+
+        $audit = AssetAudit::create([
+            'asset_id' => $asset->id,
+            'audit_date' => now(),
+            'auditor_id' => null,
+            'device_hostname' => $payload['hostname'] ?? null,
+            'device_serial' => $payload['serial_number'] ?? null,
+            'device_brand' => $payload['brand'] ?? null,
+            'device_model' => $payload['model'] ?? null,
+            'device_processor' => $payload['processor'] ?? null,
+            'device_ram' => $payload['ram'] ?? null,
+            'device_storage' => $payload['storage'] ?? null,
+            'device_os' => $payload['os'] ?? null,
+            'device_mac' => $payload['mac_address'] ?? null,
+            'device_ip' => $payload['ip_address'] ?? null,
+            'result' => AuditComparisonService::NEW_DEVICE,
+            'mismatches' => [],
+            'status' => 'submitted',
+            'notes' => 'Auto-registered by audit agent ('.request()->attributes->get('agent_token_name').').',
+        ]);
+
         ActivityLog::create([
             'actor_id' => null,
             'action' => 'AUDIT',
             'entity_type' => 'asset_audits',
-            'entity_identifier' => ($payload['serial_number'] ?? null) ?: ($payload['hostname'] ?? 'unknown-device'),
+            'entity_id' => $audit->id,
+            'entity_identifier' => $asset->asset_id,
             'new_value' => json_encode($payload),
-            'metadata' => ['result' => AuditComparisonService::UNKNOWN_DEVICE, 'via' => 'agent-api'],
+            'metadata' => ['result' => AuditComparisonService::NEW_DEVICE, 'via' => 'agent-api'],
             'source' => 'Audit Agent',
         ]);
 
         return response()->json([
-            'asset' => null,
-            'result' => AuditComparisonService::UNKNOWN_DEVICE,
+            'asset' => $asset->asset_id,
+            'result' => AuditComparisonService::NEW_DEVICE,
             'mismatches' => [],
-            'message' => 'Device is not registered. Open a transfer/import flow or register it first — nothing was overwritten.',
-        ], 202);
+            'message' => "New device registered as {$asset->asset_id}. Nothing was overwritten.",
+        ], 201);
+    }
+
+    private function createUnknownAsset(array $payload): Asset
+    {
+        $seed = $payload['serial_number'] ?: $payload['hostname'] ?: 'DEVICE';
+        $base = 'AST-'.(Str::upper(Str::slug((string) $seed, '-')) ?: 'DEVICE');
+        $candidate = $base;
+        $suffix = 1;
+
+        while (Asset::where('asset_id', $candidate)->exists()) {
+            $candidate = $base.'-'.(++$suffix);
+        }
+
+        return Asset::create([
+            'asset_id' => $candidate,
+            'company_id' => Company::firstOrFail(['id'])->id,
+            'category_id' => AssetCategory::firstOrFail(['id'])->id,
+            'brand' => $payload['brand'] ?? 'N/A',
+            'model' => $payload['model'] ?? 'N/A',
+            'serial_number' => $payload['serial_number'] ?? 'N/A',
+            'hostname' => $payload['hostname'] ?? 'N/A',
+            'processor' => $payload['processor'] ?? null,
+            'storage' => $payload['storage'] ?? null,
+            'ram' => $payload['ram'] ?? null,
+            'os_version' => $payload['os'] ?? null,
+            'mac_address' => $payload['mac_address'] ?? null,
+            'static_ip' => $payload['ip_address'] ?? null,
+            'location_id' => Location::firstOrFail(['id'])->id,
+            'asset_status_id' => AssetStatus::firstOrFail(['id'])->id,
+        ]);
     }
 
     private function resultMessage(Asset $asset, array $result): string

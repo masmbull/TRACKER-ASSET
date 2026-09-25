@@ -1,92 +1,109 @@
 @extends('layouts.app')
 
-@section('title', 'Audit Agent Fleet')
+@section('title', 'Audit Agents')
 
 @section('content')
-<h1 class="text-2xl font-bold mb-2">Audit Agent Fleet</h1>
-<p class="text-sm text-gray-500 mb-6">
-    Roll out the lightweight audit agent (PRD §11) to every laptop by pasting one command.
-    The script is served from this site — nothing to download, no <code>.exe</code>, revocable anytime.
-</p>
+<x-page-header title="Audit Agents" description="Download and deploy the audit agent to devices. The agent runs silently in the background and sends hardware scans automatically.">
+    <x-slot:actions>
+        <a href="{{ route('agent.download.latest') }}" class="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Download Agent
+        </a>
+    </x-slot:actions>
+</x-page-header>
 
-@if(session('created_token'))
-@php $created = session('created_token'); @endphp
-<div class="bg-green-50 border border-green-300 rounded p-4 mb-6">
-    <p class="font-semibold text-green-800 mb-2">Token <code>{{ $created['name'] }}</code> created — copy the commands now, the token is shown only once:</p>
-
-    <p class="text-xs text-gray-500 mt-3 mb-1">Run once (single audit):</p>
-    <div class="flex gap-2">
-        <code class="bg-gray-900 text-green-300 text-xs p-2 rounded flex-1 overflow-x-auto">{{ $created['run_once'] }}</code>
-        <button type="button" onclick="navigator.clipboard.writeText(@json($created['run_once']))" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Copy</button>
-    </div>
-
-    <p class="text-xs text-gray-500 mt-3 mb-1">Install (runs daily at 10:17 via Scheduled Task):</p>
-    <div class="flex gap-2">
-        <code class="bg-gray-900 text-green-300 text-xs p-2 rounded flex-1 overflow-x-auto">{{ $created['install'] }}</code>
-        <button type="button" onclick="navigator.clipboard.writeText(@json($created['install']))" class="bg-green-600 text-white px-3 py-1 rounded text-xs">Copy</button>
-    </div>
-
-    <p class="text-xs text-gray-500 mt-2">Raw token: <code>{{ $created['plain_text'] }}</code></p>
-</div>
-@endif
-
-<div class="bg-white p-6 rounded shadow mb-6">
-    <h2 class="text-lg font-semibold mb-3">Generate token</h2>
-    <form method="POST" action="{{ route('agent.store') }}" class="flex flex-wrap gap-3 items-end">
-        @csrf
-        <div>
-            <label class="block text-sm font-medium">Token name *</label>
-            <input type="text" name="name" required placeholder="laptop-fin-01" class="border rounded px-3 py-2">
-            @error('name')<p class="text-red-600 text-xs mt-1">{{ $message }}</p>@enderror
+<div class="grid grid-cols-1 gap-6">
+    <x-card title="How to Deploy" padding="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold">1</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Download Agent</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Click the button above to download the latest audit agent. A unique token is generated automatically.</p>
+                </div>
+            </div>
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold">2</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Install on Device</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Run <code class="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs">TrackerAgent.exe</code> on the device. No admin password required.</p>
+                </div>
+            </div>
+            <div class="flex gap-4">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold">3</div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Agent Runs in Background</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">After installation, the agent runs silently in the background. It will be detected by serial number automatically.</p>
+                </div>
+            </div>
         </div>
-        <div>
-            <label class="block text-sm font-medium">Expires (days)</label>
-            <input type="number" name="expires_days" min="1" max="3650" value="365" class="border rounded px-3 py-2 w-28">
-        </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Create</button>
-    </form>
-</div>
+    </x-card>
 
-<div class="bg-white p-6 rounded shadow">
-    <h2 class="text-lg font-semibold mb-3">Tokens</h2>
-    @if($tokens->count() > 0)
-    <table class="min-w-full text-sm">
-        <thead>
-            <tr class="border-b bg-gray-50">
-                <th class="text-left py-2 px-2">Name</th>
-                <th class="text-left py-2 px-2">Expires</th>
-                <th class="text-left py-2 px-2">Last used</th>
-                <th class="text-left py-2 px-2">Status</th>
-                <th class="text-left py-2 px-2">Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($tokens as $token)
-            <tr class="border-b">
-                <td class="py-2 px-2">{{ $token->name }}</td>
-                <td class="py-2 px-2">{{ $token->expires_at?->format('Y-m-d') ?? 'never' }}</td>
-                <td class="py-2 px-2">{{ $token->last_used_at?->diffForHumans() ?? 'never' }}</td>
-                <td class="py-2 px-2">
-                    @if($token->isUsable())
-                        <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-800">active</span>
-                    @else
-                        <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700">revoked/expired</span>
-                    @endif
-                </td>
-                <td class="py-2 px-2">
-                    @if($token->isUsable())
-                        <form method="POST" action="{{ route('agent.revoke', $token) }}" class="inline" onsubmit="return confirm('Revoke {{ $token->name }}? Its laptops will get 401 at next run.')">
-                            @csrf
-                            <button type="submit" class="text-red-600 text-sm">Revoke</button>
-                        </form>
-                    @endif
-                </td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
-    @else
-    <p class="text-gray-500">No tokens yet.</p>
-    @endif
+    <x-card title="Deployed Devices" padding="p-0">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+                        <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Device</th>
+                        <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                        <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Last Seen</th>
+                        <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Expires</th>
+                        <th class="text-right py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
+                    @forelse($tokens as $token)
+                        <tr class="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-brand-500/10 dark:bg-brand-500/20 flex items-center justify-center text-brand-500">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                    </div>
+                                    <span class="font-medium text-gray-900 dark:text-white">{{ $token->name }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4">
+                                @if($token->isUsable())
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-400">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-success-500"></span>
+                                        Active
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-error-50 text-error-700 dark:bg-error-500/10 dark:text-error-400">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-error-500"></span>
+                                        Revoked / Expired
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="py-3 px-4 text-gray-600 dark:text-gray-400">
+                                {{ $token->last_used_at?->diffForHumans() ?? 'Never' }}
+                            </td>
+                            <td class="py-3 px-4 text-gray-600 dark:text-gray-400">
+                                {{ $token->expires_at?->format('Y-m-d') ?? 'Never' }}
+                            </td>
+                            <td class="py-3 px-4 text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    @if($token->isUsable())
+                                        <a href="{{ route('agent.download', $token) }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                            Download
+                                        </a>
+                                    @else
+                                        <span class="text-xs text-gray-400">Inactive</span>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="py-8 px-4 text-center text-gray-500 dark:text-gray-400">
+                                No devices yet. Click <strong>Download Agent</strong> above to get started.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </x-card>
 </div>
 @endsection

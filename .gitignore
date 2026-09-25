@@ -33,3 +33,7 @@ IT Assets.xlsx
 # Legacy Windows audit app (reference only, never distributed via repo)
 ITAuditMITOGroup-NEW.exe
 storage/*.ps1
+# .NET build output
+agent/TrackerAgent/bin/
+agent/TrackerAgent/obj/
+agent/TrackerAgent.exe

@@ -99,22 +99,24 @@ class AuditApiTest extends TestCase
         $this->assertSame('8 GB', $response->json('mismatches.ram.registered'));
     }
 
-    public function test_unknown_device_returns_202_and_never_overwrites(): void
+    public function test_unknown_device_creates_new_asset_and_audit(): void
     {
         $countBefore = Asset::count();
 
         $response = $this->withHeaders($this->agentHeaders())->postJson('/api/audits', [
-            'serial_number' => 'SN-NOT-IN-REGISTER',
-            'hostname' => 'HOST-NOT-IN-REGISTER',
+            'serial_number' => 'SN-NEW-DEVICE',
+            'hostname' => 'HOST-NEW-DEVICE',
+            'brand' => 'Micro-Star International Co., Ltd.',
+            'model' => 'Thin 15 B13UC',
+            'ram' => '8 GB',
         ]);
 
-        $response->assertStatus(202)->assertJsonPath('result', 'UNKNOWN DEVICE');
+        $response->assertCreated()->assertJsonPath('result', 'NEW DEVICE');
 
-        $this->assertDatabaseCount('assets', $countBefore);
+        $this->assertDatabaseCount('assets', $countBefore + 1);
         $this->assertDatabaseHas('activity_logs', [
             'action' => 'AUDIT',
             'source' => 'Audit Agent',
-            'entity_identifier' => 'SN-NOT-IN-REGISTER',
         ]);
     }
 
