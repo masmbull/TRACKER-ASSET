@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class AgentApiToken extends Model
 {
     protected $fillable = [
-        'name', 'token_hash', 'abilities', 'last_used_at', 'expires_at', 'is_active',
+        'name', 'token_hash', 'token_plain', 'abilities', 'last_used_at', 'expires_at', 'is_active',
+        'device_id', 'platform',
     ];
 
     protected function casts(): array
@@ -17,6 +18,7 @@ class AgentApiToken extends Model
             'last_used_at' => 'datetime',
             'expires_at' => 'datetime',
             'is_active' => 'boolean',
+            'token_plain' => 'encrypted',
         ];
     }
 

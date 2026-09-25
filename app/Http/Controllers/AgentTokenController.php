@@ -3,13 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Response;
 
-/**
- * Web UI for fleet agent tokens (PRD §11): generate, copy one-liner install
- * command, revoke. Plaintext token is shown exactly once at creation.
- */
 class AgentTokenController extends Controller
 {
     public function index()
@@ -19,43 +14,39 @@ class AgentTokenController extends Controller
         return view('agent.index', compact('tokens'));
     }
 
-    public function store(Request $request)
+    public function download(AgentApiToken $token)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:agent_api_tokens,name',
-            'expires_days' => 'nullable|integer|min:1|max:3650',
+        $token->update(['last_used_at' => now()]);
+
+        $exePath = storage_path('app/agent/TrackerAgent.exe');
+        if (! file_exists($exePath)) {
+            return back()->with('error', 'Agent executable not found. Build the agent first.');
+        }
+
+        return Response::download($exePath, 'TrackerAgent.exe', [
+            'Content-Type' => 'application/vnd.microsoft.portable-executable',
         ]);
+    }
 
-        $plainText = sprintf('tat_%s', Str::random(48));
-        $expiresDays = $validated['expires_days'] ?? null;
+    public function downloadLatest()
+    {
+        $token = AgentApiToken::orderByDesc('id')->first();
 
-        AgentApiToken::create([
-            'name' => $validated['name'],
-            'token_hash' => hash('sha256', $plainText),
-            'abilities' => ['audit:submit', 'assets:lookup'],
-            'expires_at' => $expiresDays ? now()->addDays((int) $expiresDays) : null,
-        ]);
-
-        $daemonUrl = route('agent.daemon', ['token' => $plainText]);
-
-        return redirect()
-            ->route('agent.index')
-            ->with('created_token', [
-                'name' => $validated['name'],
-                'plain_text' => $plainText,
-                'install' => sprintf(
-                    "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"iwr '%s' -OutFile '%%LOCALAPPDATA%%\\TRACKER\\daemon.ps1'; powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '%%LOCALAPPDATA%%\\TRACKER\\daemon.ps1'\"",
-                    $daemonUrl,
-                ),
+        if (! $token) {
+            $token = AgentApiToken::create([
+                'name' => 'device-'.now()->format('Ymd-His'),
+                'token_hash' => hash('sha256', ''),
+                'token_plain' => '',
             ]);
+        }
+
+        return redirect()->route('agent.download', $token);
     }
 
     public function revoke(AgentApiToken $token)
     {
         $token->update(['is_active' => false]);
 
-        return redirect()
-            ->route('agent.index')
-            ->with('success', "Token '{$token->name}' revoked — laptops using it are cut off at their next run.");
+        return back()->with('success', "Device '{$token->name}' revoked.");
     }
 }
