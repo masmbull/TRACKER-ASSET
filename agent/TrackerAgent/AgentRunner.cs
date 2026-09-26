@@ -28,7 +28,7 @@ public static class AgentRunner
 
     public static int Run(string[] args)
     {
-        // WinExe has no console — attach to the launching terminal so one-shot
+        // WinExe has no console - attach to the launching terminal so one-shot
         // results are visible when run from PowerShell/CMD.
         if (!AttachConsole(AttachParentProcess))
         {
@@ -42,6 +42,7 @@ public static class AgentRunner
         bool daemon = false;
         int pollSeconds = 10;
         bool uninstall = false;
+        bool update = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -54,6 +55,7 @@ public static class AgentRunner
                 case "--daemon" or "-d": daemon = true; break;
                 case "--poll": pollSeconds = Math.Max(1, int.Parse(NextArg(args, ref i))); break;
                 case "--uninstall": uninstall = true; break;
+                case "--update": update = true; break;
             }
         }
 
@@ -67,6 +69,13 @@ public static class AgentRunner
         {
             Uninstall();
             return 0;
+        }
+
+        if (update)
+        {
+            serverUrl = serverUrl.TrimEnd('/');
+            bool updated = AutoUpdater.PerformUpdate(serverUrl, token);
+            return updated ? 0 : 1;
         }
 
         if (string.IsNullOrWhiteSpace(token))
@@ -120,7 +129,7 @@ public static class AgentRunner
     static int RunDaemon(string url, string token, string? assetId, int pollSeconds)
     {
         RegisterAutostart(url, token, assetId, pollSeconds);
-        Console.WriteLine($"[OK] Daemon started — polling {url} every {pollSeconds}s.");
+        Console.WriteLine($"[OK] Daemon started - polling {url} every {pollSeconds}s.");
 
         while (true)
         {
@@ -138,14 +147,21 @@ public static class AgentRunner
                         {
                             int rc = RunOnce(url, token, assetId);
                             Api.Ack(url, token, id, rc == 0 ? "done" : "failed");
-                            Console.WriteLine($"[OK] Command #{id} scan → {(rc == 0 ? "done" : "failed")}");
+                            Console.WriteLine($"[OK] Command #{id} scan -> {(rc == 0 ? "done" : "failed")}");
+                        }
+                        else if (command == "update")
+                        {
+                            Console.WriteLine($"[*] Command #{id} update received. Acknowledging and updating...");
+                            Api.Ack(url, token, id, "done");
+                            if (AutoUpdater.PerformUpdate(url, token))
+                            {
+                                Environment.Exit(0);
+                            }
                         }
                         else
                         {
-                            // update/unknown: the served endpoint always delivers the latest
-                            // version, so ack and let the operator trigger the re-pull.
                             Api.Ack(url, token, id, "done");
-                            Console.WriteLine($"[OK] Command #{id} {command} → done (ack)");
+                            Console.WriteLine($"[OK] Command #{id} {command} -> done (ack)");
                         }
                     }
                 }

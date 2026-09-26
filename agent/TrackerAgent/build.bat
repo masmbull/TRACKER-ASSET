@@ -1,8 +1,8 @@
 @echo off
-REM ──────────────────────────────────────────────────────────────────────────
-REM  Build TrackerAgent.exe — run from the agent/TrackerAgent directory
+REM --------------------------------------------------------------------------
+REM  Build TrackerAgent.exe - run from the agent/TrackerAgent directory
 REM  Requires: .NET 8 SDK (https://dotnet.microsoft.com/download/dotnet/8.0)
-REM ──────────────────────────────────────────────────────────────────────────
+REM --------------------------------------------------------------------------
 
 echo [*] Building TrackerAgent.exe (single-file, self-contained)...
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true

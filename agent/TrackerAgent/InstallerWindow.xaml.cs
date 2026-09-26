@@ -26,6 +26,7 @@ public partial class InstallerWindow : Window
     private string _stepMessage = "";
     private string _installDir = "";
     private string _serverUrl = "";
+    private string _deviceId = "";
 
     public InstallerWindow()
     {
@@ -109,17 +110,17 @@ public partial class InstallerWindow : Window
 
         if (success)
         {
-            ResultIcon.Text = "✅";
+            ResultIcon.Text = "OK";
             ResultIcon.Foreground = WpfBrushes.LightGreen;
             ResultText.Text = "Installation Complete!";
-            ResultDetail.Text = $"Agent installed to:\n{_installDir}\n\nThe agent is now running in the background.";
+            ResultDetail.Text = $"Agent installed to:\n{_installDir}\n\nThe agent is now running and registered for autostart.";
         }
         else
         {
-            ResultIcon.Text = "❌";
+            ResultIcon.Text = "X";
             ResultIcon.Foreground = WpfBrushes.OrangeRed;
             ResultText.Text = "Installation Failed";
-            ResultDetail.Text = "Could not register with server. Please run as your user account (not administrator) and try again.";
+            ResultDetail.Text = "Could not register with server. Please ensure the server is online and try again.";
         }
     }
 
@@ -209,14 +210,15 @@ public partial class InstallerWindow : Window
                 File.Copy(sourceExe, destExe, overwrite: true);
             }
 
-            UpdateStatus(50, "Generating device token...");
-            var deviceId = GenerateDeviceId();
-            var token = Convert.ToBase64String(deviceId);
+            UpdateStatus(50, "Generating device identity...");
+            _deviceId = Convert.ToBase64String(GenerateDeviceId());
+            var token = _deviceId;
 
             UpdateStatus(70, "Registering device with server...");
-            RegisterDevice(serverUrl, token);
+            token = RegisterDevice(serverUrl, _deviceId);
 
-            UpdateStatus(85, "Finishing up...");
+            UpdateStatus(85, "Configuring autostart and settings...");
+            RegisterAutostart(destExe, serverUrl, token);
 
             UpdateStatus(100, "Done!");
             Thread.Sleep(400);
@@ -229,7 +231,7 @@ public partial class InstallerWindow : Window
         }
     }
 
-    private void RegisterDevice(string serverUrl, string token)
+    private string RegisterDevice(string serverUrl, string token)
     {
         try
         {
@@ -238,7 +240,7 @@ public partial class InstallerWindow : Window
 
             var payload = new
             {
-                device_id = Convert.ToBase64String(GenerateDeviceId()),
+                device_id = _deviceId,
                 name = Environment.MachineName,
                 platform = Environment.OSVersion.VersionString
             };
@@ -259,11 +261,13 @@ public partial class InstallerWindow : Window
             }
 
             SaveConfig(serverUrl, token);
+            return token;
         }
         catch
         {
             // Save config even if registration fails - agent will retry on startup
             SaveConfig(serverUrl, token);
+            return token;
         }
     }
 
@@ -279,7 +283,7 @@ public partial class InstallerWindow : Window
         var configPath = Path.Combine(_installDir, "config.json");
         File.WriteAllText(configPath, JsonSerializer.Serialize(new
         {
-            device_id = Convert.ToBase64String(GenerateDeviceId()),
+            device_id = _deviceId,
             token = token,
             server_url = serverUrl,
             installed_at = DateTime.Now.ToString("o")
@@ -292,13 +296,24 @@ public partial class InstallerWindow : Window
     {
         try
         {
-            var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker", true)
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker", true)
                      ?? Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker");
-            key.SetValue("DeviceId", Convert.ToBase64String(GenerateDeviceId()));
-            key.SetValue("Token", token);
-            key.SetValue("ServerUrl", serverUrl);
-            key.SetValue("InstalledAt", DateTime.Now.ToString("o"));
-            key.Close();
+            key?.SetValue("DeviceId", _deviceId);
+            key?.SetValue("Token", token);
+            key?.SetValue("ServerUrl", serverUrl);
+            key?.SetValue("InstalledAt", DateTime.Now.ToString("o"));
+        }
+        catch { }
+    }
+
+    private void RegisterAutostart(string exePath, string serverUrl, string token)
+    {
+        try
+        {
+            var runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+            using var key = Registry.CurrentUser.CreateSubKey(runKey);
+            // Autostart with --daemon flag
+            key?.SetValue("MitoAuditTracker", $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
         }
         catch { }
     }
