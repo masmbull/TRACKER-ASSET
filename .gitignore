@@ -37,3 +37,7 @@ storage/*.ps1
 agent/TrackerAgent/bin/
 agent/TrackerAgent/obj/
 agent/TrackerAgent.exe
+server.php
+tailadmin-free-tailwind-dashboard-template-main/
+cookie.jar
+
