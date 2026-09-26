@@ -14,6 +14,10 @@ if %ERRORLEVEL% neq 0 (
 
 echo [OK] Output: bin\Release\net8.0-windows\win-x64\publish\TrackerAgent.exe
 echo.
+echo GUI:
+echo   Double-click TrackerAgent.exe    - zero-config install (no URL or token prompt)
+echo.
+
 echo USAGE:
 echo   TrackerAgent.exe --token tat_xxx --url http://127.0.0.1:8000
 echo   TrackerAgent.exe --token tat_xxx --daemon

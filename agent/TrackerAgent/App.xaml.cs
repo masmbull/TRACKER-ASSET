@@ -130,6 +130,11 @@ public partial class App : System.Windows.Application
         try
         {
             var payload = HardwareCollector.Collect();
+            // Live Fleet (PRD §11) ties telemetry to the device identity that the
+            // installer stored, so a device shows up even before its token is
+            // bound to that device_id.
+            payload["device_id"] = config.DeviceId;
+
             var result = Api.Post(config.ServerUrl, config.Token, payload);
             _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker",
                 result is not null ? "Scan completed successfully." : "Scan failed.",

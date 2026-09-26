@@ -1,4 +1,9 @@
+using System.IO;
+
+using System.Diagnostics;
+using System.Globalization;
 using System.Management;
+using System.Text;
 
 namespace TrackerAgent;
 
@@ -76,8 +81,305 @@ public static class HardwareCollector
         }
         catch { }
 
+        // Live Fleet telemetry (PRD §11) — battery wear, C: disk space, RAM
+        // layout, Wi-Fi link and the Windows user that is logged in.
+        try { data["logged_in_user"] = Environment.UserName; } catch { }
+
+        CollectBattery(data);
+        CollectDisk(data);
+        CollectMemoryLayout(data);
+        CollectGraphics(data);
+        CollectWifi(data);
+        CollectUptime(data);
+
         return data.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    const double Gigabyte = 1024.0 * 1024.0 * 1024.0;
+
+    /// <summary>
+    /// Formats numbers with a dot as the decimal separator: the API validates
+    /// telemetry with `numeric`, which rejects comma decimals.
+    /// </summary>
+    static string Number(double value, int decimals) =>
+        Math.Round(value, decimals).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Battery charge, wear and cycles. Battery sensors differ per vendor, so
+    /// every reading is optional: a missing class simply leaves the key unset.
+    /// </summary>
+    static void CollectBattery(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var battery = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
+            foreach (var obj in battery.Get())
+            {
+                if (obj["EstimatedChargeRemaining"] is not null)
+                {
+                    data["battery_percent"] = Convert.ToInt32(obj["EstimatedChargeRemaining"])
+                        .ToString(CultureInfo.InvariantCulture);
+                }
+
+                data["battery_status"] = Convert.ToInt32(obj["BatteryStatus"] ?? 0) switch
+                {
+                    2 => "charging",
+                    1 => "discharging",
+                    _ => "idle",
+                };
+
+                break;
+            }
+        }
+        catch { }
+
+        var fullCharge = 0L;
+        var design = 0L;
+
+        try
+        {
+            using var full = new ManagementObjectSearcher(
+                new ManagementScope(@"root\wmi"), new ObjectQuery("SELECT * FROM BatteryFullChargedCapacity"));
+
+            foreach (var obj in full.Get())
+            {
+                fullCharge = Convert.ToInt64(obj["FullChargedCapacity"] ?? 0);
+
+                if (fullCharge > 0)
+                {
+                    break;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var staticData = new ManagementObjectSearcher(
+                new ManagementScope(@"root\wmi"), new ObjectQuery("SELECT * FROM BatteryStaticData"));
+
+            foreach (var obj in staticData.Get())
+            {
+                design = Convert.ToInt64(obj["DesignedCapacity"] ?? 0);
+
+                if (design > 0)
+                {
+                    break;
+                }
+            }
+        }
+        catch { }
+
+        if (design <= 0)
+        {
+            try
+            {
+                using var battery = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
+                foreach (var obj in battery.Get())
+                {
+                    design = Convert.ToInt64(obj["DesignCapacity"] ?? 0);
+
+                    if (design > 0)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        if (fullCharge > 0 && design > 0)
+        {
+            var health = Math.Clamp((int)Math.Round(fullCharge * 100.0 / design), 0, 100);
+            data["battery_health"] = health.ToString(CultureInfo.InvariantCulture);
+        }
+
+        try
+        {
+            using var cycles = new ManagementObjectSearcher(
+                new ManagementScope(@"root\wmi"), new ObjectQuery("SELECT * FROM BatteryCycleCount"));
+
+            foreach (var obj in cycles.Get())
+            {
+                data["battery_cycle_count"] = Convert.ToInt64(obj["CycleCount"] ?? 0)
+                    .ToString(CultureInfo.InvariantCulture);
+
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Free/total space of the system drive (Live Fleet disk alarm).</summary>
+    static void CollectDisk(Dictionary<string, string> data)
+    {
+        try
+        {
+            var systemDrive = (Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\").TrimEnd('\\');
+
+            using var disk = new ManagementObjectSearcher(
+                $"SELECT * FROM Win32_LogicalDisk WHERE DeviceID='{systemDrive}'");
+
+            foreach (var obj in disk.Get())
+            {
+                var free = Convert.ToDouble(obj["FreeSpace"] ?? 0);
+                var total = Convert.ToDouble(obj["Size"] ?? 0);
+
+                if (free > 0) data["disk_free_gb"] = Number(free / Gigabyte, 2);
+                if (total > 0) data["disk_total_gb"] = Number(total / Gigabyte, 2);
+
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>RAM modules, total size and speed, e.g. "2x 8GB @ 3200 MHz".</summary>
+    static void CollectMemoryLayout(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var memory = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMemory");
+
+            var modules = 0;
+            var speed = 0;
+            double totalBytes = 0;
+
+            foreach (var obj in memory.Get())
+            {
+                modules++;
+                totalBytes += Convert.ToDouble(obj["Capacity"] ?? 0);
+                speed = Math.Max(speed, Convert.ToInt32(obj["Speed"] ?? 0));
+            }
+
+            if (modules > 0)
+            {
+                var layout = $"{modules}x {FormatBytes(totalBytes)}";
+
+                if (speed > 0)
+                {
+                    layout += $" @ {speed} MHz";
+                }
+
+                data["ram_config"] = layout;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Primary GPU name (Live Fleet hardware summary).</summary>
+    static void CollectGraphics(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var gpu = new ManagementObjectSearcher(
+                "SELECT TOP 1 * FROM Win32_VideoController ORDER BY AdapterRAM DESC");
+
+            foreach (var obj in gpu.Get())
+            {
+                var name = obj["Name"]?.ToString();
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    data["gpu"] = name.Trim();
+                }
+
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Current Wi-Fi SSID + signal strength, parsed from netsh.</summary>
+    static void CollectWifi(Dictionary<string, string> data)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo("netsh", "wlan show interfaces")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+
+            using var process = Process.Start(startInfo);
+
+            if (process is null)
+            {
+                return;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+
+            var ssidSeen = false;
+
+            foreach (var raw in output.Split('\n'))
+            {
+                var line = raw.Trim();
+                var separator = line.IndexOf(':');
+
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                var key = line[..separator].Trim();
+                var value = line[(separator + 1)..].Trim();
+
+                if (value.Length == 0)
+                {
+                    continue;
+                }
+
+                // "Nama SSID" on localized Windows, but never "BSSID".
+                if (!ssidSeen
+                    && key.EndsWith("SSID", StringComparison.OrdinalIgnoreCase)
+                    && !key.EndsWith("BSSID", StringComparison.OrdinalIgnoreCase))
+                {
+                    data["wifi_ssid"] = value;
+                    ssidSeen = true;
+                }
+                else if (key.Equals("Signal", StringComparison.OrdinalIgnoreCase))
+                {
+                    data["wifi_signal"] = value.Replace("%", string.Empty).Trim();
+                }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Hours since the last boot (Live Fleet freshness check).</summary>
+    static void CollectUptime(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var os = new ManagementObjectSearcher(
+                "SELECT LastBootUpTime FROM Win32_OperatingSystem");
+
+            foreach (var obj in os.Get())
+            {
+                var boot = obj["LastBootUpTime"]?.ToString();
+
+                if (string.IsNullOrWhiteSpace(boot))
+                {
+                    continue;
+                }
+
+                var hours = (DateTime.Now - ManagementDateTimeConverter.ToDateTime(boot)).TotalHours;
+
+                if (hours >= 0)
+                {
+                    data["uptime_hours"] = Number(hours, 2);
+                }
+
+                break;
+            }
+        }
+        catch { }
     }
 
     static string FormatBytes(double bytes)

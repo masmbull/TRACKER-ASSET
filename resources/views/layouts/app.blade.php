@@ -160,13 +160,22 @@
                                 </li>
                             @endif
                             @if(Gate::allows('manage-agents'))
-                                @php $isActive = $route === 'agent.*'; @endphp
+                                @php $isActive = $route === 'agent.index'; @endphp
                                 <li>
                                     <a href="{{ route('agent.index') }}"
                                        @click="selectedMenu = 'agent.index'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM4.5 12C4.5 7.85786 7.85786 4.5 12 4.5C16.1421 4.5 19.5 7.85786 19.5 12C19.5 16.1421 16.1421 19.5 12 19.5C7.85786 19.5 4.5 16.1421 4.5 12ZM12 7C8.13401 7 5 10.134 5 14C5 14.2761 5.22386 14.5 5.5 14.5H18.5C18.7761 14.5 19 14.2761 19 14C19 10.134 15.866 7 12 7Z" fill="currentColor"/></svg>
                                         <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Audit Agents</span>
+                                    </a>
+                                </li>
+                                @php $isActive = $route === 'agent.fleet'; @endphp
+                                <li>
+                                    <a href="{{ route('agent.fleet') }}"
+                                       @click="selectedMenu = 'agent.fleet'"
+                                       class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
+                                        <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 5.5C4 4.25736 5.00736 3.25 6.25 3.25H9.25C10.4926 3.25 11.5 4.25736 11.5 5.5V8.5C11.5 9.74264 10.4926 10.75 9.25 10.75H6.25C5.00736 10.75 4 9.74264 4 8.5V5.5ZM6.25 4.75C5.83579 4.75 5.5 5.08579 5.5 5.5V8.5C5.5 8.91421 5.83579 9.25 6.25 9.25H9.25C9.66421 9.25 10 8.91421 10 8.5V5.5C10 5.08579 9.66421 4.75 9.25 4.75H6.25ZM4 15.5C4 14.2574 5.00736 13.25 6.25 13.25H9.25C10.4926 13.25 11.5 14.2574 11.5 15.5V18.5C11.5 19.7426 10.4926 20.75 9.25 20.75H6.25C5.00736 20.75 4 19.7426 4 18.5V15.5ZM6.25 14.75C5.83579 14.75 5.5 15.0858 5.5 15.5V18.5C5.5 18.9142 5.83579 19.25 6.25 19.25H9.25C9.66421 19.25 10 18.9142 10 18.5V15.5C10 15.0858 9.66421 14.75 9.25 14.75H6.25ZM12.5 6.25C12.5 5.83579 12.8358 5.5 13.25 5.5H20C20.4142 5.5 20.75 5.83579 20.75 6.25C20.75 6.66421 20.4142 7 20 7H13.25C12.8358 7 12.5 6.66421 12.5 6.25ZM12.5 12C12.5 11.5858 12.8358 11.25 13.25 11.25H20C20.4142 11.25 20.75 11.5858 20.75 12C20.75 12.4142 20.4142 12.75 20 12.75H13.25C12.8358 12.75 12.5 12.4142 12.5 12ZM12.5 17.75C12.5 17.3358 12.8358 17 13.25 17H20C20.4142 17 20.75 17.3358 20.75 17.75C20.75 18.1642 20.4142 18.5 20 18.5H13.25C12.8358 18.5 12.5 18.1642 12.5 17.75ZM4.25 12C4.25 11.5858 4.58579 11.25 5 11.25H11C11.4142 11.25 11.75 11.5858 11.75 12C11.75 12.4142 11.4142 12.75 11 12.75H5C4.58579 12.75 4.25 12.4142 4.25 12Z" fill="currentColor"/></svg>
+                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Live Fleet</span>
                                     </a>
                                 </li>
                             @endif

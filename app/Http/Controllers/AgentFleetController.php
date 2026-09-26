@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AssetAudit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
@@ -13,6 +14,43 @@ use Illuminate\Support\Facades\URL;
  */
 class AgentFleetController extends Controller
 {
+    /**
+     * Live Fleet (PRD §11): the last telemetry snapshot of every deployed
+     * device — battery wear, disk space, RAM layout, Wi-Fi and who is logged in.
+     */
+    public function index()
+    {
+        $devices = AgentApiToken::query()
+            ->with(['telemetry.asset'])
+            ->orderBy('name')
+            ->get();
+
+        $assetIds = $devices->map(fn (AgentApiToken $token) => $token->telemetry?->asset_id)
+            ->filter()
+            ->all();
+
+        // Latest audit per asset (ordered desc, then unique keeps the newest).
+        $latestAudits = AssetAudit::query()
+            ->whereIn('asset_id', $assetIds)
+            ->orderByDesc('audit_date')
+            ->get()
+            ->unique('asset_id')
+            ->keyBy('asset_id');
+
+        $telemetries = $devices->map(fn (AgentApiToken $token) => $token->telemetry)->filter();
+
+        $stats = [
+            'devices' => $devices->count(),
+            'online' => $telemetries->filter(fn ($t) => $t->isOnline())->count(),
+            'battery_alerts' => $telemetries->filter(fn ($t) => $t->hasLowBattery() || $t->hasWeakBattery())->count(),
+            'disk_alerts' => $telemetries->filter(fn ($t) => $t->hasLowDisk())->count(),
+            'avg_battery_health' => $telemetries->whereNotNull('battery_health')->avg('battery_health'),
+            'pending_commands' => AgentCommand::where('status', 'pending')->count(),
+        ];
+
+        return view('agent.fleet', compact('devices', 'latestAudits', 'stats'));
+    }
+
     public function commands(Request $request)
     {
         $commands = AgentCommand::query()
