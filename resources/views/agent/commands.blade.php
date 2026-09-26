@@ -28,6 +28,7 @@
     <div class="flex flex-wrap gap-2 text-theme-sm">
         <a href="{{ route('agent.index') }}" class="rounded-lg bg-gray-100 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Tokens</a>
         <a href="{{ route('agent.commands') }}" class="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white">Commands</a>
+        <a href="{{ route('agent.fleet') }}" class="rounded-lg bg-gray-100 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Live Fleet</a>
     </div>
 
     @if(session('success'))

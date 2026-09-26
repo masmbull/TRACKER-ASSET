@@ -35,7 +35,7 @@ public static class AgentRunner
             AllocConsole();
         }
 
-        string serverUrl = Environment.GetEnvironmentVariable("TRACKER_API_URL") ?? "http://127.0.0.1:8000";
+        string serverUrl = ResolveDefaultServerUrl();
         string token = Environment.GetEnvironmentVariable("TRACKER_AUDIT_TOKEN") ?? "";
         string? assetId = null;
         bool quiet = false;
@@ -93,6 +93,64 @@ public static class AgentRunner
 
     static string NextArg(string[] args, ref int i) =>
         i + 1 < args.Length ? args[++i] : throw new ArgumentException($"Missing value for {args[i - 1]}");
+    /// <summary>
+    /// Default server address when no --url is given: environment override →
+    /// address baked into the downloaded installer (AgentConfigTrailer) →
+    /// local development server.
+    /// </summary>
+    static string ResolveDefaultServerUrl()
+    {
+        var fromEnvironment = Environment.GetEnvironmentVariable("TRACKER_API_URL");
+
+        if (!string.IsNullOrWhiteSpace(fromEnvironment))
+        {
+            return fromEnvironment;
+        }
+
+        var baked = AgentConfigTrailer.TryRead()?.ServerUrls.FirstOrDefault();
+
+        return string.IsNullOrWhiteSpace(baked) ? "http://127.0.0.1:8000" : baked;
+    }
+
+    /// <summary>
+    /// Device identity written by the installer (config.json / HKCU registry),
+    /// so Live Fleet can tie telemetry to the same device even before a token
+    /// has been issued.
+    /// </summary>
+    static string? TryReadDeviceId()
+    {
+        try
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker"))
+            {
+                if (key?.GetValue("DeviceId") is string fromRegistry && !string.IsNullOrWhiteSpace(fromRegistry))
+                {
+                    return fromRegistry;
+                }
+            }
+
+            var configPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER",
+                "config.json");
+
+            if (!File.Exists(configPath))
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+
+            return doc.RootElement.TryGetProperty("device_id", out var id) && id.ValueKind == JsonValueKind.String
+                ? id.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 
     static int RunOnce(string url, string token, string? assetId = null)
     {
@@ -103,6 +161,12 @@ public static class AgentRunner
             {
                 payload["asset_id"] = assetId;
             }
+            var deviceId = TryReadDeviceId();
+            if (!string.IsNullOrWhiteSpace(deviceId))
+            {
+                payload["device_id"] = deviceId;
+            }
+
 
             var result = Api.Post(url, token, payload);
 

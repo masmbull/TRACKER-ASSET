@@ -1,95 +1,194 @@
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using WpfTextBox = System.Windows.Controls.TextBox;
-using WpfStackPanel = System.Windows.Controls.StackPanel;
-using WpfOrientation = System.Windows.Controls.Orientation;
-using WpfMessageBox = System.Windows.MessageBox;
-using WpfMessageBoxButton = System.Windows.MessageBoxButton;
-using WpfMessageBoxImage = System.Windows.MessageBoxImage;
-using WpfBrushes = System.Windows.Media.Brushes;
 
 namespace TrackerAgent;
 
+/// <summary>
+/// Zero-configuration installer (PRD §11). Double-clicking the agent opens this
+/// window: it locates the TRACKER-ASSET server (the address is baked into the
+/// download by <c>AgentTokenController::configTrailer</c>), registers the
+/// device, enables autostart and starts reporting — the user only watches an
+/// animated progress bar, no server URL or token to type.
+/// </summary>
 public partial class InstallerWindow : Window
 {
-    private readonly DispatcherTimer _timer = new();
-    private int _progress;
-    private string _stepMessage = "";
+    private readonly DispatcherTimer _progressTimer = new();
+    private readonly DispatcherTimer _autoCloseTimer = new();
+
+    private int _targetProgress;
+    private int _displayedProgress;
     private string _installDir = "";
     private string _serverUrl = "";
     private string _deviceId = "";
+    private string _lastError = "";
 
     public InstallerWindow()
     {
         InitializeComponent();
+
         ResultPanel.Visibility = Visibility.Collapsed;
+        RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Collapsed;
-        
-        // Check for server URL passed via command line
+
+        StartProgressAnimation();
+        BeginShimmer();
+
+        _ = AutoInstallAsync();
+    }
+
+    /// <summary>
+    /// Eases the bar towards the latest reported percentage on the UI thread,
+    /// so the animation stays smooth while the install work itself runs on a
+    /// background thread.
+    /// </summary>
+    private void StartProgressAnimation()
+    {
+        _progressTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _progressTimer.Tick += (_, _) =>
+        {
+            var remaining = _targetProgress - _displayedProgress;
+
+            _displayedProgress = remaining <= 1
+                ? _targetProgress
+                : _displayedProgress + Math.Max(1, (int)Math.Ceiling(remaining * 0.18));
+
+            ProgressBar.Value = _displayedProgress;
+            PercentText.Text = $"{_displayedProgress}%";
+        };
+        _progressTimer.Start();
+    }
+
+    private void BeginShimmer() =>
+        ((Storyboard)FindResource("ShimmerStoryboard")).Begin(this, true);
+
+    private void EndShimmer() =>
+        ((Storyboard)FindResource("ShimmerStoryboard")).Stop(this);
+
+    /// <summary>Thread-safe progress report (called from the worker thread).</summary>
+    private void Report(int percent, string message)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _targetProgress = Math.Clamp(percent, 0, 100);
+            StatusText.Text = message;
+        });
+    }
+
+    private async Task AutoInstallAsync()
+    {
+        Report(2, "Looking for the TRACKER-ASSET server...");
+
+        var serverUrl = await Task.Run(DiscoverServerUrl);
+
+        if (serverUrl is null)
+        {
+            ShowFailure("No TRACKER-ASSET server answered. Start the server (or download this agent from it) and press Retry.");
+            return;
+        }
+
+        _serverUrl = serverUrl;
+        Report(12, $"Server found: {serverUrl}");
+
+        var installed = await Task.Run(() => RunInstall(serverUrl));
+
+        if (installed)
+        {
+            ShowSuccess();
+        }
+        else
+        {
+            ShowFailure(_lastError.Length > 0 ? _lastError : "The installer could not finish.");
+        }
+    }
+
+    /// <summary>
+    /// Server discovery, in order of trust: environment override → command line
+    /// (1-click web installer) → address baked into this binary by the download
+    /// route → previously installed address → local development ports.
+    /// </summary>
+    private static string? DiscoverServerUrl()
+    {
+        foreach (var candidate in CandidateServerUrls())
+        {
+            if (TestServer(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> CandidateServerUrls()
+    {
+        var urls = new List<string>();
+
+        void Add(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            var clean = url.Trim().TrimEnd('/');
+
+            if (clean.Length > 0 && !urls.Contains(clean, StringComparer.OrdinalIgnoreCase))
+            {
+                urls.Add(clean);
+            }
+        }
+
+        Add(Environment.GetEnvironmentVariable("TRACKER_API_URL"));
+        Add(CommandLineServerUrl());
+
+        foreach (var baked in AgentConfigTrailer.TryRead()?.ServerUrls ?? new List<string>())
+        {
+            Add(baked);
+        }
+
+        Add(ReadRegistryString("ServerUrl"));
+
+        foreach (var port in new[] { 8000, 8003, 8004 })
+        {
+            Add($"http://127.0.0.1:{port}");
+            Add($"http://localhost:{port}");
+        }
+
+        return urls;
+    }
+
+    private static string? CommandLineServerUrl()
+    {
         var args = Environment.GetCommandLineArgs();
-        for (int i = 0; i < args.Length - 1; i++)
+
+        for (var i = 0; i < args.Length - 1; i++)
         {
             if (args[i].Equals("--server-url", StringComparison.OrdinalIgnoreCase) ||
                 args[i].Equals("-s", StringComparison.OrdinalIgnoreCase))
             {
-                _serverUrl = args[i + 1];
-                break;
+                return args[i + 1];
             }
         }
 
-        _ = AutoDetectAndInstallAsync();
+        return null;
     }
 
-    private async Task AutoDetectAndInstallAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(_serverUrl))
-        {
-            await TryInstallAsync(_serverUrl);
-            return;
-        }
-
-        // Auto-detect common server URLs
-        var candidateUrls = new[]
-        {
-            "http://127.0.0.1:8000",
-            "http://127.0.0.1:8003",
-            "http://127.0.0.1:8004",
-            "http://localhost:8000",
-            "http://localhost:8003",
-            "http://localhost:8004",
-        };
-
-        foreach (var url in candidateUrls)
-        {
-            UpdateStatus(10, $"Trying {url}...");
-            if (await TestServerAsync(url))
-            {
-                _serverUrl = url;
-                await TryInstallAsync(url);
-                return;
-            }
-        }
-
-        // If auto-detect fails, show manual entry (fallback)
-        ShowManualUrlEntry();
-    }
-
-    private async Task<bool> TestServerAsync(string url)
+    private static bool TestServer(string url)
     {
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            var resp = await http.GetAsync($"{url}/api/health");
-            return resp.IsSuccessStatusCode;
+            using var response = http.GetAsync($"{url}/api/health").GetAwaiter().GetResult();
+
+            return response.IsSuccessStatusCode;
         }
         catch
         {
@@ -97,177 +196,177 @@ public partial class InstallerWindow : Window
         }
     }
 
-    private async Task TryInstallAsync(string url)
-    {
-        UpdateStatus(20, $"Connecting to {url}...");
-
-        var success = await Task.Run(() => RunInstall(url));
-
-        StatusPanel.Visibility = Visibility.Collapsed;
-        ResultPanel.Visibility = Visibility.Visible;
-        CloseButton.Visibility = Visibility.Visible;
-        InstallButton.Visibility = Visibility.Collapsed;
-
-        if (success)
-        {
-            ResultIcon.Text = "OK";
-            ResultIcon.Foreground = WpfBrushes.LightGreen;
-            ResultText.Text = "Installation Complete!";
-            ResultDetail.Text = $"Agent installed to:\n{_installDir}\n\nThe agent is now running and registered for autostart.";
-        }
-        else
-        {
-            ResultIcon.Text = "X";
-            ResultIcon.Foreground = WpfBrushes.OrangeRed;
-            ResultText.Text = "Installation Failed";
-            ResultDetail.Text = "Could not register with server. Please ensure the server is online and try again.";
-        }
-    }
-
-    private void ShowManualUrlEntry()
-    {
-        // Add a manual URL entry TextBox dynamically
-        var urlBox = new WpfTextBox
-        {
-            Name = "UrlBox",
-            Background = WpfBrushes.White,
-            Foreground = WpfBrushes.Black,
-            BorderBrush = WpfBrushes.Gray,
-            Padding = new Thickness(8, 6, 8, 6),
-            FontSize = 13,
-            Margin = new Thickness(0, 0, 0, 10),
-            Text = "http://127.0.0.1:8000"
-        };
-
-        var label = new TextBlock
-        {
-            Text = "Auto-detect failed. Enter server URL manually:",
-            Foreground = WpfBrushes.LightGray,
-            FontSize = 12,
-            Margin = new Thickness(0, 0, 0, 4)
-        };
-
-        var panel = new WpfStackPanel { Orientation = WpfOrientation.Vertical };
-        panel.Children.Add(label);
-        panel.Children.Add(urlBox);
-
-        // Replace status panel with manual entry
-        StatusPanel.Children.Clear();
-        StatusPanel.Children.Add(panel);
-        ProgressBar.IsIndeterminate = false;
-        ProgressBar.Value = 0;
-        PercentText.Text = "";
-        StatusText.Text = "Enter server URL above and click Install";
-        InstallButton.IsEnabled = true;
-
-        // Store reference for later use
-        StatusPanel.Tag = urlBox;
-    }
-
-    private async void InstallButton_Click(object sender, RoutedEventArgs e)
-    {
-        InstallButton.IsEnabled = false;
-
-        string url;
-        if (StatusPanel.Tag is WpfTextBox manualBox)
-        {
-            url = manualBox.Text.Trim();
-        }
-        else
-        {
-            url = _serverUrl;
-        }
-
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            WpfMessageBox.Show("Please enter a server URL", "Error", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
-            InstallButton.IsEnabled = true;
-            return;
-        }
-
-        await TryInstallAsync(url);
-    }
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
-
+    /// <summary>
+    /// The whole install in one pass: files, device identity, registration,
+    /// autostart, resident background agent and a first hardware scan so the
+    /// device appears in Master Assets and Live Fleet right away.
+    /// </summary>
     private bool RunInstall(string serverUrl)
     {
         try
         {
-            UpdateStatus(5, "Initializing Mito Audit Tracker...");
-
-            UpdateStatus(15, "Creating installation directory...");
+            Report(18, "Creating the installation folder...");
             _installDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TRACKER");
             Directory.CreateDirectory(_installDir);
 
-            UpdateStatus(30, "Copying agent files...");
+            Report(32, "Copying agent files...");
             var sourceExe = Environment.ProcessPath;
             var destExe = Path.Combine(_installDir, "TrackerAgent.exe");
-            if (sourceExe != null && File.Exists(sourceExe))
+
+            if (sourceExe is not null && File.Exists(sourceExe) &&
+                !string.Equals(sourceExe, destExe, StringComparison.OrdinalIgnoreCase))
             {
                 File.Copy(sourceExe, destExe, overwrite: true);
             }
 
-            UpdateStatus(50, "Generating device identity...");
-            _deviceId = Convert.ToBase64String(GenerateDeviceId());
-            var token = _deviceId;
+            Report(46, "Generating the device identity...");
+            var existingId = ReadRegistryString("DeviceId");
+            _deviceId = string.IsNullOrWhiteSpace(existingId)
+                ? Convert.ToBase64String(GenerateDeviceId())
+                : existingId;
 
-            UpdateStatus(70, "Registering device with server...");
-            token = RegisterDevice(serverUrl, _deviceId);
+            Report(62, "Registering the device with the server...");
+            var token = RegisterDevice(serverUrl, ReadRegistryString("Token") ?? string.Empty);
 
-            UpdateStatus(85, "Configuring autostart and settings...");
+            Report(76, "Configuring autostart...");
             RegisterAutostart(destExe, serverUrl, token);
 
-            UpdateStatus(100, "Done!");
-            Thread.Sleep(400);
+            Report(86, "Starting the background agent...");
+            StartDetached(destExe, $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+
+            Report(94, "Running the first hardware scan...");
+            StartDetached(destExe, $"--url \"{serverUrl}\" --token \"{token}\"");
+
+            Report(100, "Installation complete");
+            Thread.Sleep(250);
             return true;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Install error: {ex.Message}");
+            _lastError = ex.Message;
+            Debug.WriteLine($"Install error: {ex}");
             return false;
         }
     }
 
-    private string RegisterDevice(string serverUrl, string token)
+    /// <summary>
+    /// Registers (or re-registers) this device and persists the settings. The
+    /// registration endpoint is public and idempotent per device_id, so running
+    /// the installer twice never creates a second token.
+    /// </summary>
+    private string RegisterDevice(string serverUrl, string fallbackToken)
     {
+        var token = fallbackToken;
+
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            var payload = new
+            var payload = JsonSerializer.Serialize(new
             {
                 device_id = _deviceId,
                 name = Environment.MachineName,
-                platform = Environment.OSVersion.VersionString
-            };
+                platform = Environment.OSVersion.VersionString,
+            });
 
-            var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+            using var response = http.PostAsync($"{serverUrl}/api/agent/register", content)
+                .GetAwaiter()
+                .GetResult();
 
-            var resp = http.PostAsync($"{serverUrl}/api/agent/register", content).GetAwaiter().GetResult();
-
-            if (resp.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode)
             {
-                var responseJson = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                var doc = JsonDocument.Parse(responseJson);
-                if (doc.RootElement.TryGetProperty("token", out var newToken))
+                var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                using var doc = JsonDocument.Parse(body);
+
+                if (doc.RootElement.TryGetProperty("token", out var issued) &&
+                    issued.ValueKind == JsonValueKind.String)
                 {
-                    token = newToken.GetString() ?? token;
+                    token = issued.GetString() ?? token;
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            // Server unreachable: keep the previous token and let the resident
+            // agent retry on its next poll instead of failing the install.
+            Debug.WriteLine($"Registration failed: {ex.Message}");
+        }
 
-            SaveConfig(serverUrl, token);
-            return token;
+        SaveConfig(serverUrl, token);
+        return token;
+    }
+
+    private void SaveConfig(string serverUrl, string token)
+    {
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(_installDir, "config.json"),
+                JsonSerializer.Serialize(new
+                {
+                    device_id = _deviceId,
+                    token,
+                    server_url = serverUrl,
+                    installed_at = DateTime.Now.ToString("o"),
+                }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch { }
+
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker");
+            key?.SetValue("DeviceId", _deviceId);
+            key?.SetValue("Token", token);
+            key?.SetValue("ServerUrl", serverUrl);
+            key?.SetValue("InstalledAt", DateTime.Now.ToString("o"));
+        }
+        catch { }
+    }
+
+    private static void RegisterAutostart(string exePath, string serverUrl, string token)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run");
+
+            key?.SetValue("MitoAuditTracker",
+                $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+        }
+        catch { }
+    }
+
+    /// <summary>Starts an agent process without showing a console window.</summary>
+    private static void StartDetached(string exePath, string arguments)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = arguments,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+            });
+        }
+        catch { }
+    }
+
+    private static string? ReadRegistryString(string name)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker");
+
+            return key?.GetValue(name) as string;
         }
         catch
         {
-            // Save config even if registration fails - agent will retry on startup
-            SaveConfig(serverUrl, token);
-            return token;
+            return null;
         }
     }
 
@@ -278,58 +377,70 @@ public partial class InstallerWindow : Window
         return id;
     }
 
-    private void SaveConfig(string serverUrl, string token)
+    private void ShowSuccess()
     {
-        var configPath = Path.Combine(_installDir, "config.json");
-        File.WriteAllText(configPath, JsonSerializer.Serialize(new
-        {
-            device_id = _deviceId,
-            token = token,
-            server_url = serverUrl,
-            installed_at = DateTime.Now.ToString("o")
-        }, new JsonSerializerOptions { WriteIndented = true }));
-
-        SaveToRegistry(serverUrl, token);
-    }
-
-    private void SaveToRegistry(string serverUrl, string token)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker", true)
-                     ?? Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker");
-            key?.SetValue("DeviceId", _deviceId);
-            key?.SetValue("Token", token);
-            key?.SetValue("ServerUrl", serverUrl);
-            key?.SetValue("InstalledAt", DateTime.Now.ToString("o"));
-        }
-        catch { }
-    }
-
-    private void RegisterAutostart(string exePath, string serverUrl, string token)
-    {
-        try
-        {
-            var runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-            using var key = Registry.CurrentUser.CreateSubKey(runKey);
-            // Autostart with --daemon flag
-            key?.SetValue("MitoAuditTracker", $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
-        }
-        catch { }
-    }
-
-    private void UpdateStatus(int percent, string message)
-    {
-        _progress = percent;
-        _stepMessage = message;
-
         Dispatcher.BeginInvoke(() =>
         {
-            ProgressBar.Value = _progress;
-            PercentText.Text = $"{_progress}%";
-            StatusText.Text = _stepMessage;
-        });
+            _progressTimer.Stop();
+            EndShimmer();
 
-        Thread.Sleep(100);
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ResultPanel.Visibility = Visibility.Visible;
+            ResultIcon.Text = "OK";
+            ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
+            ResultText.Text = "Installation complete";
+            ResultDetail.Text =
+                $"Agent installed to {_installDir}\n" +
+                $"Connected to {_serverUrl}\n\n" +
+                "The device is reporting now — it appears in Master Assets and Live Fleet.";
+
+            // Nothing to click on success: close the window after a moment.
+            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
+            _autoCloseTimer.Tick += (_, _) =>
+            {
+                _autoCloseTimer.Stop();
+                Close();
+            };
+            _autoCloseTimer.Start();
+        });
     }
+
+    private void ShowFailure(string message)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _progressTimer.Stop();
+            EndShimmer();
+
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ResultPanel.Visibility = Visibility.Visible;
+            RetryButton.Visibility = Visibility.Visible;
+            CloseButton.Visibility = Visibility.Visible;
+
+            ResultIcon.Text = "X";
+            ResultIcon.Foreground = System.Windows.Media.Brushes.OrangeRed;
+            ResultText.Text = "Installation failed";
+            ResultDetail.Text = message;
+        });
+    }
+
+    private async void RetryButton_Click(object sender, RoutedEventArgs e)
+    {
+        RetryButton.Visibility = Visibility.Collapsed;
+        CloseButton.Visibility = Visibility.Collapsed;
+        ResultPanel.Visibility = Visibility.Collapsed;
+        StatusPanel.Visibility = Visibility.Visible;
+
+        _targetProgress = 0;
+        _displayedProgress = 0;
+        ProgressBar.Value = 0;
+        PercentText.Text = "0%";
+
+        _progressTimer.Start();
+        BeginShimmer();
+
+        await AutoInstallAsync();
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 }

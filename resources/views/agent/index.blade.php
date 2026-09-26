@@ -12,6 +12,14 @@
     </x-slot:actions>
 </x-page-header>
 
+<x-card class="mb-6">
+    <div class="flex flex-wrap gap-2 text-theme-sm">
+        <a href="{{ route('agent.index') }}" class="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white">Tokens</a>
+        <a href="{{ route('agent.commands') }}" class="rounded-lg bg-gray-100 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Commands</a>
+        <a href="{{ route('agent.fleet') }}" class="rounded-lg bg-gray-100 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Live Fleet</a>
+    </div>
+</x-card>
+
 <div class="grid grid-cols-1 gap-6">
     <x-card title="How to Deploy" padding="p-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -26,7 +34,7 @@
                 <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold">2</div>
                 <div>
                     <h3 class="font-semibold text-gray-900 dark:text-white mb-1">Install on Device</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Run <code class="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs">TrackerAgent.exe</code> on the device. No admin password required.</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Run <code class="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs">TrackerAgent.exe</code> on the device. Zero configuration: the download already carries this server's address, so the installer auto-detects it and registers the device on its own.</p>
                 </div>
             </div>
             <div class="flex gap-4">

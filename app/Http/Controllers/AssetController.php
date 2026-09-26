@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Exports\AssetsExport;
 use App\Models\ActivityLog;
+use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\Asset;
 use App\Models\AssetAssignment;
 use App\Models\AssetAudit;
@@ -365,6 +367,28 @@ class AssetController extends Controller
             return back()->with('error', 'This asset has no serial number. Agent scan requires a serial number to match the device.');
         }
 
+        // Address the device through the token whose telemetry snapshot is
+        // linked to this asset (re-linked on every scan the agent submits).
+        $token = AgentApiToken::query()
+            ->whereHas('telemetry', fn ($q) => $q->where('asset_id', $asset->id))
+            ->orderByDesc('last_used_at')
+            ->first();
+
+        if (! $token) {
+            return back()->with('error', 'No audit agent is enrolled for this asset yet. Download and run the 1-click agent on the device — it registers itself automatically.');
+        }
+
+        if (! $token->isUsable()) {
+            return back()->with('error', 'The audit agent for this asset is deactivated or its token has expired. Re-activate it on the Agents page or reinstall the agent on the device.');
+        }
+
+        AgentCommand::create([
+            'agent_token_id' => $token->id,
+            'command' => 'scan',
+            'payload' => ['source' => 'asset-audit', 'asset_id' => $asset->id],
+            'status' => 'pending',
+        ]);
+
         ActivityLog::create([
             'actor_id' => Auth::id(),
             'action' => 'AGENT_SCAN_REQUEST',
@@ -372,11 +396,11 @@ class AssetController extends Controller
             'entity_id' => $asset->id,
             'entity_identifier' => $asset->asset_id,
             'new_value' => json_encode(['serial_number' => $asset->serial_number]),
-            'metadata' => ['via' => 'agent-scan'],
+            'metadata' => ['via' => 'agent-scan', 'agent_token_id' => $token->id],
             'source' => 'Web UI',
         ]);
 
-        return back()->with('success', 'Scan command queued. The audit agent on this device will pick it up and send the scan result.');
+        return back()->with('success', 'Scan command queued. The audit agent on this device will pick it up within a few seconds and send the scan result.');
     }
 
     public function audit(Asset $asset)

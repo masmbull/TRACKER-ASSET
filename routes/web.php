@@ -107,6 +107,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/agent', [AgentTokenController::class, 'index'])->name('agent.index');
         Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
 
+        Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
         Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
         Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');

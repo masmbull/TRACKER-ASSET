@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class AgentApiToken extends Model
 {
@@ -29,5 +30,13 @@ class AgentApiToken extends Model
         }
 
         return $this->expires_at === null || $this->expires_at->isFuture();
+    }
+
+    /**
+     * Latest Live Fleet telemetry snapshot for this device (PRD §11).
+     */
+    public function telemetry(): HasOne
+    {
+        return $this->hasOne(AgentTelemetry::class, 'agent_token_id')->latestOfMany('reported_at');
     }
 }
