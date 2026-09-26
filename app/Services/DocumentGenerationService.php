@@ -99,6 +99,14 @@ class DocumentGenerationService
                 'storage' => $asset->storage,
                 'os_version' => $asset->os_version,
                 'status' => $asset->status?->name,
+                'type' => $input['asset_type'] ?? $asset->category?->name,
+                'brand_model' => $input['asset_brand_model'] ?? trim(($asset->brand ?? '').' '.($asset->model ?? '')),
+                'serial' => $input['asset_serial_number'] ?? $asset->serial_number,
+                'tag' => $input['asset_tag'] ?? $asset->asset_id,
+                'processor_detail' => $input['asset_processor'] ?? $asset->processor,
+                'ram_detail' => $input['asset_ram'] ?? $asset->ram,
+                'storage_detail' => $input['asset_storage'] ?? $asset->storage,
+                'accessories' => $input['asset_accessories'] ?? null,
             ],
             'company' => $asset->company?->name,
             'location' => $asset->location?->name,
@@ -115,6 +123,11 @@ class DocumentGenerationService
                 'condition' => $transfer->condition,
                 'accessories' => $transfer->accessories,
             ] : null,
+            'handover' => [
+                'date' => $input['handover_date'] ?? $input['document_date'] ?? now()->toDateString(),
+                'received_date' => $input['received_date'] ?? null,
+                'purpose' => $input['purpose'] ?? null,
+            ],
             'signatories' => [
                 'menyerahkan' => $input['signatory_menyerahkan'] ?? null,
                 'menerima' => $input['signatory_menerima'] ?? null,
@@ -123,6 +136,7 @@ class DocumentGenerationService
             ],
             'checklist' => $this->checklistFor($type, $input),
             'notes' => $input['notes'] ?? null,
+            'statement' => $input['statement'] ?? null,
         ];
     }
 

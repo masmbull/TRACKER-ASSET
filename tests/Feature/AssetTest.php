@@ -49,6 +49,20 @@ class AssetTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_authenticated_user_can_search_assets_by_status_name(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'viewer',
+            'password' => Hash::make('password'),
+        ]);
+
+        Asset::factory()->count(2)->create();
+
+        $response = $this->actingAs($user)->get('/assets?search=Active');
+
+        $response->assertStatus(200);
+    }
+
     public function test_authenticated_user_can_create_asset(): void
     {
         $user = User::factory()->create([

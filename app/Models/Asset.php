@@ -45,7 +45,7 @@ class Asset extends Model
 
     public function status(): BelongsTo
     {
-        return $this->belongsTo(AssetStatus::class);
+        return $this->belongsTo(AssetStatus::class, 'asset_status_id');
     }
 
     public function location(): BelongsTo

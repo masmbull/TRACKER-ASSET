@@ -1,207 +1,209 @@
 @extends('layouts.app')
 
 @section('title', 'Dashboard')
+@section('header', 'Dashboard')
 
 @section('content')
-<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+@php
+    $stats = [
+        ['label' => 'Total Assets', 'value' => $totalAssets, 'bg' => 'bg-brand-50', 'text' => 'text-brand-500'],
+        ['label' => 'Active', 'value' => $activeAssets, 'bg' => 'bg-success-50', 'text' => 'text-success-500'],
+        ['label' => 'Available', 'value' => $availableAssets, 'bg' => 'bg-blue-light-50', 'text' => 'text-blue-light-500'],
+        ['label' => 'Assigned', 'value' => $assignedAssets, 'bg' => 'bg-warning-50', 'text' => 'text-warning-500'],
+        ['label' => 'Repair', 'value' => $repairAssets, 'bg' => 'bg-orange-50', 'text' => 'text-orange-500'],
+        ['label' => 'Retired', 'value' => $retiredAssets, 'bg' => 'bg-gray-100', 'text' => 'text-gray-500'],
+        ['label' => 'Disposed', 'value' => $disposedAssets, 'bg' => 'bg-error-50', 'text' => 'text-error-500'],
+    ];
+@endphp
 
-<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Total Assets</p>
-        <p class="text-3xl font-bold">{{ $totalAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Active</p>
-        <p class="text-3xl font-bold text-green-600">{{ $activeAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Available</p>
-        <p class="text-3xl font-bold text-blue-600">{{ $availableAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Assigned</p>
-        <p class="text-3xl font-bold text-yellow-600">{{ $assignedAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Repair</p>
-        <p class="text-3xl font-bold text-orange-600">{{ $repairAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Retired</p>
-        <p class="text-3xl font-bold text-gray-600">{{ $retiredAssets }}</p>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <p class="text-sm text-gray-500">Disposed</p>
-        <p class="text-3xl font-bold text-gray-600">{{ $disposedAssets }}</p>
-    </div>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 md:gap-6">
+    @foreach($stats as $stat)
+        <x-card class="text-center">
+            <div class="flex items-center justify-center mb-3">
+                <div class="{{ $stat['bg'] }} flex h-11 w-11 items-center justify-center rounded-xl">
+                    <span class="{{ $stat['text'] }} text-xl font-bold">{{ $stat['value'] }}</span>
+                </div>
+            </div>
+            <p class="text-theme-sm text-gray-500 dark:text-gray-400">{{ $stat['label'] }}</p>
+        </x-card>
+    @endforeach
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-    <div class="bg-white p-4 rounded shadow">
-        <p class="text-sm text-gray-500">Open Repairs</p>
-        <p class="text-2xl font-bold">{{ $openRepairs }}</p>
-    </div>
-    <div class="bg-white p-4 rounded shadow">
-        <p class="text-sm text-gray-500">Total Repairs</p>
-        <p class="text-2xl font-bold">{{ $totalRepairs }}</p>
-    </div>
-    <div class="bg-white p-4 rounded shadow">
-        <p class="text-sm text-gray-500">Recent Transfers</p>
-        <p class="text-2xl font-bold">{{ $recentTransfers->count() }}</p>
-    </div>
+<div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 mt-6">
+    <x-card title="Open Repairs">
+        <p class="text-title-sm font-bold text-orange-500">{{ $openRepairs }}</p>
+    </x-card>
+    <x-card title="Total Repairs">
+        <p class="text-title-sm font-bold text-gray-800 dark:text-white/90">{{ $totalRepairs }}</p>
+    </x-card>
+    <x-card title="Recent Transfers">
+        <p class="text-title-sm font-bold text-brand-500">{{ $recentTransfers->count() }}</p>
+    </x-card>
 </div>
 
-<div class="bg-white p-6 rounded shadow mb-8">
-    <h2 class="text-lg font-semibold mb-4">Warnings</h2>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<x-card class="mt-6" x-data="{ expanded: true }">
+    <div class="flex items-center justify-between mb-4" x-show="expanded">
+        <button @click="expanded = !expanded" class="flex items-center gap-2">
+            <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Warnings</h3>
+            @php $totalWarnings = array_sum($warnings); @endphp
+            @if($totalWarnings > 0)
+                <x-badge variant="warning" dot>{{ $totalWarnings }}</x-badge>
+            @endif
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="expanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+    </div>
+    <button @click="expanded = !expanded" x-show="!expanded" class="flex items-center gap-2 mb-4">
+        <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Warnings</h3>
+        @if($totalWarnings > 0)
+            <x-badge variant="warning" dot>{{ $totalWarnings }}</x-badge>
+        @endif
+    </button>
+
+    <div x-show="expanded" x-collapse x-cloak>
         @php
             $warningLabels = [
-                'warranty_expiring' => ['Warranty Expiring (60 days)', 'text-orange-600'],
-                'not_audited' => ['Asset Not Audited', 'text-yellow-600'],
-                'audit_mismatch' => ['Audit Mismatch', 'text-red-600'],
-                'missing_serial' => ['Missing Serial', 'text-red-500'],
-                'missing_asset_id' => ['Missing Asset ID', 'text-red-500'],
-                'duplicate_serial' => ['Duplicate Serial', 'text-red-700'],
-                'retirement_due' => ['Retirement Due', 'text-gray-700'],
-                'audit_stale' => ['Audit Older Than 6 Months', 'text-yellow-700'],
+                'warranty_expiring' => ['Warranty Expiring (60d)', 'warning'],
+                'not_audited' => ['Not Audited', 'warning'],
+                'audit_mismatch' => ['Audit Mismatch', 'error'],
+                'missing_serial' => ['Missing Serial', 'error'],
+                'missing_asset_id' => ['Missing Asset ID', 'error'],
+                'duplicate_serial' => ['Duplicate Serial', 'error'],
+                'retirement_due' => ['Retirement Due', 'gray'],
+                'audit_stale' => ['Audit Stale (>6mo)', 'warning'],
             ];
         @endphp
-        @foreach($warningLabels as $key => $meta)
-            <div class="border rounded p-3">
-                <p class="text-xs text-gray-500">{{ $meta[0] }}</p>
-                <p class="text-xl font-bold {{ $meta[1] }}">{{ $warnings[$key] ?? 0 }}</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            @foreach($warningLabels as $key => $meta)
+                <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-center">
+                    <p class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $meta[0] }}</p>
+                    <p class="text-xl font-bold text-gray-800 dark:text-white/90 mt-1">{{ $warnings[$key] ?? 0 }}</p>
+                </div>
+            @endforeach
+        </div>
+    </div>
+</x-card>
+
+<div class="grid grid-cols-1 gap-6 md:grid-cols-3 mt-6">
+    @php
+        $charts = [
+            ['title' => 'by Category', 'data' => $assetsByCategory, 'color' => 'brand'],
+            ['title' => 'by Location', 'data' => $assetsByLocation, 'color' => 'success'],
+            ['title' => 'by Company', 'data' => $assetsByCompany, 'color' => 'theme-purple-500'],
+        ];
+    @endphp
+    @foreach($charts as $chart)
+        <x-card title="Assets {{ $chart['title'] }}">
+            @if($chart['data']->count() > 0)
+                @php $max = $chart['data']->max('total'); @endphp
+                <div class="space-y-3">
+                    @foreach($chart['data'] as $item)
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-theme-sm text-gray-500 dark:text-gray-400">{{ $item->name }}</span>
+                                <span class="text-theme-xs text-gray-400">{{ $item->total }}</span>
+                            </div>
+                            <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                                <div class="bg-brand-500 h-2 rounded-full" style="width: {{ $max > 0 ? ($item->total / $max * 100) : 0 }}%"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <p class="text-theme-sm text-gray-400">No data available.</p>
+            @endif
+        </x-card>
+    @endforeach
+</div>
+
+<x-card class="mt-6">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Agent Fleet</h3>
+        @can('manage-agents')
+            <div class="flex gap-2">
+                <x-button variant="secondary" size="sm" :href="route('agent.commands')">Command Center</x-button>
+                <x-button variant="success" size="sm" type="button" @click="$dispatch('open-modal', 'scan-all-agents-modal')">Scan All</x-button>
+            </div>
+        @endcan
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        @php
+            $fleetItems = [
+                ['label' => 'Online', 'value' => $fleet['online'], 'variant' => 'success'],
+                ['label' => 'Stale (>5m)', 'value' => $fleet['stale'], 'variant' => 'warning'],
+                ['label' => 'Never Reported', 'value' => $fleet['offline'], 'variant' => 'gray'],
+                ['label' => 'Pending Commands', 'value' => $fleet['pending_commands'], 'variant' => $fleet['pending_commands'] > 0 ? 'error' : 'gray'],
+            ];
+        @endphp
+        @foreach($fleetItems as $fi)
+            <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 text-center">
+                <x-badge :variant="$fi['variant']" class="text-lg font-bold px-3 py-1">{{ $fi['value'] }}</x-badge>
+                <p class="text-theme-xs text-gray-500 dark:text-gray-400 mt-2">{{ $fi['label'] }}</p>
             </div>
         @endforeach
     </div>
-</div>
+    <p class="text-theme-xs text-gray-400 mt-3">Agent audits in the last 24 hours: <strong class="text-gray-600">{{ $fleet['recent_audits'] }}</strong></p>
+</x-card>
 
-<div class="bg-white p-6 rounded shadow mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold">Agent Fleet</h2>
-        <div class="flex gap-2 text-sm">
-            @can('manage-agents')
-                <a href="{{ route('agent.commands') }}" class="text-blue-600">Command Center</a>
-                <form method="POST" action="{{ route('agent.scanAll') }}" class="inline">
-                    @csrf
-                    <button type="submit" class="text-green-700 font-medium">Scan All Laptops</button>
-                </form>
-            @endcan
-        </div>
-    </div>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="border rounded p-3">
-            <p class="text-xs text-gray-500">Agents Online</p>
-            <p class="text-xl font-bold text-green-600">{{ $fleet['online'] }}</p>
-        </div>
-        <div class="border rounded p-3">
-            <p class="text-xs text-gray-500">Stale (&gt; 5 min)</p>
-            <p class="text-xl font-bold text-yellow-600">{{ $fleet['stale'] }}</p>
-        </div>
-        <div class="border rounded p-3">
-            <p class="text-xs text-gray-500">Never Reported</p>
-            <p class="text-xl font-bold text-gray-500">{{ $fleet['offline'] }}</p>
-        </div>
-        <div class="border rounded p-3">
-            <p class="text-xs text-gray-500">Pending Commands</p>
-            <p class="text-xl font-bold {{ $fleet['pending_commands'] > 0 ? 'text-orange-600' : 'text-gray-700' }}">{{ $fleet['pending_commands'] }}</p>
-        </div>
-    </div>
-    <p class="text-xs text-gray-500 mt-3">Agent audits in the last 24 hours: <strong>{{ $fleet['recent_audits'] }}</strong></p>
-</div>
+<x-modal id="scan-all-agents-modal" title="Scan all agents" maxWidth="md">
+    <div class="space-y-4">
+        <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+            Start a scan for all active agents so the current fleet status is refreshed across the asset inventory.
+        </p>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-semibold mb-4">Assets by Category</h2>
-        <ul>
-            @forelse($assetsByCategory as $item)
-                <li class="flex justify-between py-1 border-b">
-                    <span>{{ $item->name }}</span>
-                    <span>{{ $item->total }}</span>
-                </li>
-            @empty
-                <li class="text-gray-500">No data.</li>
-            @endforelse
-        </ul>
+        <form method="POST" action="{{ route('agent.scanAll') }}" class="space-y-4">
+            @csrf
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" @click="$dispatch('close-modal', 'scan-all-agents-modal')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                <x-button type="submit" variant="success">Scan now</x-button>
+            </div>
+        </form>
     </div>
-    <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-semibold mb-4">Assets by Location</h2>
-        <ul>
-            @forelse($assetsByLocation as $item)
-                <li class="flex justify-between py-1 border-b">
-                    <span>{{ $item->name }}</span>
-                    <span>{{ $item->total }}</span>
-                </li>
-            @empty
-                <li class="text-gray-500">No data.</li>
-            @endforelse
-        </ul>
-    </div>
-    <div class="bg-white p-6 rounded shadow">
-        <h2 class="text-lg font-semibold mb-4">Assets by Company</h2>
-        <ul>
-            @forelse($assetsByCompany as $item)
-                <li class="flex justify-between py-1 border-b">
-                    <span>{{ $item->name }}</span>
-                    <span>{{ $item->total }}</span>
-                </li>
-            @empty
-                <li class="text-gray-500">No data.</li>
-            @endforelse
-        </ul>
-    </div>
-</div>
+</x-modal>
 
 @if($recentTransfers->count() > 0)
-<div class="bg-white p-6 rounded shadow mb-8">
-    <h2 class="text-lg font-semibold mb-4">Recent Transfers</h2>
-    <table class="min-w-full">
-        <thead>
-            <tr class="border-b">
-                <th class="text-left py-2 px-4">Transfer #</th>
-                <th class="text-left py-2 px-4">Date</th>
-                <th class="text-left py-2 px-4">From</th>
-                <th class="text-left py-2 px-4">To</th>
-                <th class="text-left py-2 px-4">Status</th>
-            </tr>
-        </thead>
-        <tbody>
+    <x-card class="mt-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Recent Transfers</h3>
+            <a href="{{ route('transfers.index') }}" class="text-theme-sm text-brand-500 hover:text-brand-600">View all</a>
+        </div>
+
+        <x-table :headers="['Transfer #', 'Date', 'From', 'To', 'Status']">
             @foreach($recentTransfers as $transfer)
-            <tr class="border-b">
-                <td class="py-2 px-4">{{ $transfer->transfer_number }}</td>
-                <td class="py-2 px-4">{{ $transfer->transfer_date }}</td>
-                <td class="py-2 px-4">{{ $transfer->fromUser?->name }}</td>
-                <td class="py-2 px-4">{{ $transfer->toUser?->name }}</td>
-                <td class="py-2 px-4"><span class="px-2 py-1 text-xs rounded bg-gray-200">{{ $transfer->status }}</span></td>
-            </tr>
+                <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                    <td class="py-3 px-4 text-theme-sm font-medium text-gray-700 dark:text-gray-300">{{ $transfer->transfer_number }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-500">{{ $transfer->transfer_date?->format('Y-m-d') }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-600">{{ $transfer->fromUser?->name }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-600">{{ $transfer->toUser?->name }}</td>
+                    <td class="py-3 px-4"><x-badge variant="success">{{ $transfer->status }}</x-badge></td>
+                </tr>
             @endforeach
-        </tbody>
-    </table>
-</div>
+        </x-table>
+    </x-card>
 @endif
 
-<div class="bg-white p-6 rounded shadow">
-    <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
-    <table class="min-w-full">
-        <thead>
-            <tr class="border-b">
-                <th class="text-left py-2">User</th>
-                <th class="text-left py-2">Action</th>
-                <th class="text-left py-2">Asset</th>
-                <th class="text-left py-2">Time</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse($recentActivity as $activity)
-                <tr class="border-b">
-                    <td class="py-2">{{ $activity->actor?->name }}</td>
-                    <td class="py-2">{{ $activity->action }}</td>
-                    <td class="py-2">{{ $activity->entity_identifier }}</td>
-                    <td class="py-2">{{ $activity->created_at->diffForHumans() }}</td>
-                </tr>
-            @empty
-                <tr><td colspan="4" class="py-2 text-gray-500">No activity yet.</td></tr>
-            @endforelse
-        </tbody>
-    </table>
-</div>
+<x-card class="mt-6" title="Recent Activity">
+    <div class="space-y-3">
+        @forelse($recentActivity as $activity)
+            <div class="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+                    <span class="text-theme-xs font-semibold text-gray-500">{{ strtoupper(substr($activity->action, 0, 1)) }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-theme-sm text-gray-700 dark:text-gray-300">
+                        <span class="font-medium text-gray-800 dark:text-white/90">{{ $activity->actor?->name ?? 'System' }}</span>
+                        <span class="text-gray-400 mx-1">&middot;</span>
+                        <span>{{ $activity->action }}</span>
+                        <span class="text-gray-400 mx-1">&middot;</span>
+                        <span class="font-medium text-gray-600 dark:text-gray-400">{{ $activity->entity_identifier }}</span>
+                    </p>
+                    <p class="text-theme-xs text-gray-400 mt-0.5">{{ $activity->created_at->diffForHumans() }}</p>
+                </div>
+            </div>
+        @empty
+            <p class="text-theme-sm text-gray-400 text-center py-4">No activity yet.</p>
+        @endforelse
+    </div>
+</x-card>
 @endsection

@@ -3,70 +3,80 @@
 @section('title', $user ? 'Edit User' : 'New User')
 
 @section('content')
-<h1 class="text-2xl font-bold mb-6">{{ $user ? 'Edit' : 'New' }} User</h1>
+<div class="mx-auto max-w-5xl space-y-6">
+    <x-page-header :title="($user ? 'Edit' : 'New') . ' User'" :subtitle="$user ? 'Update profile, role and access details.' : 'Create a new system user with access and role information.'">
+        <x-slot:actions>
+            <x-button variant="secondary" size="sm" :href="route('users.index')">Back to Users</x-button>
+        </x-slot:actions>
+    </x-page-header>
 
-<form method="POST" action="{{ $user ? route('users.update', $user) : route('users.store') }}" class="bg-white p-6 rounded shadow space-y-4">
-    @csrf
-    @if($user)
-        @method('PUT')
-    @endif
+    <form method="POST" action="{{ $user ? route('users.update', $user) : route('users.store') }}" class="space-y-6">
+        @csrf
+        @if($user)
+            @method('PUT')
+        @endif
 
-    <div class="grid grid-cols-2 gap-4">
-        <div>
-            <label class="block text-sm font-medium">Name *</label>
-            <input type="text" name="name" required value="{{ old('name', $user?->name) }}" class="w-full border rounded px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Email *</label>
-            <input type="email" name="email" required value="{{ old('email', $user?->email) }}" class="w-full border rounded px-3 py-2">
-        </div>
-    	<div>
-            <label class="block text-sm font-medium">Role {{ auth()->user()->isAdmin() ? '*' : '(admin only)' }}</label>
-            <select name="role" {{ auth()->user()->isAdmin() ? 'required' : 'disabled' }} class="w-full border rounded px-3 py-2">
-                @foreach(\App\Models\User::ROLES as $role)
-                    <option value="{{ $role }}" {{ (string) old('role', $user?->role ?? 'viewer') === $role ? 'selected' : '' }}>{{ ucfirst($role) }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Department</label>
-            <input type="text" name="department" value="{{ old('department', $user?->department) }}" class="w-full border rounded px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Job Title</label>
-            <input type="text" name="job_title" value="{{ old('job_title', $user?->job_title) }}" class="w-full border rounded px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Company</label>
-            <input type="text" name="company" value="{{ old('company', $user?->company) }}" class="w-full border rounded px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">{{ $user ? 'New Password (leave blank to keep)' : 'Password * (min 8)' }}</label>
-            <input type="password" name="password" {{ $user ? '' : 'required' }} class="w-full border rounded px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Confirm Password {{ $user ? '' : '*' }}</label>
-            <input type="password" name="password_confirmation" {{ $user ? '' : 'required' }} class="w-full border rounded px-3 py-2">
-        </div>
-    </div>
+        <x-card title="User Details">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Name *</label>
+                    <input type="text" name="name" required value="{{ old('name', $user?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Email *</label>
+                    <input type="email" name="email" required value="{{ old('email', $user?->email) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Role {{ auth()->user()->isAdmin() ? '*' : '(admin only)' }}</label>
+                    <select name="role" {{ auth()->user()->isAdmin() ? 'required' : 'disabled' }} class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        @foreach(\App\Models\User::ROLES as $role)
+                            <option value="{{ $role }}" {{ (string) old('role', $user?->role ?? 'viewer') === $role ? 'selected' : '' }}>{{ ucfirst($role) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                    <input type="text" name="department" value="{{ old('department', $user?->department) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Job Title</label>
+                    <input type="text" name="job_title" value="{{ old('job_title', $user?->job_title) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Company</label>
+                    <input type="text" name="company" value="{{ old('company', $user?->company) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">{{ $user ? 'New Password (leave blank to keep)' : 'Password * (min 8)' }}</label>
+                    <input type="password" name="password" {{ $user ? '' : 'required' }} class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Confirm Password {{ $user ? '' : '*' }}</label>
+                    <input type="password" name="password_confirmation" {{ $user ? '' : 'required' }} class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+            </div>
+        </x-card>
 
-    @if($user)
-        <label class="flex items-center gap-2 text-sm">
-            <input type="hidden" name="is_active" value="0">
-            <input type="checkbox" name="is_active" value="1" {{ old('is_active', $user->is_active) ? 'checked' : '' }}>
-            Active (inactive users are blocked from the system)
-        </label>
-    @else
-        <input type="hidden" name="is_active" value="1">
-    @endif
+        <x-card title="Status">
+            @if($user)
+                <label class="flex items-center gap-3 text-theme-sm text-gray-700 dark:text-gray-300">
+                    <input type="hidden" name="is_active" value="0">
+                    <input type="checkbox" name="is_active" value="1" {{ old('is_active', $user->is_active) ? 'checked' : '' }} class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+                    Active (inactive users are blocked from the system)
+                </label>
+            @else
+                <input type="hidden" name="is_active" value="1">
+            @endif
 
-    @error('password')
-        <p class="text-red-600 text-sm">{{ $message }}</p>
-    @enderror
+            @error('password')
+                <p class="mt-3 text-theme-sm text-error-500">{{ $message }}</p>
+            @enderror
+        </x-card>
 
-    <div class="flex gap-2 pt-4">
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded">{{ $user ? 'Update' : 'Create' }}</button>
-        <a href="{{ route('users.index') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
-    </div>
-</form>
+        <div class="flex justify-end gap-3">
+            <a href="{{ route('users.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</a>
+            <x-button type="submit" variant="primary">{{ $user ? 'Update User' : 'Create User' }}</x-button>
+        </div>
+    </form>
+</div>
 @endsection
