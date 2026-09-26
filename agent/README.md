@@ -8,7 +8,7 @@ Windows hardware collector that runs on each laptop/workstation and reports back
 2. POSTs JSON to the server API
 3. Server compares against registered asset data
 4. Returns MATCH / MISMATCH / UNKNOWN DEVICE result
-5. **Never overwrites registered data** — comparison only
+5. **Never overwrites registered data** â€” comparison only
 
 ## Two Modes
 
@@ -68,7 +68,7 @@ you just compiled.
 
 | Flag | Description |
 |---|---|
-| `--url`, `-u` | API base URL (default: `http://127.0.0.1:8000`) |
+| `--url`, `-u` | API base URL (default: baked download address, else `http://127.0.0.1:8000`) |
 | `--token`, `-t` | Bearer token (or set `TRACKER_AUDIT_TOKEN` env) |
 | `--asset-id`, `-a` | Specific asset ID to audit against |
 | `--quiet`, `-q` | Suppress console output |
@@ -106,7 +106,7 @@ itself with the exact same flags.
 2. Distribute `TrackerAgent.exe` to target machines (or use the one-liner install command)
 3. Run with `--daemon` flag
 4. Agent registers itself for Windows autostart (HKCU Run key)
-5. Monitor from TRACKER-ASSET dashboard → Agent Fleet section
+5. Monitor from TRACKER-ASSET dashboard â†’ Agent Fleet section
 
 ## API Endpoints Used
 
@@ -118,11 +118,70 @@ itself with the exact same flags.
 | GET | `/agent/download` | Fetch the newest agent exe (self-update) |
 | POST | `/api/agent/register` | Register a device during GUI install |
 
-## GUI Installer Mode
 
-Double-clicking `TrackerAgent.exe` with no CLI flags opens the installer window:
-it probes `http://127.0.0.1:8000` (and ports 8003/8004, plus `localhost`) via
-`/api/health`, falls back to a manual server URL box, registers the device on
-`/api/agent/register`, writes `%LOCALAPPDATA%\TRACKER\config.json`, and adds the
-`--daemon` autostart entry. Once configured, subsequent launches start straight
-into the system tray (Scan Now / Check for Updates / Exit).
+## GUI Installer Mode (zero configuration)
+
+Double-clicking `TrackerAgent.exe` with no CLI flags opens the installer window. It is
+fully automatic: the download route inlines the server address, so there is no URL or
+token to type and the only UI while it works is an animated progress bar.
+
+1. Reads the server address baked into its own binary (see below) - falling back to
+   `TRACKER_API_URL`, then `--server-url`, then the address used by a previous
+   installation, then `/api/health` probes of `http://127.0.0.1:8000` (plus 8003, 8004
+   and `localhost`).
+2. Copies itself to `%LOCALAPPDATA%\TRACKER`, generates or reuses the device id,
+   registers the device on `/api/agent/register` and writes `config.json`.
+3. Adds the `--daemon` autostart entry (HKCU Run), starts the resident agent and runs a
+   first hardware scan, so the laptop appears in Master Assets and Live Fleet within
+   seconds.
+4. Shows "Installation complete" and closes itself. If no server answers, a single
+   **Retry** button is offered.
+
+Once configured, later launches go straight to the tray icon (Scan Now / Check for
+Updates / Exit).
+
+## Zero-Config Download (config trailer)
+
+`AgentTokenController::download()` streams the built exe and appends a UTF-8 trailer:
+
+```
+<<<TRACKER-AGENT-CONFIG:<base64 json>:END>>>
+```
+
+The JSON carries `server_urls` (the host the browser used plus `APP_URL`) and
+`issued_at`. `AgentConfigTrailer.cs` reads the last 64 KB of the running executable, so
+the installer and the daemon know their server without any input. Appending to a .NET 8
+single-file executable is safe: the host locates its bundle through an absolute offset
+rather than an end-of-file footer (verified by running an appended build).
+
+The trailer is exactly `"\n<<<TRACKER-AGENT-CONFIG:<base64 json>:END>>>\n"` — 33 bytes
+of fixed overhead (24-byte opener, 7-byte closer, 2 newline bytes) plus the base64
+payload, so a typical trailer measures 173 bytes total (171 excluding the newlines).
+
+## Standard Users & UAC (fleet reality)
+
+Fleet laptops run local **standard** accounts; the admin profile belongs to IT and end
+users cannot approve UAC. The agent is built for exactly that:
+
+- No manifest elevation (`asInvoker`) — double-clicking the installer never raises a
+  UAC prompt, so an ordinary user can complete the 1-click install unattended.
+- All state lives in `%LOCALAPPDATA%\TRACKER` and `HKCU` (Run key, device id). The
+  agent never writes HKLM, never installs to Program Files, never creates a Windows
+  service, scheduled task or firewall rule.
+- WMI hardware collection and the scan/audit loop work for standard users.
+
+Install **from the daily-driver account** — installation is per-user, so the HKCU
+autostart belongs to whoever runs the installer.
+
+## Windows Smart App Control (SAC) & code signing
+
+The exe is unsigned. Smart App Control / SmartScreen judge **per binary hash**: a
+freshly built hash can be blocked once while a re-download passes (the config
+trailer embeds `issued_at`, so every download produces a new hash). The trailer
+itself is innocent — locally appended builds run normally.
+
+**Real fix: code-sign `TrackerAgent.exe`** with a trusted certificate
+(`signtool sign /fd SHA256 ...`). When signing, re-verify the signed binary together
+with the download-time trailer append (sign happens at build time, the trailer is
+appended when the server streams the file) and re-run the install E2E. Until the
+binary is signed, expect occasional SmartScreen/SAC friction on fresh builds.

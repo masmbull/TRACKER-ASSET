@@ -533,6 +533,33 @@ agent/TrackerAgent/
 4. Auto-update helper launches a detached process that replaces `TrackerAgent.exe` once the running instance exits, then restarts the agent.
 5. In addition to the C# agent, a lightweight PowerShell resident daemon (`agent/tracker-agent-daemon.ps1`) is supported for headless environments.
 
+### Fleet Deployment Constraints (standard users, no UAC)
+
+Every fleet laptop runs a local **standard-user** account; the IT admin is the only
+holder of an admin profile and end users cannot approve UAC. The agent is therefore
+built to run fully unprivileged:
+
+- Default `asInvoker` manifest — the 1-click installer never raises a UAC prompt.
+- All state lives in `%LOCALAPPDATA%\TRACKER` and `HKCU` (Run key, device id).
+  No HKLM, Program Files, Windows service, scheduled task or firewall change is
+  ever made. WMI hardware collection works for standard users.
+- Because installation is per-user, run the installer **from the account that uses
+  the laptop daily** — the HKCU autostart belongs to whoever executes it.
+
+### Platform Risk — Smart App Control (unsigned binary)
+
+The published agent is unsigned. Windows Smart App Control / SmartScreen judge a
+**per binary hash**, so a freshly built hash can be blocked once while a
+re-download passes — the download-time config trailer embeds `issued_at`, giving
+every download a new hash. This is a reputation verdict, not a trailer defect:
+a locally appended build runs normally (the .NET 8 host locates its bundle by
+absolute offset, not end-of-file).
+
+**Resolution: code-sign `TrackerAgent.exe`** with a trusted code-signing
+certificate (`signtool`). When implementing, verify the signed binary together
+with the download-time trailer append (sign at build, trailer appended at serve)
+and re-run the install E2E. Until then, expect occasional SmartScreen/SAC
+friction on fresh builds; re-downloading usually clears a per-hash verdict.
 
 ---
 
