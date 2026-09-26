@@ -18,7 +18,7 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        // CLI modes documented in agent/README.md (--token, --daemon, --uninstall...).
+        // CLI modes documented in agent/README.md (--token, --daemon, --uninstall, --update...).
         // When any CLI flag is present we never open the installer/tray UI: run
         // AgentRunner headless (one-shot audit or resident inbox daemon) and exit
         // with its exit code. --server-url is the installer GUI flag, not a CLI mode.
@@ -63,7 +63,7 @@ public partial class App : System.Windows.Application
     private static bool IsCliFlag(string arg) => arg.ToLowerInvariant() switch
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
-        "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" => true,
+        "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update" => true,
         _ => false,
     };
 
@@ -78,6 +78,7 @@ public partial class App : System.Windows.Application
         };
 
         _trayIcon.ContextMenuStrip.Items.Add("Scan Now", null, (_, _) => RunScan(config));
+        _trayIcon.ContextMenuStrip.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
         _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
 
         _ = Task.Run(() => CommandLoop(config));
@@ -101,6 +102,15 @@ public partial class App : System.Windows.Application
                         {
                             RunScan(config);
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
+                        }
+                        else if (command == "update")
+                        {
+                            Api.Ack(config.ServerUrl, config.Token, id, "done");
+                            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Applying auto-update...", ToolTipIcon.Info);
+                            if (AutoUpdater.PerformUpdate(config.ServerUrl, config.Token))
+                            {
+                                Environment.Exit(0);
+                            }
                         }
                         else
                         {
@@ -128,6 +138,27 @@ public partial class App : System.Windows.Application
         catch
         {
             _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Scan failed.", ToolTipIcon.Error);
+        }
+    }
+
+    private void RunUpdate(AgentConfig config)
+    {
+        try
+        {
+            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Checking for updates...", ToolTipIcon.Info);
+            bool updated = AutoUpdater.PerformUpdate(config.ServerUrl, config.Token);
+            if (updated)
+            {
+                Environment.Exit(0);
+            }
+            else
+            {
+                _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Update check finished or already up-to-date.", ToolTipIcon.Info);
+            }
+        }
+        catch
+        {
+            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Update failed.", ToolTipIcon.Error);
         }
     }
 
