@@ -133,4 +133,51 @@ class TransferTest extends TestCase
 
         $this->assertDatabaseCount('asset_transfers', 0);
     }
+
+    public function test_transfer_history_index_requires_auth(): void
+    {
+        $this->get('/transfers')->assertRedirect('/login');
+    }
+
+    public function test_transfer_history_index_is_accessible(): void
+    {
+        $this->actingAs($this->support)
+            ->get('/transfers')
+            ->assertOk()
+            ->assertSee('Transfer History');
+    }
+
+    public function test_transfer_history_shows_transfers(): void
+    {
+        $this->actingAs($this->support)
+            ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->target->id));
+
+        $this->actingAs($this->support)
+            ->get('/transfers')
+            ->assertOk()
+            ->assertSee('AST/TRF');
+    }
+
+    public function test_retired_assets_page_is_accessible(): void
+    {
+        $this->actingAs($this->support)
+            ->get('/assets/retired')
+            ->assertOk()
+            ->assertSee('Retired');
+    }
+
+    public function test_retired_assets_shows_retired_items(): void
+    {
+        $retiredStatus = AssetStatus::create(['name' => 'Retired']);
+        $this->asset->update([
+            'asset_status_id' => $retiredStatus->id,
+            'retire_date' => '2026-01-01',
+            'current_user_id' => null,
+        ]);
+
+        $this->actingAs($this->support)
+            ->get('/assets/retired')
+            ->assertOk()
+            ->assertSee($this->asset->asset_id);
+    }
 }

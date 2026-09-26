@@ -16,6 +16,7 @@ use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +42,13 @@ Route::middleware('auth')->group(function () {
     // Collection level routes must be declared before the resource route.
     Route::get('/assets/export', [AssetController::class, 'export'])
         ->name('assets.export')
+        ->middleware('can:export-assets');
+
+    Route::get('/assets/retired', [AssetController::class, 'retired'])
+        ->name('assets.retired');
+
+    Route::get('/transfers', [TransferController::class, 'index'])
+        ->name('transfers.index')
         ->middleware('can:export-assets');
 
     Route::get('/assets/import', [AssetImportController::class, 'show'])
