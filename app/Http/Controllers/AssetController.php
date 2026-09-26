@@ -683,6 +683,36 @@ class AssetController extends Controller
         );
     }
 
+    /**
+     * Retired / disposed assets list (PRD §43 "Assets → Retired").
+     */
+    public function retired(Request $request)
+    {
+        $this->authorize('viewAny', Asset::class);
+
+        $retiredStatuses = AssetStatus::whereIn('name', ['Retired', 'Disposed'])->pluck('id');
+
+        $query = Asset::query()
+            ->with(['category', 'status', 'location', 'currentUser', 'company'])
+            ->whereIn('asset_status_id', $retiredStatuses);
+
+        if ($request->filled('search')) {
+            $search = '%'.trim((string) $request->input('search')).'%';
+            $query->where(function ($q) use ($search) {
+                $q->where('asset_id', 'like', $search)
+                    ->orWhere('serial_number', 'like', $search)
+                    ->orWhere('hostname', 'like', $search)
+                    ->orWhereHas('currentUser', fn ($sub) => $sub->where('name', 'like', $search));
+            });
+        }
+
+        $assets = $query->orderByDesc('retire_date')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('assets.retired', compact('assets'));
+    }
+
     public function createRepair(Asset $asset)
     {
         $this->authorize('manageRepair', $asset);

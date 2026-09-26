@@ -1,148 +1,119 @@
 @extends('layouts.app')
 
 @section('title', 'Assets')
+@section('header', 'All Assets')
 
 @section('content')
-<div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">Assets</h1>
-    <div class="flex gap-2">
+<x-page-header title="Assets" :subtitle="$assets->total() . ' total'">
+    <x-slot:actions>
         @can('export-assets')
-            <a href="{{ route('assets.export', request()->query()) }}" class="bg-green-600 text-white px-4 py-2 rounded">Export Excel</a>
+            <x-button variant="success" size="sm" :href="route('assets.export', request()->query())">Export</x-button>
         @endcan
         @can('import-assets')
-            <a href="{{ route('assets.import') }}" class="bg-purple-600 text-white px-4 py-2 rounded">Import Excel</a>
+            <x-button variant="secondary" size="sm" :href="route('assets.import')">Import</x-button>
         @endcan
         @can('create', App\Models\Asset::class)
-            <a href="{{ route('assets.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded">+ Add Asset</a>
+            <x-button variant="primary" size="sm" :href="route('assets.create')">+ Add Asset</x-button>
         @endcan
-    </div>
-</div>
+    </x-slot:actions>
+</x-page-header>
 
-<form method="GET" action="{{ route('assets.index') }}" class="bg-white p-4 rounded shadow mb-4">
-    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
-        <div class="lg:col-span-2">
-            <label class="block text-xs text-gray-500">Search</label>
-            <input type="text" name="search" value="{{ request('search') }}"
-                   placeholder="Asset ID, Serial, Hostname, User, Email, Dept, MAC, IP..."
-                   class="w-full border rounded px-3 py-2">
+<x-card class="mb-6" x-data="{ showFilters: {{ request()->hasAny(['status','category','company','location']) ? 'true' : 'false' }} }">
+    <form method="GET" action="{{ route('assets.index') }}">
+        <div class="flex gap-3">
+            <div class="flex-1 relative">
+                <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2">
+                    <svg class="fill-gray-400" width="20" height="20" viewBox="0 0 20 20" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z" fill=""/></svg>
+                </span>
+                <input type="text" name="search" value="{{ request('search') }}"
+                       placeholder="Search or type command..."
+                       class="dark:bg-dark-900 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-4 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-brand-500/10 focus:ring-3 focus:outline-none dark:border-gray-800 dark:text-white/90 dark:placeholder:text-white/30">
+            </div>
+            <x-button type="submit" size="md">Search</x-button>
+            <x-button type="button" variant="secondary" size="md" @click="showFilters = !showFilters">Filters</x-button>
+            <a href="{{ route('assets.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-theme-sm font-medium text-gray-700 hover:bg-gray-50">Reset</a>
         </div>
-        <div>
-            <label class="block text-xs text-gray-500">Status</label>
-            <select name="status" class="w-full border rounded px-3 py-2">
+
+        <div x-show="showFilters" x-collapse x-cloak class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+            <x-select name="status" label="Status">
                 <option value="">All</option>
                 @foreach($statuses as $status)
                     <option value="{{ $status->id }}" {{ (string) request('status') === (string) $status->id ? 'selected' : '' }}>{{ $status->name }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500">Category</label>
-            <select name="category" class="w-full border rounded px-3 py-2">
+            </x-select>
+            <x-select name="category" label="Category">
                 <option value="">All</option>
                 @foreach($categories as $category)
                     <option value="{{ $category->id }}" {{ (string) request('category') === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500">Company</label>
-            <select name="company" class="w-full border rounded px-3 py-2">
+            </x-select>
+            <x-select name="company" label="Company">
                 <option value="">All</option>
                 @foreach($companies as $company)
                     <option value="{{ $company->id }}" {{ (string) request('company') === (string) $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500">Location</label>
-            <select name="location" class="w-full border rounded px-3 py-2">
+            </x-select>
+            <x-select name="location" label="Location">
                 <option value="">All</option>
                 @foreach($locations as $location)
                     <option value="{{ $location->id }}" {{ (string) request('location') === (string) $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                 @endforeach
-            </select>
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500">Sort by</label>
-            <select name="sort" class="w-full border rounded px-3 py-2">
-                @foreach(['updated_at' => 'Updated', 'asset_id' => 'Asset ID', 'serial_number' => 'Serial', 'hostname' => 'Hostname', 'purchase_year' => 'Purchase Year'] as $value => $label)
+            </x-select>
+            <x-select name="sort" label="Sort">
+                @foreach(['updated_at' => 'Updated', 'asset_id' => 'Asset ID', 'serial_number' => 'Serial', 'hostname' => 'Hostname'] as $value => $label)
                     <option value="{{ $value }}" {{ request('sort', 'updated_at') === $value ? 'selected' : '' }}>{{ $label }}</option>
                 @endforeach
-            </select>
+            </x-select>
         </div>
-        <div>
-            <label class="block text-xs text-gray-500">Direction</label>
-            <select name="direction" class="w-full border rounded px-3 py-2">
-                <option value="desc" {{ request('direction') === 'desc' ? 'selected' : '' }}>Descending</option>
-                <option value="asc" {{ request('direction') === 'asc' ? 'selected' : '' }}>Ascending</option>
-            </select>
+        <div x-show="showFilters" x-collapse x-cloak class="mt-3">
+            <label class="inline-flex items-center gap-2 text-theme-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                <input type="checkbox" name="archived" value="include" {{ request('archived') === 'include' ? 'checked' : '' }}
+                       class="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500/10">
+                Include archived assets
+            </label>
         </div>
-    </div>
-    <div class="flex items-center gap-3">
-        <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Apply</button>
-        <a href="{{ route('assets.index') }}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Reset</a>
-        <label class="text-sm text-gray-600 flex items-center gap-1">
-            <input type="checkbox" name="archived" value="include" {{ request('archived') === 'include' ? 'checked' : '' }}>
-            Include archived
-        </label>
-    </div>
-</form>
+    </form>
+</x-card>
 
 @if($assets->count() > 0)
-<table class="min-w-full bg-white shadow rounded">
-    <thead>
-        <tr class="border-b">
-            <th class="text-left py-3 px-4">Asset ID</th>
-            <th class="text-left py-3 px-4">Category</th>
-            <th class="text-left py-3 px-4">Brand/Model</th>
-            <th class="text-left py-3 px-4">Serial</th>
-            <th class="text-left py-3 px-4">Hostname</th>
-            <th class="text-left py-3 px-4">Location</th>
-            <th class="text-left py-3 px-4">User</th>
-            <th class="text-left py-3 px-4">IT PIC</th>
-            <th class="text-left py-3 px-4">Status</th>
-            <th class="text-left py-3 px-4">Updated</th>
-            <th class="text-left py-3 px-4">Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach($assets as $asset)
-        <tr class="border-b hover:bg-gray-50">
-            <td class="py-3 px-4">{{ $asset->asset_id }}</td>
-            <td class="py-3 px-4">{{ $asset->category?->name }}</td>
-            <td class="py-3 px-4">{{ $asset->brand }} {{ $asset->model }}</td>
-            <td class="py-3 px-4">{{ $asset->serial_number }}</td>
-            <td class="py-3 px-4">{{ $asset->hostname }}</td>
-            <td class="py-3 px-4">{{ $asset->location?->name }}</td>
-            <td class="py-3 px-4">{{ $asset->currentUser?->name }}</td>
-            <td class="py-3 px-4">{{ $asset->adminItPic?->name }}</td>
-            <td class="py-3 px-4">
-                <span class="px-2 py-1 text-xs rounded bg-gray-200">{{ $asset->status?->name }}</span>
-                @unless($asset->is_active)
-                    <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700">Archived</span>
-                @endunless
-            </td>
-            <td class="py-3 px-4 text-xs text-gray-500">{{ $asset->updated_at?->format('Y-m-d') }}</td>
-            <td class="py-3 px-4 whitespace-nowrap">
-                <a href="{{ route('assets.show', $asset) }}" class="text-blue-600">View</a>
-                @can('update', $asset)
-                    <a href="{{ route('assets.edit', $asset) }}" class="text-yellow-600 ml-2">Edit</a>
-                @endcan
-                @can('archive', $asset)
-                    <form method="POST" action="{{ route('assets.destroy', $asset) }}" class="inline ml-2" onsubmit="return confirm('Archive this asset?')">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="text-red-600">Archive</button>
-                    </form>
-                @endcan
-            </td>
-        </tr>
-        @endforeach
-    </tbody>
-</table>
+    <x-card>
+        <x-table :headers="['Asset ID', 'Category', 'Brand/Model', 'Serial', 'Hostname', 'Location', 'User', 'Status', 'Actions']">
+            @foreach($assets as $asset)
+                <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                    <td class="py-3 px-4"><a href="{{ route('assets.show', $asset) }}" class="text-theme-sm font-semibold text-brand-500 hover:text-brand-600">{{ $asset->asset_id }}</a></td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ $asset->category?->name }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-700 dark:text-gray-300">{{ $asset->brand }} {{ $asset->model }}</td>
+                    <td class="py-3 px-4 text-theme-xs text-gray-500 font-mono">{{ $asset->serial_number }}</td>
+                    <td class="py-3 px-4 text-theme-xs text-gray-500 font-mono">{{ $asset->hostname }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-600">{{ $asset->location?->name }}</td>
+                    <td class="py-3 px-4 text-theme-sm text-gray-600">{{ $asset->currentUser?->name }}</td>
+                    <td class="py-3 px-4">
+                        @php
+                            $badgeMap = ['Active' => 'success', 'Available' => 'brand', 'Assigned' => 'warning', 'Repair' => 'orange', 'Retired' => 'gray', 'Disposed' => 'error'];
+                        @endphp
+                        <x-badge :variant="$badgeMap[$asset->status?->name] ?? 'gray'">{{ $asset->status?->name }}</x-badge>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="flex items-center gap-2">
+                            <a href="{{ route('assets.show', $asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">View</a>
+                            @can('update', $asset)
+                                <a href="{{ route('assets.edit', $asset) }}" class="text-theme-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">Edit</a>
+                            @endcan
+                        </div>
+                    </td>
+                </tr>
+            @endforeach
+        </x-table>
 
-{{ $assets->links() }}
+        @if($assets->hasPages())
+            <div class="border-t border-gray-100 dark:border-gray-800">
+                {{ $assets->links('components.pagination') }}
+            </div>
+        @endif
+    </x-card>
 @else
-<p class="bg-white p-6 rounded shadow">No assets found.</p>
+    <x-card class="text-center py-12">
+        <p class="text-theme-sm text-gray-400">No assets found.</p>
+    </x-card>
 @endif
 @endsection
