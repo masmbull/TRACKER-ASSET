@@ -3,7 +3,7 @@
 @section('title', 'Audit Agents')
 
 @section('content')
-<x-page-header title="Audit Agents" description="Download and deploy the audit agent to devices. The agent runs silently in the background and sends hardware scans automatically.">
+<x-page-header title="Audit Agents" subtitle="Download and deploy the audit agent to devices. The agent runs silently in the background and sends hardware scans automatically.">
     <x-slot:actions>
         <a href="{{ route('agent.download.latest') }}" class="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
