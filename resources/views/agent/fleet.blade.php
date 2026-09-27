@@ -190,6 +190,19 @@
                             </form>
                         @endif
                         <a href="{{ route('agent.download', $device) }}" class="text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Reinstall</a>
+
+                        {{-- Removing an agent deletes files on someone else's
+                             machine, so it is the one action that asks twice:
+                             once here, once more on the server side. --}}
+                        @if($pendingUninstalls->has($device->id))
+                            <span class="text-theme-xs text-warning-600 dark:text-warning-500">Uninstall queued…</span>
+                        @else
+                            <form method="POST" action="{{ route('agent.uninstall', $device) }}"
+                                  onsubmit="return confirm(@js('Remove the agent from ' . $device->name . '?\n\nIt deletes its autostart entry and its program folder on that machine within 10 seconds, and revokes the token. This cannot be undone from here.'));">
+                                @csrf
+                                <button type="submit" class="text-theme-sm font-medium text-error-500 hover:text-error-600">Uninstall</button>
+                            </form>
+                        @endif
                     </div>
                 </td>
 

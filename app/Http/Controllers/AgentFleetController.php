@@ -48,7 +48,15 @@ class AgentFleetController extends Controller
             'pending_commands' => AgentCommand::where('status', 'pending')->count(),
         ];
 
-        return view('agent.fleet', compact('devices', 'latestAudits', 'stats'));
+        // Token ids with an uninstall still queued: the button turns into a
+        // "queued" label so a second click cannot pile up duplicate removals.
+        $pendingUninstalls = AgentCommand::query()
+            ->where('command', 'uninstall')
+            ->where('status', 'pending')
+            ->pluck('agent_token_id')
+            ->flip();
+
+        return view('agent.fleet', compact('devices', 'latestAudits', 'stats', 'pendingUninstalls'));
     }
 
     public function commands(Request $request)
@@ -94,6 +102,32 @@ class AgentFleetController extends Controller
         $this->enqueue(null, 'update', ['url' => URL::route('agent.run')]);
 
         return back()->with('success', 'Update broadcast to all agents — each re-pulls the latest script and restarts.');
+    }
+
+    /**
+     * Remove the agent from one machine, from the browser.
+     *
+     * The server has no access to the user's disk, so this queues an
+     * `uninstall` command: the resident daemon picks it up on its next poll,
+     * acks it, then deletes autostart, device identity and its own folder.
+     *
+     * The token is deliberately NOT revoked here. AuthenticateAuditAgent rejects
+     * inactive tokens, so revoking now would make the very next poll return 401
+     * and an online machine would never receive the command it was just sent.
+     * Revocation happens in AgentCommandApiController::ack, i.e. only after the
+     * agent has confirmed it tore itself down. A machine that is offline keeps
+     * its token and therefore still executes the removal the moment it comes
+     * back, instead of going permanently deaf.
+     */
+    public function uninstall(Request $request, AgentApiToken $token)
+    {
+        $this->enqueue($token->id, 'uninstall', ['requested_by' => $request->user()?->name]);
+
+        return back()->with('success', sprintf(
+            "Uninstall queued for '%s'. The agent removes itself at its next poll (within 10 seconds) and the token is revoked then. " .
+            'A machine that is currently offline will do this the next time it comes back online.',
+            $token->name
+        ));
     }
 
     /**
