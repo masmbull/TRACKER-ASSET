@@ -109,4 +109,45 @@ class DocumentTemplateTest extends TestCase
         $response->assertRedirect(route('documents.preview', $document));
         $this->assertSame($template->id, $document->template_id);
     }
+
+    public function test_template_show_page_lists_every_field_grouped_by_its_section(): void
+    {
+        User::factory()->create(['role' => 'admin']);
+        $this->seed(DocumentTemplateSeeder::class);
+
+        $template = DocumentTemplate::where('document_type', 'FAT')->firstOrFail();
+        $fieldCount = count($template->template_content);
+        $this->assertGreaterThan(0, $fieldCount);
+
+        $response = $this->actingAs(User::first())->get(route('templates.show', $template));
+
+        $response->assertOk();
+
+        // Headline count, so the page cannot silently render an empty schema.
+        $response->assertSee("{$fieldCount} fields");
+
+        // Each field's label and raw key must be visible — that pairing is the
+        // whole point of the page; the index page only ever showed a number.
+        $response->assertSee($fieldCount . ' fields ·');
+        foreach (array_slice($template->template_content, 0, 10, true) as $key => $definition) {
+            $response->assertSee($key);
+            $response->assertSee($definition['label']);
+        }
+
+        // Sections come from the data, not a hardcoded map, so the paper-form
+        // heading ("A. Informasi Yang Menyerahkan") must survive to the screen.
+        $response->assertSee('Informasi Yang Menyerahkan');
+    }
+
+    public function test_template_show_page_requires_authentication(): void
+    {
+        // The seeder skips itself when no user exists, so a user must exist even
+        // though this test deliberately never acts as them.
+        User::factory()->create(['role' => 'admin']);
+        $this->seed(DocumentTemplateSeeder::class);
+
+        $template = DocumentTemplate::where('document_type', 'FAT')->firstOrFail();
+
+        $this->get(route('templates.show', $template))->assertRedirect(route('login'));
+    }
 }

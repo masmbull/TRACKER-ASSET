@@ -132,7 +132,7 @@ Route::middleware('auth')->group(function () {
             Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         });
 
-        Route::resource('templates', TemplateController::class)->except(['show', 'edit', 'update']);
+        Route::resource('templates', TemplateController::class)->except(['edit', 'update']);
         Route::put('/templates/{template}/toggle', [TemplateController::class, 'toggle'])->name('templates.toggle');
 
         Route::get('/ike-bast/inspection/create/{asset}', [IkeBastInspectionController::class, 'create'])->name('ike-bast.inspection.create');

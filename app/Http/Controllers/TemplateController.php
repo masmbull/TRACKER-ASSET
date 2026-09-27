@@ -15,6 +15,38 @@ class TemplateController extends Controller
         return view('templates.index', compact('templates'));
     }
 
+    public function show(DocumentTemplate $template)
+    {
+        $fields = $template->template_content ?? [];
+
+        // Every field already carries its own "section" label ("A. Informasi Yang
+        // Menyerahkan"), authored to match the real paper form. Grouping on that
+        // keeps the on-screen order identical to the document; the key prefix is
+        // only a fallback for fields stored without one.
+        $groups = [];
+        $orphans = 0;
+
+        foreach ($fields as $key => $definition) {
+            $definition = is_array($definition) ? $definition : ['label' => $definition, 'type' => 'text'];
+
+            $section = trim((string) ($definition['section'] ?? ''));
+
+            if ($section === '') {
+                $orphans++;
+                $section = 'Lainnya';
+            }
+
+            $groups[$section][] = ['key' => $key] + $definition;
+        }
+
+        return view('templates.show', [
+            'template' => $template,
+            'groups' => $groups,
+            'fieldCount' => count($fields),
+            'orphans' => $orphans,
+        ]);
+    }
+
     public function create()
     {
         return view('templates.create');

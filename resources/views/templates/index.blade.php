@@ -21,7 +21,10 @@
             <x-table :headers="['Name', 'Type', 'Fields', 'Status', 'Actions']">
                 @foreach($templates as $template)
                     <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5">
-                        <td class="py-3 px-4 text-theme-sm font-medium text-gray-700 dark:text-gray-300">{{ $template->name }}</td>
+                        <td class="py-3 px-4">
+                            <a href="{{ route('templates.show', $template) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">{{ $template->name }}</a>
+                            <p class="text-theme-xs text-gray-400">{{ $template->created_at?->diffForHumans() }}</p>
+                        </td>
                         <td class="py-3 px-4">
                             <span class="inline-flex rounded-full bg-brand-50 px-2 py-1 text-theme-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">{{ $template->document_type }}</span>
                         </td>
