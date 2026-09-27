@@ -86,9 +86,24 @@ public static class AgentRunner
 
         serverUrl = serverUrl.TrimEnd('/');
 
-        return daemon
-            ? RunDaemon(serverUrl, token, assetId, pollSeconds)
-            : RunOnce(serverUrl, token, assetId);
+        if (!daemon)
+        {
+            return RunOnce(serverUrl, token, assetId);
+        }
+
+        var exitCode = RunDaemon(serverUrl, token, assetId, pollSeconds);
+
+        // The server asked us to disappear (fleet page "Uninstall"). The poll
+        // loop has already stopped, so nothing can re-register autostart or
+        // recreate the folder we are about to delete. The short pause keeps a
+        // console window visible for the last messages of the removal.
+        if (UninstallRequested)
+        {
+            Uninstall();
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+        }
+
+        return exitCode;
     }
 
     static string NextArg(string[] args, ref int i) =>
@@ -151,6 +166,12 @@ public static class AgentRunner
         }
     }
 
+
+    /// <summary>
+    /// Set by the poll loop when the server asked us to remove the agent, so
+    /// the caller can run <see cref="Uninstall"/> after the loop has returned.
+    /// </summary>
+    static bool UninstallRequested { get; set; }
 
     static int RunOnce(string url, string token, string? assetId = null)
     {
@@ -221,6 +242,24 @@ public static class AgentRunner
                             {
                                 Environment.Exit(0);
                             }
+                        }
+                        else if (command == "uninstall")
+                        {
+                            // Ack FIRST. Uninstalling takes the process (and the
+                            // token) down with it, so an unacked command would
+                            // stay 'pending' on the server forever and the fleet
+                            // page would keep offering "Uninstall" on a machine
+                            // that no longer has an agent.
+                            Console.WriteLine($"[*] Command #{id} uninstall received. Acknowledging...");
+                            Api.Ack(url, token, id, "done", new Dictionary<string, string>
+                            {
+                                ["message"] = "Agent removed itself after receiving the uninstall command.",
+                            });
+
+                            // Leave the poll loop before touching the disk, so the
+                            // sleep below cannot resurrect anything.
+                            UninstallRequested = true;
+                            return 0;
                         }
                         else
                         {
@@ -296,35 +335,239 @@ public static class AgentRunner
         }
     }
 
+    /// <summary>
+    /// Path of the binary that is actually running.
+    ///
+    /// <see cref="Environment.ProcessPath"/> is wrong for us: when the agent is
+    /// launched as <c>dotnet TrackerAgent.dll</c> (the shape used by the tests and
+    /// by the framework-dependent build) it returns the path of <c>dotnet.exe</c>,
+    /// not the agent's own dll. Asking the loaded entry assembly gives the file we
+    /// really are, which is the one holding the lock on the install folder.
+    /// </summary>
+    static string SelfBinaryPath()
+    {
+        try
+        {
+            var location = System.Reflection.Assembly
+                .GetEntryAssembly()?.Location;
+
+            if (!string.IsNullOrWhiteSpace(location) && File.Exists(location))
+            {
+                return location;
+            }
+        }
+        catch
+        {
+            // Dynamic or single-file hosts may not expose a location.
+        }
+
+        return Environment.ProcessPath ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Full removal: autostart, device identity and the install folder.
+    ///
+    /// Order matters. The Run key is deleted FIRST so a reboot in the middle
+    /// cannot resurrect the agent; only then do we kill the resident daemon and
+    /// drop the folder.
+    ///
+    /// Self-deletion is the awkward part: this process always holds a file inside
+    /// the install folder open (the exe, or the dll under the dotnet host), so
+    /// <c>Directory.Delete</c> fails with "being used by another process". We
+    /// therefore delete everything we can, then hand our own file to a detached
+    /// cmd that removes it (and the folder) once we have exited.
+    /// </summary>
     static void Uninstall()
     {
         try
         {
+            // 1. Autostart first - nothing may restart the agent after this.
             using (var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
             {
-                runKey?.DeleteValue(RunValueName, false);
+                if (runKey?.GetValue(RunValueName) is not null)
+                {
+                    runKey.DeleteValue(RunValueName, false);
+                    Console.WriteLine("[OK] Autostart entry removed.");
+                }
             }
 
-            var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker", true);
-            key?.DeleteValue("DeviceId");
-            key?.DeleteValue("Token");
-            key?.DeleteValue("ServerUrl");
-            key?.DeleteValue("InstalledAt");
-            key?.Close();
+            // 2. Device identity (Live Fleet ties telemetry to this).
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker", true))
+            {
+                if (key is not null)
+                {
+                    foreach (var name in new[] { "DeviceId", "Token", "ServerUrl", "InstalledAt" })
+                    {
+                        key.DeleteValue(name, false);
+                    }
+                }
+            }
+            Console.WriteLine("[OK] Device identity cleared from registry.");
 
             var installDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TRACKER");
-            if (Directory.Exists(installDir))
+
+            // 3. Stop the resident daemon (it holds TrackerAgent.exe open).
+            var self = Environment.ProcessId;
+            var killed = 0;
+            foreach (var proc in Process.GetProcessesByName("TrackerAgent"))
             {
-                Directory.Delete(installDir, true);
+                if (proc.Id == self)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    proc.Kill();
+                    proc.WaitForExit(5000);
+                    killed++;
+                }
+                catch
+                {
+                    // Access denied or already gone - keep going.
+                }
+                finally
+                {
+                    proc.Dispose();
+                }
+            }
+            if (killed > 0)
+            {
+                Console.WriteLine($"[OK] Stopped {killed} running agent process(es).");
             }
 
-            Console.WriteLine("[OK] Uninstalled successfully.");
+            // 4. Folder. Our own binary lives inside it and is locked, so remove
+            //    everything else now and let a detached cmd drop the rest.
+            if (Directory.Exists(installDir))
+            {
+                var selfPath = SelfBinaryPath();
+                var holdingOurFile = !string.IsNullOrEmpty(selfPath) &&
+                    selfPath.StartsWith(installDir, StringComparison.OrdinalIgnoreCase);
+
+                if (holdingOurFile)
+                {
+                    // Delete the siblings we can; a just-killed daemon can still be
+                    // releasing handles, hence the retry.
+                    foreach (var file in Directory.EnumerateFiles(installDir))
+                    {
+                        if (string.Equals(file, selfPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        TryDeleteWithRetry(file);
+                    }
+
+                    // Our own file is mapped into this process, so the helper has to
+                    // do the last step - and it has to KEEP trying. `del` on a
+                    // mapped image only marks it delete-pending: the entry stays in
+                    // the directory until the last handle closes, which happens
+                    // after this process exits. A single del+rmdir therefore fails
+                    // and leaves an empty folder behind for good.
+                    LaunchSelfDeleteHelper(installDir, selfPath);
+
+                    Console.WriteLine("[OK] Handed self-deletion to a background helper.");
+                    Console.WriteLine("Uninstalled successfully (the install folder disappears in a few seconds).");
+                    return;
+                }
+
+                // Not running from there: kill leftovers and retry.
+                for (var attempt = 0; attempt < 10; attempt++)
+                {
+                    try
+                    {
+                        Directory.Delete(installDir, true);
+                        break;
+                    }
+                    catch (IOException) when (attempt < 9)
+                    {
+                        Thread.Sleep(300);
+                    }
+                }
+
+                if (Directory.Exists(installDir))
+                {
+                    throw new IOException(
+                        $"Could not delete {installDir} - close any Explorer window showing it and retry.");
+                }
+            }
+
+            Console.WriteLine("[OK] Install folder removed.");
+            Console.WriteLine("Uninstalled successfully.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[X] {ex.Message}");
+            Console.Error.WriteLine($"[X] {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Drop a batch file in TEMP that keeps trying to remove the agent's own
+    /// file and the install folder, then deletes itself.
+    ///
+    /// A retry loop is mandatory, not defensive padding: Windows keeps a
+    /// delete-pending file visible in its directory until the last handle
+    /// closes, so the first rmdir (issued while this process still holds the
+    /// mapped image) always fails. The loop keeps knocking until our process
+    /// has exited and the folder is really gone.
+    ///
+    /// The paths are passed as %1/%2 rather than interpolated into the script
+    /// so a user name containing &amp;, % or spaces cannot corrupt it. The helper
+    /// runs with an explicit working directory because Windows refuses to
+    /// remove a folder that is a live process's current directory.
+    /// </summary>
+    static void LaunchSelfDeleteHelper(string installDir, string selfPath)
+    {
+        var scriptPath = Path.Combine(
+            Path.GetTempPath(),
+            $"ta_uninstall_{Guid.NewGuid():N}.cmd");
+
+        File.WriteAllText(scriptPath,
+            "@echo off\r\n" +
+            "setlocal\r\n" +
+            "set \"TARGET=%~1\"\r\n" +
+            "set \"SELF=%~2\"\r\n" +
+            "for /l %%i in (1,1,40) do (\r\n" +
+            "  if exist \"%SELF%\" del /f /q \"%SELF%\" >nul 2>&1\r\n" +
+            "  if exist \"%TARGET%\" rmdir /s /q \"%TARGET%\" >nul 2>&1\r\n" +
+            "  if not exist \"%TARGET%\" goto :done\r\n" +
+            "  ping 127.0.0.1 -n 2 >nul\r\n" +
+            ")\r\n" +
+            ":done\r\n" +
+            "del /f /q \"%~f0\" >nul 2>&1\r\n");
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            // `call` keeps the quoted script path intact; without it cmd applies
+            // its own quote-stripping rule when the path contains a space.
+            Arguments = $"/c call \"{scriptPath}\" \"{installDir}\" \"{selfPath}\"",
+            WorkingDirectory = Path.GetTempPath(),
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
+    }
+
+    /// <summary>Delete one file, tolerating a daemon that is still shutting down.</summary>
+    static void TryDeleteWithRetry(string path)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (IOException) when (attempt < 9)
+            {
+                Thread.Sleep(300);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 9)
+            {
+                Thread.Sleep(300);
+            }
         }
     }
 }

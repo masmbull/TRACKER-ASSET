@@ -642,13 +642,13 @@ public partial class InstallerWindow : Window
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Visible;
 
-        ResultIcon.Text = "OK";
-        ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
-        ResultText.Text = "Aplikasi Sudah Pernah Diinstall";
-        ResultDetail.Text =
-            $"Versi {_installedVersion} sudah terpasang di mesin ini.\n" +
+        SetResult(
+            GlyphOk,
+            "Aplikasi Sudah Pernah Diinstall",
+            $"Versi {_installedVersion} sudah terpasang di mesin ini.\n\n" +
             $"{_installedExe}\n\n" +
-            "Tidak ada yang perlu dilakukan. Jalankan installer versi lebih baru untuk memperbarui.";
+            "Tidak ada yang perlu dilakukan. Jalankan installer versi lebih baru untuk memperbarui.",
+            SuccessBrush);
     }
 
     /// <summary>Swap finished: report the version jump, then auto-close.</summary>
@@ -662,13 +662,13 @@ public partial class InstallerWindow : Window
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
 
-            ResultIcon.Text = "OK";
-            ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
-            ResultText.Text = "Update complete";
-            ResultDetail.Text =
-                $"Version {_installedVersion} to {_newVersion}\n" +
-                $"Installed to {_installDir}\n\n" +
-                "The background agent was restarted - the device keeps reporting.";
+            SetResult(
+                GlyphOk,
+                "Pembaruan Selesai",
+                $"Versi {_installedVersion} → {_newVersion}\n\n" +
+                $"Dipasang ke {_installDir}\n\n" +
+                "Agent latar sudah dijalankan ulang — perangkat tetap melapor.",
+                SuccessBrush);
 
             _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
             _autoCloseTimer.Tick += (_, _) =>
@@ -689,13 +689,13 @@ public partial class InstallerWindow : Window
 
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
-            ResultIcon.Text = "OK";
-            ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
-            ResultText.Text = "Installation complete";
-            ResultDetail.Text =
-                $"Agent installed to {_installDir}\n" +
+            SetResult(
+                GlyphOk,
+                "Installation complete",
+                $"Agent installed to {_installDir}\n\n" +
                 $"Connected to {_serverUrl}\n\n" +
-                "The device is reporting now — it appears in Master Assets and Live Fleet.";
+                "The device is reporting now — it appears in Master Assets and Live Fleet.",
+                SuccessBrush);
 
             // Nothing to click on success: close the window after a moment.
             _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
@@ -720,11 +720,53 @@ public partial class InstallerWindow : Window
             RetryButton.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
 
-            ResultIcon.Text = "X";
-            ResultIcon.Foreground = System.Windows.Media.Brushes.OrangeRed;
-            ResultText.Text = _mode == InstallerMode.Update ? "Update failed" : "Installation failed";
-            ResultDetail.Text = message;
+            SetResult(
+                GlyphError,
+                _mode == InstallerMode.Update ? "Update failed" : "Installation failed",
+                message,
+                ErrorBrush);
         });
+    }
+
+    /// <summary>Segoe MDL2 glyphs used by the result badge.</summary>
+    private const string GlyphOk = "\uE73E";   // Accept (check)
+    private const string GlyphError = "\uE783"; // Error (cross in circle)
+
+    private static readonly System.Windows.Media.Brush SuccessBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80));
+    private static readonly System.Windows.Media.Brush ErrorBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71));
+
+    /// <summary>
+    /// Fills the result card in one place. The badge is filled with a
+    /// low-alpha tint of the accent (via <see cref="SetBadgeTint"/>) so the
+    /// ring, the wash behind it and the glyph always agree on colour.
+    /// </summary>
+    private void SetResult(string glyph, string title, string detail, System.Windows.Media.Brush accent)
+    {
+        ResultIcon.Text = glyph;
+        ResultIcon.Foreground = accent;
+        SetBadgeTint(accent);
+        ResultText.Text = title;
+        ResultDetail.Text = detail;
+    }
+
+    /// <summary>
+    /// Tints the badge from the accent colour: a low-alpha fill behind the glyph
+    /// and a brighter ring around it. Built as brushes rather than by setting
+    /// <c>Opacity</c> on the badge - opacity on a parent also fades its children,
+    /// which would wash the glyph out almost completely.
+    /// </summary>
+    private void SetBadgeTint(System.Windows.Media.Brush accent)
+    {
+        var rgb = accent is SolidColorBrush solid
+            ? solid.Color
+            : System.Windows.Media.Colors.White;
+
+        ResultIconBadge.Background = new SolidColorBrush(
+            System.Windows.Media.Color.FromArgb((byte)0x26, rgb.R, rgb.G, rgb.B));
+        ResultIconBadge.BorderBrush = new SolidColorBrush(
+            System.Windows.Media.Color.FromArgb((byte)0x66, rgb.R, rgb.G, rgb.B));
     }
 
     private async void RetryButton_Click(object sender, RoutedEventArgs e)

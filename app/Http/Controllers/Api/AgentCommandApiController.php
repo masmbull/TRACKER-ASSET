@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,13 @@ use Illuminate\Validation\Rule;
  */
 class AgentCommandApiController extends Controller
 {
+    /**
+     * Exact wording the agent sends in its uninstall ack. Only this string
+     * revokes the token, so an agent too old to know the command (it acks
+     * 'done' with no result at all) leaves the token alive for a real retry.
+     */
+    public const UNINSTALL_DONE_MARKER = 'Agent removed itself after receiving the uninstall command.';
+
     public function inbox(Request $request)
     {
         $tokenId = (int) $request->attributes->get('agent_token_id');
@@ -48,6 +56,20 @@ class AgentCommandApiController extends Controller
             'result' => $validated['result'] ?? null,
             'executed_at' => now(),
         ]);
+
+        // Uninstall: burn the token, but only once the agent has actually
+        // confirmed it removed itself. Revoking earlier (when the command is
+        // queued) would break the very poll that has to deliver the command,
+        // because AuthenticateAuditAgent rejects inactive tokens. The marker
+        // keeps old agents - which ack 'done' without a result - from being
+        // treated as a successful removal.
+        if ($command->command === 'uninstall' && $tokenId !== 0) {
+            $confirmed = ($validated['result']['message'] ?? null) === self::UNINSTALL_DONE_MARKER;
+
+            if ($confirmed) {
+                AgentApiToken::whereKey($tokenId)->update(['is_active' => false]);
+            }
+        }
 
         return response()->json(['ok' => true]);
     }
