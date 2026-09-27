@@ -77,6 +77,21 @@ you just compiled.
 | `--uninstall` | Remove daemon from Windows autostart |
 | `--update` | Pull the newest `TrackerAgent.exe` from the server and self-swap |
 
+### Double-click: install / update / already installed
+
+Double-clicking a downloaded `TrackerAgent.exe` probes the machine first
+(config in `%LocalAppData%\TRACKER` plus the assembly versions of both files):
+
+| State | What happens |
+|---|---|
+| Not installed | Full zero-config install (as before) |
+| Installed, **same version** | Notice: **"Aplikasi Sudah Pernah Diinstall"** |
+| Installed, **different version** | In-place update: stops the running agent, swaps the exe (config and device identity untouched), restarts whatever was running before |
+
+Double-clicking the installed executable itself still opens the tray icon.
+Bump `<Version>` in `TrackerAgent.csproj` on every release — the version
+comparison is what drives the three states above.
+
 ### Manual self-update
 
 ```powershell

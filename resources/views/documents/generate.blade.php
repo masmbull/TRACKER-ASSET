@@ -34,6 +34,18 @@
                 </div>
             </div>
 
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Template (opsional)</label>
+                <select name="template_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="">None</option>
+                    @foreach($templates as $template)
+                        <option value="{{ $template->id }}" {{ (string) old('template_id') === (string) $template->id ? 'selected' : '' }}>
+                            {{ $template->name }} ({{ $template->document_type }})
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Linked Transfer (optional)</label>

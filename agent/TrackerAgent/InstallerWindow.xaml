@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TRACKER-ASSET Audit Agent"
-        Width="520" Height="320"
+        Icon="mito-icon.png"
+        Width="520" Height="370"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#1e293b"
@@ -29,6 +30,7 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,22">
+            <Image Source="mito-logo-white.png" Height="34" HorizontalAlignment="Left" Margin="0,0,0,12"/>
             <TextBlock Text="TRACKER-ASSET" FontSize="26" FontWeight="Bold" Foreground="#3b82f6">
                 <TextBlock.Effect>
                     <DropShadowEffect Color="#3b82f6" BlurRadius="8" ShadowDepth="0"/>

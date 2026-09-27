@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Management;
 using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
@@ -30,7 +31,23 @@ public partial class InstallerWindow : Window
     private string _deviceId = "";
     private string _lastError = "";
 
-    public InstallerWindow()
+    private readonly InstallerMode _mode;
+    private readonly string _installedExe;
+    private readonly Version? _installedVersion;
+    private readonly Version? _newVersion;
+
+    /// <summary>Fresh install (agent not present on this machine).</summary>
+    public InstallerWindow() : this(InstallerMode.Install, null, null)
+    {
+    }
+
+    /// <summary>
+    /// State-aware constructor (agent/README.md). App.OnStartup compares the
+    /// clicked build with the installed one and picks the mode: full install,
+    /// in-place update (swap exe, keep config), or the
+    /// "Aplikasi Sudah Pernah Diinstall" notice.
+    /// </summary>
+    public InstallerWindow(InstallerMode mode, Version? installedVersion, Version? newVersion)
     {
         InitializeComponent();
 
@@ -38,10 +55,30 @@ public partial class InstallerWindow : Window
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Collapsed;
 
-        StartProgressAnimation();
-        BeginShimmer();
+        _mode = mode;
+        _installedVersion = installedVersion;
+        _newVersion = newVersion;
+        _installedExe = InstallCheck.InstalledExe;
+        _installDir = InstallCheck.InstallDir;
 
-        _ = AutoInstallAsync();
+        switch (mode)
+        {
+            case InstallerMode.AlreadyInstalled:
+                ShowAlreadyInstalled();
+                break;
+
+            case InstallerMode.Update:
+                StartProgressAnimation();
+                BeginShimmer();
+                _ = AutoUpdateAsync();
+                break;
+
+            default:
+                StartProgressAnimation();
+                BeginShimmer();
+                _ = AutoInstallAsync();
+                break;
+        }
     }
 
     /// <summary>
@@ -218,7 +255,12 @@ public partial class InstallerWindow : Window
             if (sourceExe is not null && File.Exists(sourceExe) &&
                 !string.Equals(sourceExe, destExe, StringComparison.OrdinalIgnoreCase))
             {
-                File.Copy(sourceExe, destExe, overwrite: true);
+                // A resident agent (leftover daemon, e.g. after config.json was
+                // removed to test a fresh install) locks its own exe and the
+                // copy would fail with a sharing violation. Stop it first, then
+                // copy with the bounded retry used by the update path.
+                StopInstalledAgent();
+                CopyWithRetry(sourceExe, destExe);
             }
 
             Report(46, "Generating the device identity...");
@@ -377,6 +419,267 @@ public partial class InstallerWindow : Window
         return id;
     }
 
+    /// <summary>
+    /// In-place update chosen by the double-click state check: stop the agent
+    /// running from the installed path, swap in the clicked build (config and
+    /// device identity stay untouched), then restart what was running before.
+    /// </summary>
+    private async Task AutoUpdateAsync()
+    {
+        Report(2, $"Update {_installedVersion} to {_newVersion}: preparing...");
+
+        var updated = await Task.Run(RunUpdate);
+
+        if (updated)
+        {
+            ShowUpdateSuccess();
+        }
+        else
+        {
+            ShowFailure(_lastError.Length > 0 ? _lastError : "The update could not finish.");
+        }
+    }
+
+    private bool RunUpdate()
+    {
+        try
+        {
+            var sourceExe = Environment.ProcessPath;
+
+            if (sourceExe is null || !File.Exists(sourceExe))
+            {
+                throw new FileNotFoundException("The new agent executable could not be located.");
+            }
+
+            if (InstallCheck.IsSameFile(sourceExe, _installedExe))
+            {
+                throw new InvalidOperationException(
+                    "This file is the installed application itself - no other build was clicked.");
+            }
+
+            Report(25, "Stopping the running background agent...");
+            var restart = StopInstalledAgent();
+
+            Report(55, $"Copying version {_newVersion}...");
+            CopyWithRetry(sourceExe, _installedExe);
+
+            Report(80, "Restarting the background agent...");
+            RestartAgent(restart);
+
+            Report(100, "Update complete");
+            Thread.Sleep(250);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastError = ex.Message;
+            Debug.WriteLine($"Update error: {ex}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Kills every agent process running from the installed path (resident
+    /// daemon and/or an open tray window) while remembering their command
+    /// lines, so the update can bring them back exactly as they were.
+    /// Returns null when the process list could not be read - the caller then
+    /// falls back to a config-based daemon restart.
+    /// </summary>
+    private static List<string>? StopInstalledAgent()
+    {
+        try
+        {
+            var commandLines = new List<string>();
+
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT CommandLine, ExecutablePath, ProcessId FROM Win32_Process WHERE Name = 'TrackerAgent.exe'");
+
+            foreach (var entry in searcher.Get())
+            {
+                using var process = (ManagementObject)entry;
+
+                if (!InstallCheck.IsSameFile(
+                        process["ExecutablePath"] as string, InstallCheck.InstalledExe))
+                {
+                    continue;
+                }
+
+                if (process["CommandLine"] is string commandLine &&
+                    !string.IsNullOrWhiteSpace(commandLine))
+                {
+                    commandLines.Add(commandLine);
+                }
+
+                if (process["ProcessId"] is uint pid && pid != 0 &&
+                    pid != Environment.ProcessId)
+                {
+                    try
+                    {
+                        using var target = Process.GetProcessById((int)pid);
+                        target.Kill(entireProcessTree: true);
+                        target.WaitForExit(3000);
+                    }
+                    catch { }
+                }
+            }
+
+            return commandLines;
+        }
+        catch
+        {
+            // WMI unavailable: still kill by path via the process API, but the
+            // caller cannot replay the exact command lines anymore.
+            foreach (var process in Process.GetProcessesByName("TrackerAgent"))
+            {
+                try
+                {
+                    if (process.Id == Environment.ProcessId)
+                    {
+                        continue;
+                    }
+
+                    if (!InstallCheck.IsSameFile(
+                            process.MainModule?.FileName, InstallCheck.InstalledExe))
+                    {
+                        continue;
+                    }
+
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(3000);
+                }
+                catch { }
+                finally { process.Dispose(); }
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Restarts what <see cref="StopInstalledAgent"/> stopped: replay the
+    /// captured command lines, or - when the process list was unreadable -
+    /// bring the daemon back from config.json so the device keeps reporting.
+    /// </summary>
+    private static void RestartAgent(List<string>? captured)
+    {
+        if (captured != null)
+        {
+            foreach (var commandLine in captured)
+            {
+                StartDetached(InstallCheck.InstalledExe, ExtractArguments(commandLine));
+            }
+
+            return;
+        }
+
+        try
+        {
+            if (!File.Exists(InstallCheck.InstalledConfig))
+            {
+                return;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(InstallCheck.InstalledConfig));
+            var token = doc.RootElement.TryGetProperty("token", out var t) ? t.GetString() : null;
+            var serverUrl = doc.RootElement.TryGetProperty("server_url", out var s) ? s.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(serverUrl))
+            {
+                return;
+            }
+
+            StartDetached(InstallCheck.InstalledExe,
+                $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+        }
+        catch { }
+    }
+
+    /// <summary>Strips the leading executable from a captured command line.</summary>
+    private static string ExtractArguments(string commandLine)
+    {
+        var line = commandLine.Trim();
+
+        if (line.StartsWith("\""))
+        {
+            var end = line.IndexOf('"', 1);
+            return end >= 0 ? line[(end + 1)..].TrimStart() : "";
+        }
+
+        var space = line.IndexOf(' ');
+        return space >= 0 ? line[(space + 1)..].TrimStart() : "";
+    }
+
+    /// <summary>
+    /// File.Copy with retries: the just-killed process may need a moment to
+    /// release the installed executable.
+    /// </summary>
+    private static void CopyWithRetry(string source, string destination)
+    {
+        IOException? last = null;
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite: true);
+                return;
+            }
+            catch (IOException ex)
+            {
+                last = ex;
+                Thread.Sleep(300);
+            }
+        }
+
+        throw last!;
+    }
+
+    /// <summary>Clicked build == installed build: show the notice, do nothing.</summary>
+    private void ShowAlreadyInstalled()
+    {
+        StatusPanel.Visibility = Visibility.Collapsed;
+        ResultPanel.Visibility = Visibility.Visible;
+        RetryButton.Visibility = Visibility.Collapsed;
+        CloseButton.Visibility = Visibility.Visible;
+
+        ResultIcon.Text = "OK";
+        ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
+        ResultText.Text = "Aplikasi Sudah Pernah Diinstall";
+        ResultDetail.Text =
+            $"Versi {_installedVersion} sudah terpasang di mesin ini.\n" +
+            $"{_installedExe}\n\n" +
+            "Tidak ada yang perlu dilakukan. Jalankan installer versi lebih baru untuk memperbarui.";
+    }
+
+    /// <summary>Swap finished: report the version jump, then auto-close.</summary>
+    private void ShowUpdateSuccess()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _progressTimer.Stop();
+            EndShimmer();
+
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ResultPanel.Visibility = Visibility.Visible;
+
+            ResultIcon.Text = "OK";
+            ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
+            ResultText.Text = "Update complete";
+            ResultDetail.Text =
+                $"Version {_installedVersion} to {_newVersion}\n" +
+                $"Installed to {_installDir}\n\n" +
+                "The background agent was restarted - the device keeps reporting.";
+
+            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
+            _autoCloseTimer.Tick += (_, _) =>
+            {
+                _autoCloseTimer.Stop();
+                Close();
+            };
+            _autoCloseTimer.Start();
+        });
+    }
+
     private void ShowSuccess()
     {
         Dispatcher.BeginInvoke(() =>
@@ -419,7 +722,7 @@ public partial class InstallerWindow : Window
 
             ResultIcon.Text = "X";
             ResultIcon.Foreground = System.Windows.Media.Brushes.OrangeRed;
-            ResultText.Text = "Installation failed";
+            ResultText.Text = _mode == InstallerMode.Update ? "Update failed" : "Installation failed";
             ResultDetail.Text = message;
         });
     }
@@ -439,7 +742,14 @@ public partial class InstallerWindow : Window
         _progressTimer.Start();
         BeginShimmer();
 
-        await AutoInstallAsync();
+        if (_mode == InstallerMode.Update)
+        {
+            await AutoUpdateAsync();
+        }
+        else
+        {
+            await AutoInstallAsync();
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
