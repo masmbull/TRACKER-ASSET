@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
             CategorySeeder::class,
             StatusSeeder::class,
             UserSeeder::class,
+            DocumentTemplateSeeder::class,
             ExcelImportSeeder::class,
         ]);
     }

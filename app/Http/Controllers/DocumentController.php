@@ -29,6 +29,7 @@ class DocumentController extends Controller
             'transfers' => $asset->transfers()->with(['fromUser', 'toUser'])->orderByDesc('id')->get(),
             'types' => (array) config('documents.types', []),
             'checklist' => (array) config('documents.fat_checklist', []),
+            'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
         ]);
     }
 
@@ -41,6 +42,7 @@ class DocumentController extends Controller
 
         $validated = $request->validate([
             'document_type' => ['required', Rule::in((array) config('documents.types', []))],
+            'template_id' => 'nullable|exists:document_templates,id',
             'transfer_id' => 'nullable|exists:asset_transfers,id',
             'document_date' => 'nullable|date',
             'handover_date' => 'nullable|date',

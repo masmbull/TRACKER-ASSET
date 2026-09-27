@@ -46,18 +46,68 @@ public partial class App : System.Windows.Application
             "TRACKER");
         _configPath = Path.Combine(_installDir, "config.json");
 
-        if (File.Exists(_configPath))
+        var installed = ReadInstalledConfig();
+
+        if (installed != null && !string.IsNullOrWhiteSpace(installed.Token))
         {
-            var config = JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(_configPath));
-            if (config != null && !string.IsNullOrWhiteSpace(config.Token))
+            // Double-click state check (agent/README.md): when the clicked exe
+            // is a *different* copy — the installer someone just downloaded —
+            // and this machine already runs the agent, compare versions:
+            //   • same version      → notice "Aplikasi Sudah Pernah Diinstall"
+            //   • different version → in-place update (swap exe, keep config)
+            // Clicking the installed executable itself still opens the tray.
+            var clickedVersion = InstallCheck.ReadVersion(Environment.ProcessPath);
+            var installedVersion = InstallCheck.ReadVersion(InstallCheck.InstalledExe);
+
+            if (!InstallCheck.IsSameFile(Environment.ProcessPath, InstallCheck.InstalledExe) &&
+                clickedVersion != null && installedVersion != null)
             {
-                StartTray(config);
+                MainWindow = new InstallerWindow(
+                    clickedVersion == installedVersion
+                        ? InstallerMode.AlreadyInstalled
+                        : InstallerMode.Update,
+                    installedVersion,
+                    clickedVersion);
+                MainWindow.Show();
                 return;
             }
+
+            StartTray(installed);
+            return;
         }
 
         MainWindow = new InstallerWindow();
         MainWindow.Show();
+    }
+
+    /// <summary>
+    /// config.json stores snake_case keys (device_id, server_url, ...). Without
+    /// this naming policy the PascalCase AgentConfig record silently binds to
+    /// null for every field, so double-click detection treats an installed,
+    /// running agent as a fresh machine and re-enters the Install flow.
+    /// </summary>
+    private static readonly JsonSerializerOptions ConfigJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    /// <summary>
+    /// Reads the persisted agent settings, treating a missing or corrupt file
+    /// as "not installed" so the installer can repair the machine.
+    /// </summary>
+    private AgentConfig? ReadInstalledConfig()
+    {
+        try
+        {
+            return File.Exists(_configPath)
+                ? JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(_configPath), ConfigJsonOptions)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static bool IsCliFlag(string arg) => arg.ToLowerInvariant() switch

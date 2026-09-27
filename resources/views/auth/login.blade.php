@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — TRACKER-ASSET</title>
     @vite(['resources/css/app.css'])
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         (function() {
@@ -28,9 +29,8 @@
 
             {{-- Logo --}}
             <div class="text-center mb-8">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-brand-500 rounded-2xl shadow-theme-lg mb-4">
-                    <span class="text-white text-2xl font-bold">TA</span>
-                </div>
+                <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="64" height="64"
+                     class="inline-block w-16 h-16 rounded-2xl shadow-theme-lg mb-4">
                 <h1 class="text-title-xs font-bold text-gray-800">TRACKER-ASSET</h1>
                 <p class="text-theme-sm text-gray-500 mt-1">IT Asset Management System</p>
             </div>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@yield('title', 'TRACKER-ASSET')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     @livewireStyles
     <script>
         (function() {
@@ -89,12 +90,12 @@
                 <a href="/" class="flex items-center justify-center gap-2 overflow-hidden">
                     <span class="logo" :class="sidebarExpanded ? '' : 'hidden'">
                         <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">TA</div>
+                            <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg flex-shrink-0">
                             <span class="text-lg font-bold text-gray-800 dark:text-white whitespace-nowrap">TRACKER-ASSET</span>
                         </div>
                     </span>
                     <div class="logo-icon" :class="sidebarExpanded ? 'hidden' : 'block'">
-                        <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">TA</div>
+                        <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg">
                     </div>
                 </a>
                 <button @click="sidebarExpanded = !sidebarExpanded"

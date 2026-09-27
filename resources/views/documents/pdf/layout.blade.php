@@ -22,8 +22,18 @@
 </style>
 </head>
 <body>
+@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-dark.png'))))
 <div class="header">
-    <h1>@yield('title')</h1>
+    <table style="border: none; width: 100%; margin-bottom: 4px;">
+        <tr>
+            <td style="border: none; width: 150px; vertical-align: top; padding: 0;">
+                <img src="{{ $logoUri }}" style="width: 130px;" alt="MITO Electronic">
+            </td>
+            <td style="border: none; vertical-align: top; padding: 0;">
+                <h1>@yield('title')</h1>
+            </td>
+        </tr>
+    </table>
     <div class="meta">No. Dokumen: <strong>{{ $document['number'] }}</strong></div>
     <div class="meta">Tanggal: {{ $document['date'] }}</div>
     <div class="meta">Perusahaan: {{ $document['company'] ?? '-' }}</div>
