@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
@@ -244,5 +245,68 @@ class AgentDistributionTest extends TestCase
             'device_id' => 'ZGV2aWNlLTAwMQ==',
             'platform' => 'Windows 11',
         ]);
+    }
+
+    /**
+     * A device that has just enrolled must be told to report itself.
+     *
+     * The heartbeat endpoint will not invent a telemetry row - with no snapshot
+     * it answers 202 "run a full scan" - and the only other things that queue a
+     * scan are the weekly audit sweep and a manual button on the fleet page. So
+     * without this, a device deployed on a Monday reported nothing at all until
+     * the sweep ran days later, and the deployment looked like it had simply
+     * failed. The agent treats 202 as success, so no error surfaced anywhere.
+     */
+    public function test_registering_a_device_queues_a_scan_for_it(): void
+    {
+        $this->postJson('/api/agent/register', [
+            'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'name' => 'new-laptop',
+            'platform' => 'Windows 11',
+        ])->assertOk();
+
+        $token = AgentApiToken::where('device_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
+
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $token->id,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Exactly one scan, on first enrolment only.
+     *
+     * The agent re-registers whenever it cannot authenticate, and a restart
+     * re-runs registration. Queuing on every call would pile up identical scans
+     * in the inbox, and a device that has already been scanned would be made to
+     * walk its whole registry again for no reason.
+     */
+    public function test_re_registering_an_existing_device_does_not_queue_another_scan(): void
+    {
+        $payload = [
+            'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'name' => 'field-laptop',
+            'platform' => 'Windows 11',
+        ];
+
+        $this->postJson('/api/agent/register', $payload)->assertOk();
+
+        $token = AgentApiToken::where('device_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
+        $afterFirst = AgentCommand::where('agent_token_id', $token->id)
+            ->where('command', 'scan')
+            ->count();
+
+        $this->assertSame(1, $afterFirst);
+
+        // Re-register twice, as a restarting agent would.
+        $this->postJson('/api/agent/register', $payload)->assertOk();
+        $this->postJson('/api/agent/register', $payload)->assertOk();
+
+        $this->assertSame(
+            $afterFirst,
+            AgentCommand::where('agent_token_id', $token->id)->where('command', 'scan')->count(),
+            'Re-registration must not stack up duplicate scans.'
+        );
     }
 }
