@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Api\AgentCommandApiController;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use App\Models\User;
@@ -88,6 +89,79 @@ class ResidentDaemonTest extends TestCase
         $this->getJson('/api/agent/inbox', $this->bearer())
             ->assertOk()
             ->assertJsonCount(1, 'commands');
+    }
+
+    /**
+     * A command settles exactly once.
+     *
+     * A broadcast is acked by whichever agent answers first, so without this a
+     * slow second agent could overwrite a real 'done' with its own 'failed'.
+     * The same overwrite was possible the other way round: the stale resolver
+     * flips a row to 'failed' after 10 minutes, and an agent that was merely
+     * slow would then erase that verdict with its own success.
+     */
+    public function test_a_command_can_only_be_settled_once(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $this->postJson("/api/agent/commands/{$command->id}/ack", [
+            'status' => 'done',
+        ], $this->bearer())->assertOk();
+
+        $this->postJson("/api/agent/commands/{$command->id}/ack", [
+            'status' => 'failed',
+        ], $this->bearer())->assertOk();
+
+        $this->assertSame('done', $command->fresh()->status, 'The late ack must not overwrite the first verdict.');
+    }
+
+    /**
+     * The resolver and the agent race: a command the resolver already gave up on
+     * stays failed even if the agent eventually completes it.
+     */
+    public function test_an_ack_cannot_overwrite_a_verdict_from_the_stale_resolver(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'failed',
+            'result' => ['message' => 'Not delivered: the agent token was revoked or had expired...'],
+        ]);
+
+        $this->postJson("/api/agent/commands/{$command->id}/ack", [
+            'status' => 'done',
+        ], $this->bearer())->assertOk();
+
+        $this->assertSame('failed', $command->fresh()->status);
+    }
+
+    /**
+     * A late ack must not be able to revoke a token, or a second poll after an
+     * uninstall could re-trigger the side effect the first one already caused.
+     */
+    public function test_a_replayed_uninstall_ack_does_not_revoke_again(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $payload = ['status' => 'done', 'result' => ['message' => AgentCommandApiController::UNINSTALL_DONE_MARKER]];
+
+        $this->postJson("/api/agent/commands/{$command->id}/ack", $payload, $this->bearer())->assertOk();
+        $this->assertFalse((bool) $this->apiToken->fresh()->is_active);
+
+        // Re-enable, then replay: the token must survive the second ack.
+        $this->apiToken->update(['is_active' => true]);
+
+        $this->postJson("/api/agent/commands/{$command->id}/ack", $payload, $this->bearer())->assertOk();
+
+        $this->assertTrue((bool) $this->apiToken->fresh()->is_active, 'A replayed ack must not re-run the side effect.');
     }
 
     public function test_ack_marks_command_done()
