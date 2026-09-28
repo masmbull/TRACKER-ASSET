@@ -47,6 +47,7 @@ public static class FingerprintCollector
         CollectOsState(data);
         CollectStorage(data);
         CollectProcessor(data);
+        CollectMemorySlots(data);
         CollectMonitor(data);
         CollectStartup(data);
         CollectSoftware(data);
@@ -596,6 +597,65 @@ public static class FingerprintCollector
                     .ToString(CultureInfo.InvariantCulture);
 
                 break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// How many RAM slots the board has, and how many are populated.
+    /// </summary>
+    /// <remarks>
+    /// This is the question an asset register is actually asked: "can this laptop
+    /// take more memory?" Total capacity alone cannot answer it - two 8GB sticks
+    /// and one 16GB stick look identical in every capacity figure, but the first
+    /// is full and the second has a free slot.
+    ///
+    /// The slot count comes from Win32_PhysicalMemoryArray.MemoryDevices and the
+    /// populated count from the number of Win32_PhysicalMemory rows. That pairing
+    /// is deliberate: the array describes the board, the modules describe what is
+    /// in it, and no single class answers both questions.
+    ///
+    /// A count of 0 is treated as "unknown" and not reported. Several firmware
+    /// versions report MemoryDevices = 0, and publishing "0 of 0" would read as
+    /// a machine with no memory at all rather than one we failed to ask properly.
+    /// </remarks>
+    static void CollectMemorySlots(Dictionary<string, string> data)
+    {
+        try
+        {
+            var slots = 0;
+            var populated = 0;
+
+            using (var searcher = new ManagementObjectSearcher("SELECT MemoryDevices FROM Win32_PhysicalMemoryArray"))
+            {
+                foreach (var obj in searcher.Get())
+                {
+                    slots = Convert.ToInt32(obj["MemoryDevices"] ?? 0);
+                    break;
+                }
+            }
+
+            using (var searcher = new ManagementObjectSearcher("SELECT DeviceLocator FROM Win32_PhysicalMemory"))
+            {
+                foreach (var _ in searcher.Get())
+                {
+                    populated++;
+                }
+            }
+
+            if (populated > 0)
+            {
+                data["ram_modules"] = populated.ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (slots > 0)
+            {
+                // Never let the board claim fewer slots than are physically
+                // present: some firmwares report the array size before SODIMM
+                // detection settles, which would produce the nonsense "2 of 1".
+                var total = Math.Max(slots, populated);
+                data["ram_slots"] = total.ToString(CultureInfo.InvariantCulture);
             }
         }
         catch { }

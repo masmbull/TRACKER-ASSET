@@ -281,6 +281,7 @@ class FingerprintTest extends TestCase
             AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail()->asset_id
         );
     }
+
     public function test_it_stores_security_posture_and_software(): void
     {
         $response = $this->postJson('/api/agent/fingerprint', $this->payload([
@@ -398,6 +399,62 @@ class FingerprintTest extends TestCase
         $this->postJson('/api/agent/fingerprint', $this->payload(), $this->headers())->assertOk();
 
         $this->assertSame([], $this->agentToken->fresh()->fingerprint->findings());
+    }
+
+    /**
+     * RAM slot occupancy, so the fleet can answer "can this take more memory?".
+     *
+     * Two 8GB sticks and one 16GB stick are indistinguishable in every capacity
+     * figure, yet the first has no free slot. Without these counts the only way
+     * to find out is to physically open the machine.
+     */
+    public function test_it_records_ram_slot_counts(): void
+    {
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'ram_modules' => 2,
+            'ram_slots' => 4,
+        ]), $this->headers())->assertOk();
+
+        $fingerprint = AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail();
+
+        $this->assertSame(2, $fingerprint->ram_modules);
+        $this->assertSame(4, $fingerprint->ram_slots);
+    }
+
+    /**
+     * The fleet page shows them as "2 of 4" rather than two separate numbers:
+     * the reader wants occupancy, not a pair they have to subtract.
+     */
+    public function test_the_fleet_detail_shows_ram_slot_occupancy(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'ram_modules' => 1,
+            'ram_slots' => 2,
+        ]), $this->headers())->assertOk();
+
+        $this->actingAs($admin)->get('/agent/fleet')
+            ->assertOk()
+            ->assertSee('RAM slots')
+            ->assertSee('1 of 2');
+    }
+
+    /**
+     * Firmware that reports MemoryDevices = 0 sends nothing at all, so the
+     * column stays null and the page shows a dash. A stored 0 would read as a
+     * machine with no memory rather than one we failed to ask properly.
+     */
+    public function test_a_missing_slot_count_is_not_recorded_as_zero(): void
+    {
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'ram_modules' => 2,
+            'ram_slots' => 0,
+        ]), $this->headers())->assertOk();
+
+        $this->assertNull(
+            AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail()->ram_slots
+        );
     }
 
     public function test_the_fleet_page_lists_security_findings(): void
