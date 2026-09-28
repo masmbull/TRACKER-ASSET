@@ -233,15 +233,22 @@
             $deviceFindings = $findingsByToken[$device->id] ?? [];
             $audit = $t?->asset_id ? ($latestAudits[$t->asset_id] ?? null) : null;
         @endphp
-        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="2xl">
-            <div class="max-h-[70vh] overflow-y-auto pr-1">
-                @if($t?->asset)
-                    <p class="mb-3 text-theme-sm">
-                        <a href="{{ route('assets.show', $t->asset) }}" class="font-medium text-brand-500 hover:text-brand-600">
+        {{-- xl rather than 2xl: two section columns need width to stay readable,
+             and the extra 128px of a 2xl modal was empty gutter on a 1440 screen.
+             The scroll container stays - an agent reporting every field can still
+             outrun the viewport on a short display. --}}
+        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="xl">
+            <div class="max-h-[65vh] overflow-y-auto pr-1">
+                <div class="mb-3 flex flex-wrap items-center gap-2">
+                    @if($t?->asset)
+                        <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
                             {{ $t->asset->asset_id }}
                         </a>
-                    </p>
-                @endif
+                    @endif
+                    @if($t?->hostname)
+                        <span class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $t->hostname }}</span>
+                    @endif
+                </div>
 
                 @if($deviceFindings)
                     <div class="mb-4 flex flex-wrap gap-1">
@@ -251,15 +258,30 @@
                     </div>
                 @endif
 
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-theme-xs sm:grid-cols-3">
-                    @foreach($rowsByDevice[$device->id] ?? [] as $label => $value)
-                        <div class="min-w-0">
-                            <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                            <dd class="break-words text-gray-800 dark:text-gray-200">
-                                {{ $value !== null && $value !== '' ? $value : '—' }}
-                            </dd>
-                        </div>
+                {{-- Two section columns, label and value on one line each. The
+                     previous label-above-value grid gave every reading two lines,
+                     so 36 readings became a scrolling wall with half the width
+                     unused. One line per reading, split by subject, is what makes
+                     the whole inventory readable without scrolling. --}}
+                <div class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                    @foreach($rowsByDevice[$device->id] ?? [] as $section => $fields)
+                        <section class="min-w-0">
+                            <h4 class="mb-1.5 border-b border-gray-100 pb-1 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                                {{ $section }}
+                            </h4>
+                            <dl class="space-y-0.5 text-theme-xs">
+                                @foreach($fields as $label => $value)
+                                    <div class="flex items-baseline gap-3">
+                                        <dt class="w-28 shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                                        <dd class="min-w-0 flex-1 break-words text-right font-medium text-gray-800 dark:text-gray-200">
+                                            {{ $value !== null && $value !== '' ? $value : '—' }}
+                                        </dd>
+                                    </div>
+                                @endforeach
+                            </dl>
+                        </section>
                     @endforeach
+                </div>
                 </dl>
 
                 @if($audit)
