@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use App\Models\AgentFingerprint;
+use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
 use Illuminate\Http\Request;
@@ -339,13 +340,67 @@ class AgentFleetController extends Controller
     }
 
     /**
+     * Page sizes offered by the software table's "per page" dropdown.
+     */
+    private const SOFTWARE_PAGE_SIZES = [25, 50, 100, 200];
+
+    private const DEFAULT_SOFTWARE_PAGE_SIZE = 50;
+
+    /**
      * Full security + software detail for one device (PRD §11 deep inventory).
      */
-    public function fingerprint(AgentApiToken $token)
+    public function fingerprint(Request $request, AgentApiToken $token)
     {
-        $token->load(['fingerprint.software', 'telemetry.asset']);
+        $token->load('fingerprint.software', 'telemetry.asset');
 
-        return view('agent.fingerprint', ['token' => $token]);
+        $fingerprint = $token->fingerprint;
+
+        // Software is paginated and filtered on the server. It used to be one
+        // scrollable block holding every row at once, which is a 66-row laptop
+        // now and a 400-row one on a machine that has been imaged for years.
+        // A device with hundreds of programs also made the page unusable on the
+        // machines that most need it.
+        $perPage = (int) $request->query('per_page', self::DEFAULT_SOFTWARE_PAGE_SIZE);
+
+        if (! in_array($perPage, self::SOFTWARE_PAGE_SIZES, true)) {
+            $perPage = self::DEFAULT_SOFTWARE_PAGE_SIZE;
+        }
+
+        $search = trim((string) $request->query('q', ''));
+
+        $softwareQuery = $fingerprint
+            ? $fingerprint->software()
+            : AgentSoftware::query()->whereRaw('1 = 0');
+
+        if ($search !== '') {
+            // Escaped: a program name is attacker-influenced data, and "%" or "_"
+            // typed into the box would otherwise become a wildcard and return
+            // everything. The wildcards belong only around the user's term.
+            $term = '%'.addcslashes($search, '%_\\').'%';
+            $softwareQuery->where(function ($q) use ($term) {
+                $q->where('name', 'like', $term)
+                    ->orWhere('publisher', 'like', $term)
+                    ->orWhere('version', 'like', $term);
+            });
+        }
+
+        $software = $softwareQuery
+            ->orderBy('name')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return view('agent.fingerprint', [
+            'token' => $token,
+            'software' => $software,
+            'softwareTotal' => $fingerprint?->software()->count() ?? 0,
+            'search' => $search,
+            'pageSizes' => self::SOFTWARE_PAGE_SIZES,
+            'perPage' => $perPage,
+            // Formatted here, not in the view: ramSlotsLabel() is private to this
+            // controller, and the fleet view already reuses the same helper so the
+            // two pages cannot drift apart on how a slot count is worded.
+            'ramSlots' => $this->ramSlotsLabel($fingerprint),
+        ]);
     }
 
     public function commands(Request $request)
