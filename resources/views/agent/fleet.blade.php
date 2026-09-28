@@ -258,22 +258,31 @@
                     </div>
                 @endif
 
-                {{-- Two section columns, label and value on one line each. The
-                     previous label-above-value grid gave every reading two lines,
-                     so 36 readings became a scrolling wall with half the width
-                     unused. One line per reading, split by subject, is what makes
-                     the whole inventory readable without scrolling. --}}
-                <div class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                {{-- CSS multi-column, not a 2-column grid.
+                     A grid gives every section its own cell, so a 10-row Security
+                     section and a 2-row Software section left one column short and
+                     the other long - the ragged, unbalanced look. `columns` fills
+                     column one to the height, then flows into column two, which
+                     is what a two-column list should do.
+
+                     Each row is label-then-value on one line. The value cell
+                     carries min-w-0 because a flex item defaults to
+                     min-width:auto: without it a long value like "Microsoft
+                     Windows 11 Home Single Language 10.0.26200" refuses to
+                     shrink, spills past its own section and lands on top of the
+                     next column's label. break-words handles a single
+                     unbreakable token. --}}
+                <div class="gap-x-8 text-theme-xs [column-fill:balance] sm:columns-2">
                     @foreach($rowsByDevice[$device->id] ?? [] as $section => $fields)
-                        <section class="min-w-0">
-                            <h4 class="mb-1.5 border-b border-gray-100 pb-1 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                        <section class="mb-5 min-w-0 break-inside-avoid">
+                            <h4 class="mb-2 border-b border-gray-100 pb-1.5 font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
                                 {{ $section }}
                             </h4>
-                            <dl class="space-y-0.5 text-theme-xs">
+                            <dl class="space-y-1">
                                 @foreach($fields as $label => $value)
-                                    <div class="flex items-baseline gap-3">
-                                        <dt class="w-28 shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                                        <dd class="min-w-0 flex-1 break-words text-right font-medium text-gray-800 dark:text-gray-200">
+                                    <div class="flex items-baseline gap-2">
+                                        <dt class="w-[7.5rem] shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                                        <dd class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
                                             {{ $value !== null && $value !== '' ? $value : '—' }}
                                         </dd>
                                     </div>
