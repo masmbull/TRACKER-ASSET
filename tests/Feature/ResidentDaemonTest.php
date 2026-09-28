@@ -136,6 +136,59 @@ class ResidentDaemonTest extends TestCase
         ]);
     }
 
+    /**
+     * "Scan now" on a dead token must refuse, not queue.
+     *
+     * AssetController::agentScan and the uninstall action both already refused
+     * an unusable token; this button did not, so it would create a command the
+     * middleware rejects with 401 and then tell the operator it was queued.
+     */
+    public function test_scan_now_refuses_a_token_the_agent_can_no_longer_use(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->apiToken->update(['expires_at' => now()->subDay()]);
+
+        $this->actingAs($admin)->post(route('agent.scan', $this->apiToken))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, AgentCommand::count());
+    }
+
+    /**
+     * A revoked token is the other half of the same rule, and the one the fleet
+     * page is most likely to be clicked from.
+     */
+    public function test_scan_now_refuses_a_revoked_token(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->apiToken->update(['is_active' => false]);
+
+        $this->actingAs($admin)->post(route('agent.scan', $this->apiToken))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, AgentCommand::count());
+    }
+
+    /**
+     * Manual sweep shares the scheduled sweep's rule. It used to filter on
+     * `is_active` alone, so every click queued a scan for expired tokens too.
+     */
+    public function test_manual_sweep_skips_expired_tokens(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->apiToken->update(['expires_at' => now()->subDay()]);
+
+        $this->actingAs($admin)->post(route('agent.sweep'))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(0, AgentCommand::count());
+    }
+
     public function test_scan_all_broadcasts_to_null()
     {
         $admin = User::factory()->create(['role' => 'admin']);

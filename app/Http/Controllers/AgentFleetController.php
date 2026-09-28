@@ -151,6 +151,18 @@ class AgentFleetController extends Controller
      */
     public function scanNow(AgentApiToken $token)
     {
+        // A scan aimed at a token the middleware will reject is a command that
+        // can never be delivered. The uninstall action refuses it outright; a
+        // scan must refuse it too, otherwise the button silently produces work
+        // the fleet will never see and the operator is told it was queued.
+        if (! $token->isUsable()) {
+            return back()->with('error', sprintf(
+                "'%s' is revoked or its token has expired, so the agent can no longer be reached and a scan cannot be delivered. ".
+                'Issue a new token and redeploy the agent on that machine first.',
+                $token->name
+            ));
+        }
+
         $this->enqueue($token->id, 'scan');
 
         return back()->with('success', "Scan queued for '{$token->name}' — the agent picks it up within a few seconds.");
@@ -205,7 +217,7 @@ class AgentFleetController extends Controller
         // Refuse it at the source instead of queueing and cleaning up later.
         if (! $token->isUsable()) {
             return back()->with('error', sprintf(
-                "'%s' is already revoked, so the agent can no longer be reached and an uninstall cannot be delivered. " .
+                "'%s' is already revoked, so the agent can no longer be reached and an uninstall cannot be delivered. ".
                 'Remove the program from that machine manually.',
                 $token->name
             ));
@@ -214,7 +226,7 @@ class AgentFleetController extends Controller
         $this->enqueue($token->id, 'uninstall', ['requested_by' => $request->user()?->name]);
 
         return back()->with('success', sprintf(
-            "Uninstall queued for '%s'. The agent removes itself at its next poll (within 10 seconds) and the token is revoked then. " .
+            "Uninstall queued for '%s'. The agent removes itself at its next poll (within 10 seconds) and the token is revoked then. ".
             'A machine that is currently offline will do this the next time it comes back online.',
             $token->name
         ));
@@ -226,7 +238,13 @@ class AgentFleetController extends Controller
      */
     public function sweep()
     {
-        $tokens = AgentApiToken::where('is_active', true)->get();
+        // Same usability rule as the scheduled `audit:sweep` and the device list
+        // above: an expired token answers 401 just like a revoked one, so
+        // queueing for it creates a command that can never be delivered.
+        $tokens = AgentApiToken::query()
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->get();
 
         $queued = 0;
 
