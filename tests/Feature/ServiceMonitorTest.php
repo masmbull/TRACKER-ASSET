@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\ServiceHealthChecker;
+use App\Support\ScheduleHeartbeat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class ServiceMonitorTest extends TestCase
@@ -53,11 +55,36 @@ class ServiceMonitorTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
+        // Stamp the scheduled commands first. Nothing runs a scheduler inside a
+        // test, and an unstamped schedule is correctly reported as down - so
+        // without this the 200 assertion would fail for a reason that has
+        // nothing to do with the status code it is checking.
+        foreach (array_keys(ScheduleHeartbeat::CADENCE) as $command) {
+            ScheduleHeartbeat::record($command);
+        }
+
         $response = $this->actingAs($admin)->getJson(route('services.health'));
 
         $response->assertOk();
-        $this->assertSame('ok', $response->json('services.0.status'));
+        $this->assertSame(0, $response->json('down'));
         $this->assertGreaterThan(0, $response->json('total'));
+    }
+
+    /**
+     * The point of the JSON endpoint: a stopped scheduler is a real outage, and
+     * a load balancer reads the status code rather than a cheerful body.
+     */
+    public function test_the_json_endpoint_answers_503_when_the_scheduler_is_not_running(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        foreach (array_keys(ScheduleHeartbeat::CADENCE) as $command) {
+            Cache::forget('tracker:scheduled:'.$command);
+        }
+
+        $this->actingAs($admin)->getJson(route('services.health'))
+            ->assertStatus(503)
+            ->assertJsonPath('down', 1);
     }
 
     /**

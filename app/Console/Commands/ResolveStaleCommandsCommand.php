@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AgentCommand;
+use App\Support\ScheduleHeartbeat;
 use Illuminate\Console\Command;
 
 /**
@@ -34,6 +35,12 @@ class ResolveStaleCommandsCommand extends Command
 
     public function handle(): int
     {
+        // First thing, before any work: prove the scheduler is alive. The
+        // services page reads this to tell "the schedule is configured" apart
+        // from "something is actually firing it", which are very different
+        // states and look identical everywhere else.
+        ScheduleHeartbeat::record('agent:resolve-stale-commands');
+
         // Broadcasts (agent_token_id = null) are claimed by any live agent, so
         // they stay deliverable no matter how many tokens are revoked.
         //

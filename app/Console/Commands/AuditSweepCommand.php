@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\ActivityLog;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Support\ScheduleHeartbeat;
 use Illuminate\Console\Command;
 
 /**
@@ -27,6 +28,8 @@ class AuditSweepCommand extends Command
 
     public function handle(): int
     {
+        ScheduleHeartbeat::record('audit:sweep');
+
         $tokens = AgentApiToken::query()
             ->where('is_active', true)
             // An expired token answers 401 just like a revoked one, so queuing a
