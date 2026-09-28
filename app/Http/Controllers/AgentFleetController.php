@@ -6,6 +6,7 @@ use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use App\Models\AssetAudit;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -24,10 +25,20 @@ class AgentFleetController extends Controller
     private const POLL_WINDOW_SECONDS = 90;
 
     /**
+     * Page sizes offered by the "per page" dropdown.
+     *
+     * Whitelisted rather than trusted from the query string, so a crafted
+     * `?per_page=100000` cannot ask Laravel to build a 100k-link paginator.
+     */
+    private const PAGE_SIZES = [10, 25, 50, 100];
+
+    private const DEFAULT_PAGE_SIZE = 10;
+
+    /**
      * Live Fleet (PRD §11): the last telemetry snapshot of every deployed
      * device — battery wear, disk space, RAM layout, Wi-Fi and who is logged in.
      */
-    public function index()
+    public function index(Request $request)
     {
         $devices = AgentApiToken::query()
             ->with(['telemetry.asset', 'fingerprint'])
@@ -111,15 +122,129 @@ class AgentFleetController extends Controller
             ->count();
         $stats['fingerprinted'] = $activeDevices->filter(fn (AgentApiToken $t) => $t->fingerprint !== null)->count();
 
-        return view('agent.fleet', compact(
-            'devices',
-            'activeDevices',
-            'revokedDevices',
-            'latestAudits',
-            'stats',
-            'pendingUninstalls',
-            'findingsByToken',
-        ));
+        // Each device now renders every telemetry and fingerprint field it has,
+        // so one device is a tall block rather than one narrow table row. That
+        // is far more readable but also far longer per device, so the list is
+        // paginated and the page size is user-selectable.
+        $perPage = (int) $request->query('per_page', self::DEFAULT_PAGE_SIZE);
+
+        if (! in_array($perPage, self::PAGE_SIZES, true)) {
+            $perPage = self::DEFAULT_PAGE_SIZE;
+        }
+
+        // A plain Eloquent Collection has no paginate() — that method only
+        // exists on the query builder — and the device set is already fully
+        // loaded (it has to be, for the findings map and the modals), so the
+        // page is sliced here rather than pushed back into the database.
+        $page = max(1, (int) $request->query('page', 1));
+        $pageItems = $activeDevices->values()->forPage($page, $perPage);
+        $total = $activeDevices->count();
+
+        $paginatedDevices = new LengthAwarePaginator(
+            $pageItems,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+
+        // Guard a page number past the end after a device is removed, otherwise
+        // the user lands on an empty list with no way back except the links.
+        if ($pageItems->isEmpty() && $page > 1) {
+            return redirect()->route('agent.fleet', array_merge($request->query(), ['page' => 1]));
+        }
+
+        // The per-device field list is built here rather than in the template.
+        // A `foreach` written inside a Blade @php block shares its braces with
+        // the surrounding markup, which produced a template that Blade happily
+        // compiled but that then failed to parse as PHP at render time — and the
+        // only symptom was a 500 on the fleet page. Formatting a value is the
+        // controller's job anyway; the view should only lay it out.
+        $rowsByDevice = $paginatedDevices->getCollection()
+            ->mapWithKeys(fn (AgentApiToken $device) => [$device->id => $this->detailRows($device)]);
+
+        return view('agent.fleet', [
+            'devices' => $devices,
+            'activeDevices' => $activeDevices,
+            // Paginated for rendering; the full collection is still passed as
+            // $activeDevices because the uninstall modals and the "queued"
+            // badge have to be able to look up a device on any page.
+            'paginatedDevices' => $paginatedDevices,
+            'rowsByDevice' => $rowsByDevice,
+            'pageSizes' => self::PAGE_SIZES,
+            'perPage' => $perPage,
+            'revokedDevices' => $revokedDevices,
+            'latestAudits' => $latestAudits,
+            'stats' => $stats,
+            'pendingUninstalls' => $pendingUninstalls,
+            'findingsByToken' => $findingsByToken,
+        ]);
+    }
+
+    /**
+     * Every reading one device reports, as label => already-formatted value.
+     *
+     * A reading that is genuinely absent stays null and renders as a dash: on
+     * an asset register the absence of a value is itself information, and a
+     * hole in the grid would read as an oversight instead of a fact.
+     *
+     * @return array<string, string|null>
+     */
+    private function detailRows(AgentApiToken $device): array
+    {
+        $t = $device->telemetry;
+        $fp = $device->fingerprint;
+
+        $yesNo = fn ($v) => $v === null ? null : ($v ? 'yes' : 'no');
+        $onOff = fn ($v) => $v === null ? null : ($v ? 'on' : 'off');
+
+        $telemetry = [
+            'User' => $t?->logged_in_user,
+            'IP' => $t?->ip_address,
+            'OS' => $t?->os,
+            'Uptime' => $t?->uptime_hours !== null ? round($t->uptime_hours / 24, 1).' days' : null,
+            'Battery' => $t?->battery_percent !== null ? $t->battery_percent.'%' : null,
+            'Battery health' => $t?->battery_health !== null ? $t->battery_health.'%' : null,
+            'Battery cycles' => $t?->battery_cycle_count,
+            'Disk free' => $t?->disk_free_gb !== null ? number_format((float) $t->disk_free_gb, 1).' GB' : null,
+            'Disk total' => $t?->disk_total_gb !== null ? number_format((float) $t->disk_total_gb, 1).' GB' : null,
+            'RAM' => $t?->ram_config,
+            'GPU' => $t?->gpu,
+            'Wi-Fi' => $t?->wifi_ssid,
+            'Signal' => $t?->wifi_signal !== null ? $t->wifi_signal.'%' : null,
+            'Network' => $t?->network_type ? ucfirst($t->network_type).' '.$t->network_adapter : null,
+            'Speed' => $t?->network_speed,
+            'Reported' => $t?->reported_at?->diffForHumans(),
+        ];
+
+        $security = [
+            'Antivirus' => $fp?->antivirus_product,
+            'AV enabled' => $yesNo($fp?->antivirus_enabled),
+            'AV signature' => $fp?->antivirus_signature_age_days !== null ? $fp->antivirus_signature_age_days.'d old' : null,
+            'Firewall' => $onOff($fp?->firewall_enabled),
+            'UAC' => $onOff($fp?->uac_enabled),
+            'Secure boot' => $onOff($fp?->secure_boot_enabled),
+            'TPM' => $fp?->tpm_present === null ? null : ($fp->tpm_present ? 'present' : 'absent'),
+            'BitLocker' => $fp?->bitlocker_status,
+            'RDP' => $onOff($fp?->rdp_enabled),
+            'Pending reboot' => $yesNo($fp?->pending_reboot),
+            'Windows' => $fp?->windows_edition,
+            'Activation' => $fp?->activation_status,
+            'Licence' => $fp?->license_channel,
+            'OS build' => $fp?->os_build,
+            'Domain' => $fp?->domain,
+            'Disk type' => $fp?->disk_type,
+            'SMART' => $fp?->smart_health,
+            'CPU cores' => $fp?->cpu_cores,
+            'Monitor' => $fp?->monitor,
+            'Programs' => $fp?->software_count,
+            'Startup' => $fp?->startup_count,
+        ];
+
+        return array_merge($telemetry, $security);
     }
 
     /**

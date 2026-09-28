@@ -32,94 +32,46 @@
     @endif
 </x-card>
 
-{{-- 4 KPI cards. min-w-0 on the card + flex-wrap on the value row keeps a
-     long badge from pushing the big number out of a narrow grid track. --}}
-<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-    <x-card class="min-w-0">
-        <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Devices</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
-            <p class="text-title-sm font-bold text-gray-800 dark:text-white">{{ $stats['devices'] }}</p>
-            <x-badge variant="brand" class="shrink-0">{{ $stats['online'] }} online</x-badge>
-        </div>
-        <p class="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">Devices installed and registered with this server.</p>
-    </x-card>
-
-    <x-card class="min-w-0">
-        <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Battery Health</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
-            <p class="text-title-sm font-bold text-gray-800 dark:text-white">
-                {{ $stats['avg_battery_health'] !== null ? round($stats['avg_battery_health']).'%' : '—' }}
-            </p>
-            @if($stats['battery_alerts'] > 0)
-                <x-badge variant="warning" class="shrink-0">
-                    {{ $stats['battery_alerts'] }} {{ $stats['battery_alerts'] === 1 ? 'alert' : 'alerts' }}
-                </x-badge>
-            @else
-                <x-badge variant="success" class="shrink-0">healthy</x-badge>
-            @endif
-        </div>
-        <p class="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">Average capacity left vs. design capacity across the fleet.</p>
-    </x-card>
-
-    <x-card class="min-w-0">
-        <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disk Alerts</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
-            <p class="text-title-sm font-bold text-gray-800 dark:text-white">{{ $stats['disk_alerts'] }}</p>
-            @if($stats['disk_alerts'] > 0)
-                <x-badge variant="error" class="shrink-0">below 15% free</x-badge>
-            @else
-                <x-badge variant="success" class="shrink-0">all clear</x-badge>
-            @endif
-        </div>
-        <p class="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">Laptops whose C: drive is running out of space.</p>
-    </x-card>
-
-    <x-card class="min-w-0">
-        <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Pending Commands</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
-            <p class="text-title-sm font-bold text-gray-800 dark:text-white">{{ $stats['pending_commands'] }}</p>
-            <x-badge variant="{{ $stats['pending_commands'] > 0 ? 'warning' : 'gray' }}" class="shrink-0">queue</x-badge>
-        </div>
-        <p class="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">Waiting for the next agent poll (every 10 seconds).</p>
-    </x-card>
-
-    {{-- Security sits last on purpose: it is the newest and least expected
-         signal, and an operator scanning for battery/disk trouble should not
-         have to look past it. --}}
-    <x-card class="min-w-0">
-        <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security Findings</p>
-        <div class="mt-2 flex flex-wrap items-end justify-between gap-2">
-            <p class="text-title-sm font-bold text-gray-800 dark:text-white">{{ $stats['security_alerts'] }}</p>
-            @if($stats['critical_alerts'] > 0)
-                <x-badge variant="error" class="shrink-0">{{ $stats['critical_alerts'] }} critical</x-badge>
-            @elseif($stats['security_alerts'] > 0)
-                <x-badge variant="warning" class="shrink-0">advisory</x-badge>
-            @else
-                <x-badge variant="success" class="shrink-0">all clear</x-badge>
-            @endif
-        </div>
-        <p class="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">
-            Across {{ $stats['fingerprinted'] }} of {{ $stats['devices'] }} reported devices.
-        </p>
-    </x-card>
+{{-- One summary line instead of five KPI cards. Each card held a big number
+     and a sentence explaining it, which is a lot of ink for facts that are
+     only glanceable; the numbers an operator acts on are still here, just
+     without the card scaffolding. --}}
+<div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-theme-sm text-gray-600 dark:text-gray-300">
+    <span><span class="font-semibold text-gray-800 dark:text-white">{{ $stats['online'] }}</span>/{{ $stats['devices'] }} online</span>
+    @if($stats['battery_alerts'] > 0)
+        <x-badge variant="warning">{{ $stats['battery_alerts'] }} battery</x-badge>
+    @endif
+    @if($stats['disk_alerts'] > 0)
+        <x-badge variant="error">{{ $stats['disk_alerts'] }} low disk</x-badge>
+    @endif
+    @if($stats['critical_alerts'] > 0)
+        <x-badge variant="error">{{ $stats['critical_alerts'] }} critical</x-badge>
+    @elseif($stats['security_alerts'] > 0)
+        <x-badge variant="warning">{{ $stats['security_alerts'] }} findings</x-badge>
+    @endif
+    @if($stats['pending_commands'] > 0)
+        <x-badge variant="brand">{{ $stats['pending_commands'] }} queued</x-badge>
+    @endif
+    @if($stats['battery_alerts'] === 0 && $stats['disk_alerts'] === 0 && $stats['security_alerts'] === 0)
+        <x-badge variant="success">all clear</x-badge>
+    @endif
 </div>
-
-<x-card title="Active Devices" subtitle="Refreshes automatically every 30 seconds. Telemetry arrives with every agent scan and heartbeat.">
+<x-card title="Active Devices" subtitle="Every reading the agent reports. Refreshes every 30 seconds.">
     @if($activeDevices->isEmpty())
         <p class="py-8 text-center text-theme-sm text-gray-400">
             No active devices. Open <a href="{{ route('agent.index') }}" class="font-medium text-brand-500 hover:text-brand-600">Tokens</a> and download the agent to enrol a laptop.
         </p>
     @else
-    {{-- min-width stops the browser from crushing seven/eight columns into
-         unreadable slivers on a wide screen; the x-table wrapper scrolls
-         horizontally instead. --}}
-    <x-table
-        :headers="['Device', 'Status', 'Logged-in User', 'Battery', 'Disk (C:)', 'RAM / Network', 'Security', 'Last Audit', 'Actions']"
-        min-width="1520px"
-    >
-        @foreach($activeDevices as $device)
+
+    {{-- Was a 1520px-wide table with nine columns, which meant horizontal
+         scrolling and cells too narrow to hold a hostname, an SSID or a GPU
+         string. Each device is now a block that wraps, so every value the
+         agent sends is actually readable. --}}
+    <div class="space-y-4">
+        @foreach($paginatedDevices as $device)
             @php
                 $telemetry = $device->telemetry;
+                $fp = $device->fingerprint;
                 $audit = $telemetry?->asset_id ? ($latestAudits[$telemetry->asset_id] ?? null) : null;
                 // An agent older than the heartbeat never re-reports readings, but
                 // it still polls the inbox, so a recent last_used_at is proof of
@@ -127,7 +79,7 @@
                 // once the 2-minute telemetry window lapsed.
                 $polling = $device->last_used_at?->gt(now()->subSeconds(90)) ?? false;
                 $online = $telemetry?->isOnline() ?? false;
-                $healthVariant = $telemetry?->battery_health === null ? 'gray' : ($telemetry->battery_health >= 80 ? 'success' : ($telemetry->battery_health >= 60 ? 'warning' : 'error'));
+                $deviceFindings = $findingsByToken[$device->id] ?? [];
                 $auditVariant = match ($audit?->result) {
                     'MATCH' => 'success',
                     'MISMATCH' => 'warning',
@@ -135,120 +87,33 @@
                     default => 'gray',
                 };
             @endphp
-            <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
-                <td class="py-3 px-4">
-                    <p class="font-medium text-gray-800 dark:text-white">{{ $device->name }}</p>
-                    <p class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $telemetry?->hostname ?? $device->device_id ?? '—' }}</p>
-                    @if($telemetry?->asset)
-                        <a href="{{ route('assets.show', $telemetry->asset) }}" class="text-theme-xs font-medium text-brand-500 hover:text-brand-600">{{ $telemetry->asset->asset_id }}</a>
-                    @endif
-                </td>
-                <td class="py-3 px-4">
-                    @if(! $device->isUsable())
-                        <x-badge variant="error" :dot="true">revoked</x-badge>
-                    @elseif($online || $polling)
-                        <x-badge variant="success" :dot="true">online</x-badge>
-                    @elseif($telemetry === null)
-                        <x-badge variant="gray" :dot="true">never scanned</x-badge>
-                    @else
-                        <x-badge variant="warning" :dot="true">stale</x-badge>
-                    @endif
-                    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">
-                        {{ $telemetry?->reported_at ? 'report '.$telemetry->reported_at->diffForHumans() : 'no report yet' }}
-                    </p>
-                </td>
-                <td class="py-3 px-4 text-theme-sm text-gray-700 dark:text-gray-300">
-                    {{ $telemetry?->logged_in_user ?? '—' }}
-                    @if($telemetry?->uptime_hours !== null)
-                        <p class="text-theme-xs text-gray-500 dark:text-gray-400">up {{ round($telemetry->uptime_hours / 24, 1) }} days</p>
-                    @endif
-                </td>
-                <td class="py-3 px-4">
-                    @if($telemetry?->battery_percent !== null)
-                        <div class="flex items-center gap-2">
-                            <div class="h-2 w-20 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                <div class="h-2 rounded-full {{ $telemetry->hasLowBattery() ? 'bg-error-500' : 'bg-success-500' }}" style="width: {{ min(100, max(0, $telemetry->battery_percent)) }}%"></div>
-                            </div>
-                            <span class="text-theme-sm text-gray-700 dark:text-gray-300">{{ $telemetry->battery_percent }}%</span>
-                        </div>
-                    @else
-                        <span class="text-theme-sm text-gray-400">—</span>
-                    @endif
-                    <div class="mt-1 flex flex-wrap items-center gap-1">
-                        @if($telemetry?->battery_health !== null)
-                            <x-badge :variant="$healthVariant">health {{ $telemetry->battery_health }}%</x-badge>
-                        @endif
-                        @if($telemetry?->battery_cycle_count !== null)
-                            <span class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $telemetry->battery_cycle_count }} cycles</span>
-                        @endif
-                    </div>
-                </td>
 
-                <td class="py-3 px-4">
-                    @if($telemetry?->disk_free_gb !== null)
-                        <p class="text-theme-sm text-gray-700 dark:text-gray-300">
-                            {{ number_format($telemetry->disk_free_gb, 1) }} GB free
-                            <span class="text-theme-xs text-gray-500 dark:text-gray-400">of {{ number_format((float) $telemetry->disk_total_gb, 1) }} GB</span>
-                        </p>
-                        <div class="mt-1 h-2 w-24 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                            <div class="h-2 rounded-full {{ $telemetry->hasLowDisk() ? 'bg-error-500' : ($telemetry->disk_free_percent < 30 ? 'bg-warning-500' : 'bg-success-500') }}" style="width: {{ min(100, max(0, $telemetry->disk_free_percent)) }}%"></div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                {{-- Header: identity + status + actions. --}}
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <a href="{{ route('agent.fingerprint', $device) }}" class="break-all text-theme-sm font-semibold text-gray-800 hover:text-brand-600 dark:text-white">
+                                {{ $device->name }}
+                            </a>
+                            @if(! $device->isUsable())
+                                <x-badge variant="error" :dot="true">revoked</x-badge>
+                            @elseif($online || $polling)
+                                <x-badge variant="success" :dot="true">online</x-badge>
+                            @elseif($telemetry === null)
+                                <x-badge variant="gray" :dot="true">never scanned</x-badge>
+                            @else
+                                <x-badge variant="warning" :dot="true">stale</x-badge>
+                            @endif
                         </div>
-                    @else
-                        <span class="text-theme-sm text-gray-400">—</span>
-                    @endif
-                </td>
-                <td class="py-3 px-4 text-theme-sm text-gray-700 dark:text-gray-300">
-                    {{ $telemetry?->ram_config ?? '—' }}
-                    <p class="text-theme-xs text-gray-500 dark:text-gray-400">
-                        {{-- An Ethernet laptop has no SSID at all, and falling
-                             through to the GPU string made it look like the
-                             machine had no network. Report the real link. --}}
-                        @if($telemetry?->wifi_ssid)
-                            Wi-Fi {{ $telemetry->wifi_ssid }}{{ $telemetry->wifi_signal !== null ? ' · '.$telemetry->wifi_signal.'%' : '' }}
-                        @elseif($telemetry?->network_adapter)
-                            {{ ucfirst($telemetry->network_type ?: 'network') }} {{ $telemetry->network_adapter }}{{ $telemetry->network_speed ? ' · '.$telemetry->network_speed : '' }}
-                        @else
-                            {{ $telemetry?->ip_address ? 'Network '.$telemetry->ip_address : 'no adapter data' }}
-                        @endif
-                    </p>
-                </td>
-                <td class="py-3 px-4">
-                    @php $deviceFindings = $findingsByToken[$device->id] ?? []; @endphp
-                    @if($device->fingerprint)
-                        @if(count($deviceFindings) > 0)
-                            <div class="flex flex-wrap gap-1">
-                                @foreach($deviceFindings as $finding)
-                                    <x-badge :variant="$finding['severity'] === 'danger' ? 'error' : 'warning'">
-                                        {{ $finding['label'] }}
-                                    </x-badge>
-                                @endforeach
-                            </div>
-                        @else
-                            <x-badge variant="success">clean</x-badge>
-                        @endif
-                        <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">
-                            {{ $device->fingerprint->software_count ?? 0 }} programs
-                            · {{ $device->fingerprint->collected_at?->diffForHumans() }}
+                        <p class="mt-0.5 break-all text-theme-xs text-gray-500 dark:text-gray-400">
+                            {{ $telemetry?->hostname ?? '—' }}
+                            @if($telemetry?->asset)
+                                · <a href="{{ route('assets.show', $telemetry->asset) }}" class="font-medium text-brand-500 hover:text-brand-600">{{ $telemetry->asset->asset_id }}</a>
+                            @endif
                         </p>
-                    @else
-                        {{-- "Not yet reported" rather than a grey dash: the agent
-                             sends its first report on the poll after install, so
-                             a blank here is usually just timing. --}}
-                        <span class="text-theme-sm text-gray-400">not yet reported</span>
-                    @endif
-                </td>
-                <td class="py-3 px-4">
-                    @if($audit)
-                        <x-badge :variant="$auditVariant">{{ $audit->result }}</x-badge>
-                        <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">{{ $audit->audit_date?->diffForHumans() }}</p>
-                    @else
-                        <span class="text-theme-sm text-gray-400">—</span>
-                    @endif
-                </td>
-                {{-- flex-wrap + whitespace-nowrap: three actions in one cell used to
-                     overflow on narrow screens, and the queued note used to wrap
-                     mid-word. --}}
-                <td class="py-3 px-4">
+                    </div>
+
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                         @if($device->isUsable())
                             <form method="POST" action="{{ route('agent.scan', $device) }}">
@@ -258,11 +123,11 @@
                         @endif
                         <a href="{{ route('agent.download', $device) }}" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Reinstall</a>
 
-                        {{-- Removing an agent deletes files on someone else's machine,
-                             so it is the one action that asks twice: once in this
-                             modal, once more on the server side. Only reachable
-                             here: a revoked device lives in its own card, where
-                             nothing can be queued for it any more. --}}
+                        {{-- Removing an agent deletes files on someone else's
+                             machine, so it is the one action that asks twice:
+                             once in this modal, once more on the server side.
+                             Only reachable here: a revoked device lives in its own
+                             card, where nothing can be queued any more. --}}
                         @if($pendingUninstalls->has($device->id))
                             <x-badge variant="warning" :dot="true">Uninstall queued</x-badge>
                         @else
@@ -271,16 +136,87 @@
                                     @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</button>
                         @endif
                     </div>
-                </td>
+                </div>
 
-            </tr>
+                {{-- Every telemetry and fingerprint reading the agent reports, in a
+                     wrapping label/value grid. `break-words` on the values is what
+                     keeps a long SSID or GPU string from stretching the column, and
+                     the list is built by the controller so the template only lays
+                     it out. --}}
+                <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-theme-xs sm:grid-cols-3 lg:grid-cols-4">
+                    @foreach($rowsByDevice[$device->id] ?? [] as $label => $value)
+                        <div class="min-w-0">
+                            <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                            <dd class="break-words text-gray-800 dark:text-gray-200">
+                                {{ $value !== null && $value !== '' ? $value : '—' }}
+                            </dd>
+                        </div>
+                    @endforeach
+                </dl>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-theme-xs dark:border-gray-800">
+                    @if($deviceFindings)
+                        @foreach($deviceFindings as $finding)
+                            <x-badge :variant="$finding['severity'] === 'danger' ? 'error' : 'warning'">{{ $finding['label'] }}</x-badge>
+                        @endforeach
+                    @elseif($fp)
+                        <x-badge variant="success">security clean</x-badge>
+                    @else
+                        {{-- "Not yet reported" rather than a grey dash: the agent
+                             sends its first report on the poll after install, so
+                             a blank here is usually just timing. --}}
+                        <span class="text-gray-400">security not yet reported</span>
+                    @endif
+
+                    @if($audit)
+                        <x-badge :variant="$auditVariant">audit {{ $audit->result }}</x-badge>
+                        <span class="text-gray-500 dark:text-gray-400">{{ $audit->audit_date?->diffForHumans() }}</span>
+                    @endif
+
+                    @if($fp?->collected_at)
+                        <span class="text-gray-500 dark:text-gray-400">inventory {{ $fp->collected_at->diffForHumans() }}</span>
+                    @endif
+
+                    <a href="{{ route('agent.fingerprint', $device) }}" class="ml-auto font-medium text-brand-500 hover:text-brand-600">Detail →</a>
+                </div>
+            </div>
         @endforeach
-    </x-table>
-    @endif
+    </div>
 
-    {{-- One confirm dialog per device. The uninstall form lives here rather than
-         in the table so the row keeps its compact button-only layout. --}}
-    @foreach($activeDevices as $device)
+    {{-- Page size is a dropdown rather than a bare number field: the useful
+         values are a short fixed set, and a free-text box would invite
+         nonsense the controller then has to reject. --}}
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 text-theme-xs dark:border-gray-800">
+        <form method="GET" class="flex items-center gap-2">
+            <label for="per_page" class="text-gray-500 dark:text-gray-400">Show</label>
+            <select id="per_page" name="per_page" onchange="this.form.submit()"
+                    class="rounded-lg border border-gray-300 bg-white px-2 py-1 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                @foreach($pageSizes as $size)
+                    <option value="{{ $size }}" @selected($perPage === $size)>{{ $size }}</option>
+                @endforeach
+            </select>
+            <span class="text-gray-500 dark:text-gray-400">per page</span>
+            @if(request()->query('per_page'))
+                <a href="{{ route('agent.fleet') }}" class="text-brand-500 hover:text-brand-600">reset</a>
+            @endif
+        </form>
+
+        <p class="text-gray-500 dark:text-gray-400">
+            Showing {{ $paginatedDevices->firstItem() ?? 0 }}–{{ $paginatedDevices->lastItem() ?? 0 }}
+            of {{ $paginatedDevices->total() }}
+        </p>
+    </div>
+
+    <div class="mt-3">
+        {{ $paginatedDevices->links() }}
+    </div>
+    @endif
+    {{-- One confirm dialog per device, rendered only for the devices on this
+         page. Iterating the full collection here (as the table version did)
+         would put every laptop's name in the HTML regardless of pagination,
+         which both bloats the response and makes the page say a machine is
+         present when it is not. --}}
+    @foreach($paginatedDevices as $device)
         @continue($pendingUninstalls->has($device->id))
 
         <x-modal id="uninstall-agent-{{ $device->id }}" title="Uninstall agent" maxWidth="md">

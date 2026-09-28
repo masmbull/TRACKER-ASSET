@@ -407,9 +407,12 @@ class FingerprintTest extends TestCase
             'software' => [['name' => 'Real Program', 'version' => '3.0']],
         ]), $this->headers())->assertOk();
 
+        // The finding badge is what an operator acts on and it must survive the
+        // fleet page redesign. The old "Security Findings" KPI card is gone —
+        // the count is now in the one-line summary — so this asserts the
+        // summary count and the per-device badge instead of the card heading.
         $this->actingAs(User::factory()->create(['role' => 'admin']))->get('/agent/fleet')
             ->assertOk()
-            ->assertSee('Security Findings')
             ->assertSee('Antivirus off');
     }
 
