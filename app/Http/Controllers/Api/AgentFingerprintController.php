@@ -227,11 +227,25 @@ class AgentFingerprintController extends Controller
         foreach ($columns as $key => $column) {
             $value = $this->clean($payload[$key] ?? null);
 
+            // MACs are compared in a separator-free form on *both* sides, because
+            // the register stores dashes, WMI reports colons, and an operator
+            // may type either. Only one side normalised still leaves a mismatch,
+            // and a mismatch here is silent: the report just falls through to
+            // the telemetry fallback.
+            if ($key === 'mac_address') {
+                $value = $this->normaliseMac($value);
+            }
+
             if ($value === null) {
                 continue;
             }
 
-            $asset = Asset::where($column, $value)->first();
+            $asset = $key === 'mac_address'
+                ? Asset::whereRaw(
+                    "UPPER(REPLACE(REPLACE(REPLACE(mac_address, '-', ''), ':', ''), ' ', '')) = ?",
+                    [$value]
+                )->first()
+                : Asset::where($column, $value)->first();
 
             if ($asset) {
                 return $asset->id;
@@ -252,9 +266,17 @@ class AgentFingerprintController extends Controller
 
         return [
             'device_id' => $text,
+            // Identity fields, used to attach this report to the asset it describes.
+            // `mac_address` has to be declared here: validate() returns only the
+            // keys that have a rule, so an unlisted field is dropped from the
+            // payload before resolveAssetId ever sees it. The agent does send it
+            // (FingerprintCollector reads Win32_NetworkAdapter), so omitting this
+            // silently disabled MAC-based asset matching while the code below
+            // still appeared to support it.
             'asset_id' => $text,
             'serial_number' => $text,
             'hostname' => $text,
+            'mac_address' => $text,
 
             'antivirus_product' => $text,
             'antivirus_enabled' => $bool,
@@ -334,6 +356,27 @@ class AgentFingerprintController extends Controller
     private function intOrNull(mixed $value): ?int
     {
         return is_numeric($value) ? (int) round((float) $value) : null;
+    }
+
+    /**
+     * Reduce a MAC address to bare uppercase hex, or null if it is not one.
+     *
+     * Windows reports colons (34:5A:...), the asset register stores dashes
+     * (34-5A-...), and operators type either or nothing at all. Comparing the
+     * bare form makes the lookup immune to which convention the source used
+     * instead of silently matching nothing on every device in the fleet.
+     */
+    private function normaliseMac(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $hex = strtoupper((string) preg_replace('/[^0-9A-Fa-f]/', '', $value));
+
+        // A MAC is exactly 6 octets; anything else is a typo or a placeholder
+        // like "N/A" and must not reach the query.
+        return strlen($hex) === 12 ? $hex : null;
     }
 
     private function dateOrNull(mixed $value): ?string

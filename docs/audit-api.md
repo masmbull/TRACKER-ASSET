@@ -140,10 +140,18 @@ Two behaviours worth knowing:
   real booleans and `0`/`1`, which would 422 the entire report). An unreadable
   sensor must not destroy several hundred valid software rows, and `null` stays
   distinguishable from a genuine "off".
-- **The asset link is inherited from telemetry.** Nothing in the app writes
-  `device_serial` / `device_hostname` back onto an asset — the audit only reads
-  them to compare — so identity-column matching finds nothing. The fingerprint
-  takes the asset from the device's own `agent_telemetries` row instead.
+- **The asset link is resolved by identity, then by telemetry.** The report is
+  matched against `assets.asset_id` / `serial_number` / `hostname` / `mac_address`
+  in that order, falling back to the device's own `agent_telemetries` row.
+  Every one of those four keys needs a rule in `AgentFingerprintController::rules()`
+  or Laravel drops it from the validated payload before the lookup runs — the
+  `mac_address` case was exactly that, and it made the code look capable of MAC
+  matching while the field could never arrive.
+- **Unusable tokens are resolved, not left hanging.** `agent:resolve-stale-commands`
+  (every 5 min) fails a pending command whose token is revoked **or expired**,
+  since the middleware rejects both with 401 before the inbox is read.
+  `audit:sweep` filters on the same rule so it never queues a scan that cannot
+  be delivered. Both need the scheduler running — see `docs/deployment.md`.
 
 `AgentFingerprint::findings()` turns the readings into operator-facing badges
 (antivirus off, firewall off, BitLocker off, disk predicted failure, unlicensed
