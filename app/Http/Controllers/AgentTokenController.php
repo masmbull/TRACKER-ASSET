@@ -79,14 +79,19 @@ class AgentTokenController extends Controller
 
     public function downloadLatest()
     {
-        $token = AgentApiToken::orderByDesc('id')->first();
+        // Only an agent that actually reports something may be used to serve an
+        // update. Previously this took the newest row, or invented one with an
+        // empty token hash and no device_id when the table was empty — so a
+        // machine with a freshly wiped database would get a download tied to a
+        // token that can never authenticate or be shown in the fleet.
+        $token = AgentApiToken::query()
+            ->whereNotNull('device_id')
+            ->orderByDesc('id')
+            ->first();
 
         if (! $token) {
-            $token = AgentApiToken::create([
-                'name' => 'device-'.now()->format('Ymd-His'),
-                'token_hash' => hash('sha256', ''),
-                'token_plain' => '',
-            ]);
+            return redirect()->route('agent.index')
+                ->with('error', 'No enrolled agent to serve an update from. Deploy the agent on a machine first.');
         }
 
         return redirect()->route('agent.download', $token);

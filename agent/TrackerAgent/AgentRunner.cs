@@ -427,7 +427,15 @@ public static class AgentRunner
                         {
                             Console.WriteLine($"[*] Command #{id} update received. Acknowledging and updating...");
                             Api.Ack(url, token, id, "done");
-                            if (AutoUpdater.PerformUpdate(url, token))
+                            // The server sends the download URL in the payload; honour it
+                            // instead of always rebuilding the path locally.
+                            var downloadUrl = cmd.TryGetProperty("payload", out var p) &&
+                                p.ValueKind == JsonValueKind.Object &&
+                                p.TryGetProperty("url", out var u)
+                                ? u.GetString()
+                                : null;
+
+                            if (AutoUpdater.PerformUpdate(url, token, downloadUrl))
                             {
                                 Environment.Exit(0);
                             }

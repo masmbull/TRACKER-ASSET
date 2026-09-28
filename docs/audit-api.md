@@ -184,7 +184,7 @@ and provides 1-click fleet actions:
 |---|---|
 | **Scan Now** (per laptop) | queues a `scan` command for that token only |
 | **Scan All Laptops** | broadcast `scan` (`agent_token_id = null` → every daemon) |
-| **Update All Agents** | broadcast `update`; each daemon re-pulls `/agent/download`, swaps the exe and restarts |
+| **Update All Agents** | broadcast `update` carrying the exe download URL; each daemon re-pulls it, swaps the exe and restarts. The agent honours that URL and falls back to `/agent/download` when the command has no payload (e.g. `--update` run by hand). |
 
 ### Agent API (Bearer token)
 

@@ -13,7 +13,13 @@ public static class AutoUpdater
     /// Checks and executes self-update from the server's /agent/download endpoint.
     /// Spawns a background helper script, replaces the executable, and restarts.
     /// </summary>
-    public static bool PerformUpdate(string serverUrl, string token)
+    /// <param name="payloadUrl">
+    /// Download URL supplied by the server in the command payload, if any. The
+    /// "Update all" button sends one so the binary is pulled from the exact
+    /// route the operator pointed at. This used to be ignored in favour of a
+    /// hardcoded /agent/download, which made the payload decoration only.
+    /// </param>
+    public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null)
     {
         try
         {
@@ -30,7 +36,11 @@ public static class AutoUpdater
             var tempNewExe = Path.Combine(currentDir, $"_new_TrackerAgent_{Guid.NewGuid():N}.exe");
             var updateScript = Path.Combine(currentDir, "_update_runner.bat");
 
-            var downloadUrl = $"{serverUrl.TrimEnd('/')}/agent/download";
+            // Prefer the URL the server sent with the command. Falling back to
+            // /agent/download keeps --update (run by hand, no payload) working.
+            var downloadUrl = !string.IsNullOrWhiteSpace(payloadUrl)
+                ? payloadUrl
+                : $"{serverUrl.TrimEnd('/')}/agent/download";
             Console.WriteLine($"[*] Downloading latest agent from: {downloadUrl}");
 
             using (var req = new HttpRequestMessage(HttpMethod.Get, downloadUrl))
