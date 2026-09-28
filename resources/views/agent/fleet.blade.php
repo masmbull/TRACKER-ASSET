@@ -199,8 +199,11 @@
     <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 text-theme-xs dark:border-gray-800">
         <form method="GET" class="flex items-center gap-2">
             <label for="per_page" class="text-gray-500 dark:text-gray-400">Show</label>
+            {{-- min-w, not px-2: a three-digit option plus the native dropdown
+                 arrow does not fit in the padding this had, and the browser
+                 clipped the last digit under the arrow. --}}
             <select id="per_page" name="per_page" onchange="this.form.submit()"
-                    class="rounded-lg border border-gray-300 bg-white px-2 py-1 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                    class="min-w-[4.5rem] rounded-lg border border-gray-300 bg-white py-1 pl-3 pr-8 text-gray-700 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
                 @foreach($pageSizes as $size)
                     <option value="{{ $size }}" @selected($perPage === $size)>{{ $size }}</option>
                 @endforeach

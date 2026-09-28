@@ -188,6 +188,20 @@
                                     <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.5 6C3.5 4.61929 4.61929 3.5 6 3.5H18C19.3807 3.5 20.5 4.61929 20.5 6V8.5C20.5 9.32843 19.8284 10 19 10H5C4.17157 10 3.5 9.32843 3.5 8.5V6ZM5 14C5 13.1716 5.67157 12.5 6.5 12.5H17.5C18.3284 12.5 19 13.1716 19 14V18C19 19.3807 17.8807 20.5 16.5 20.5H7.5C6.11929 20.5 5 19.3807 5 18V14Z" fill="currentColor"/></svg>
                                     <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Templates</span>
                                 </a>
+                            @if(Gate::allows('manage-users'))
+                                @php $isActive = $route === 'services.*'; @endphp
+                                <li>
+                                    <a href="{{ route('services.index') }}"
+                                       @click="selectedMenu = 'services.index'"
+                                       class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
+                                        {{-- A heartbeat trace: this page is about whether
+                                             the backing services are alive. --}}
+                                        <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M2.5 12h4l2.5-6 4 13 2.5-7h6" stroke="currentColor"/></svg>
+                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Services</span>
+                                    </a>
+                                </li>
+                            @endif
+
                             </li>
                         </ul>
                     </nav>
