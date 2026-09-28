@@ -237,6 +237,41 @@ class LiveFleetTest extends TestCase
             ->assertViewHas('perPage', 10);
     }
 
+    /**
+     * The detail modal shows every reading on one line each, grouped by subject.
+     *
+     * These assert the two bugs the grouped layout would otherwise hide: a
+     * duplicated network type ("Ethernet Ethernet Realtek...") on every wired
+     * machine, and a disk percentage rendered as a dash when the agent had sent
+     * both halves of the ratio and the column was simply never filled.
+     */
+    public function test_device_detail_labels_network_without_repeating_the_type(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        AgentTelemetry::create([
+            'agent_token_id' => $this->agentToken->id,
+            'hostname' => 'HOST-LIVE-01',
+            'network_type' => 'ethernet',
+            'network_adapter' => 'Ethernet Realtek PCIe GbE Family Controller',
+            // Both halves present, ratio column left empty on purpose.
+            'disk_free_gb' => 134.3,
+            'disk_total_gb' => 450.4,
+            'reported_at' => now(),
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('agent.fleet'))->getContent();
+
+        $this->assertStringContainsString('Ethernet Realtek PCIe GbE Family Controller', $html);
+        $this->assertStringNotContainsString('Ethernet Ethernet', $html);
+        // 134.3 / 450.4 = 29.8%
+        $this->assertStringContainsString('30%', $html);
+    }
+
+    /**
+     * The asset page keeps its own gate: the fleet must not become readable by
+     * anyone who can log in.
+     */
     public function test_live_fleet_requires_the_manage_agents_gate(): void
     {
         $this->get(route('agent.fleet'))->assertRedirect('/login');

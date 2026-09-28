@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -185,13 +186,17 @@ class AgentFleetController extends Controller
     }
 
     /**
-     * Every reading one device reports, as label => already-formatted value.
+     * Every reading one device reports, grouped into labelled sections.
      *
-     * A reading that is genuinely absent stays null and renders as a dash: on
-     * an asset register the absence of a value is itself information, and a
-     * hole in the grid would read as an oversight instead of a fact.
+     * Returned as section => (label => value) rather than one flat list. A flat
+     * list of 36 fields reads as a wall of text with no way to tell that
+     * "BitLocker: Disabled" belongs under security and not next to the disk size.
      *
-     * @return array<string, string|null>
+     * A reading that is genuinely absent stays null and renders as a dash: on an
+     * asset register the absence of a value is itself information, and a hole in
+     * the grid would read as an oversight instead of a fact.
+     *
+     * @return array<string, array<string, string|null>>
      */
     private function detailRows(AgentApiToken $device): array
     {
@@ -201,50 +206,110 @@ class AgentFleetController extends Controller
         $yesNo = fn ($v) => $v === null ? null : ($v ? 'yes' : 'no');
         $onOff = fn ($v) => $v === null ? null : ($v ? 'on' : 'off');
 
-        $telemetry = [
-            'User' => $t?->logged_in_user,
-            'IP' => $t?->ip_address,
-            'OS' => $t?->os,
-            'Uptime' => $t?->uptime_hours !== null ? round($t->uptime_hours / 24, 1).' days' : null,
-            'Battery' => $t?->battery_percent !== null ? $t->battery_percent.'%' : null,
-            'Battery health' => $t?->battery_health !== null ? $t->battery_health.'%' : null,
-            'Battery cycles' => $t?->battery_cycle_count,
-            'Disk free' => $t?->disk_free_gb !== null ? number_format((float) $t->disk_free_gb, 1).' GB' : null,
-            'Disk total' => $t?->disk_total_gb !== null ? number_format((float) $t->disk_total_gb, 1).' GB' : null,
-            'RAM' => $t?->ram_config,
-            'GPU' => $t?->gpu,
-            'Wi-Fi' => $t?->wifi_ssid,
-            'Signal' => $t?->wifi_signal !== null ? $t->wifi_signal.'%' : null,
-            'Network' => $t?->network_type ? ucfirst($t->network_type).' '.$t->network_adapter : null,
-            'Speed' => $t?->network_speed,
-            'Reported' => $t?->reported_at?->diffForHumans(),
+        return [
+            'Device' => [
+                'User' => $t?->logged_in_user,
+                'IP address' => $t?->ip_address,
+                'Operating system' => $t?->os,
+                'Uptime' => $t?->uptime_hours !== null ? round($t->uptime_hours / 24, 1).' days' : null,
+                'Last report' => $t?->reported_at?->diffForHumans(),
+            ],
+            'Hardware' => [
+                'CPU cores' => $fp?->cpu_cores,
+                'RAM' => $t?->ram_config,
+                'GPU' => $t?->gpu,
+                'Monitor' => $fp?->monitor,
+                'Disk type' => $fp?->disk_type,
+                'SMART' => $fp?->smart_health,
+            ],
+            'Storage & battery' => [
+                'Disk free' => $t?->disk_free_gb !== null ? number_format((float) $t->disk_free_gb, 1).' GB' : null,
+                'Disk total' => $t?->disk_total_gb !== null ? number_format((float) $t->disk_total_gb, 1).' GB' : null,
+                // The agent sends free and total, never the ratio. Computing it
+                // here means a device that reported its disk size is never
+                // shown as "—", which would read as an unreadable sensor when
+                // both numbers are in fact right there.
+                'Disk free %' => $this->diskFreePercent($t),
+                'Battery' => $t?->battery_percent !== null ? $t->battery_percent.'%' : null,
+                'Battery health' => $t?->battery_health !== null ? $t->battery_health.'%' : null,
+                'Battery cycles' => $t?->battery_cycle_count,
+            ],
+            'Network' => [
+                'Network' => $this->networkLabel($t),
+                'Speed' => $t?->network_speed,
+                'Wi-Fi' => $t?->wifi_ssid,
+                'Signal' => $t?->wifi_signal !== null ? $t->wifi_signal.'%' : null,
+            ],
+            'Windows & licence' => [
+                'Edition' => $fp?->windows_edition,
+                'Activation' => $fp?->activation_status,
+                'Licence' => $fp?->license_channel,
+                'OS build' => $fp?->os_build,
+                'Domain' => $fp?->domain,
+            ],
+            'Security' => [
+                'Antivirus' => $fp?->antivirus_product,
+                'AV enabled' => $yesNo($fp?->antivirus_enabled),
+                'AV signature' => $fp?->antivirus_signature_age_days !== null ? $fp->antivirus_signature_age_days.'d old' : null,
+                'Firewall' => $onOff($fp?->firewall_enabled),
+                'UAC' => $onOff($fp?->uac_enabled),
+                'Secure boot' => $onOff($fp?->secure_boot_enabled),
+                'TPM' => $fp?->tpm_present === null ? null : ($fp->tpm_present ? 'present' : 'absent'),
+                'BitLocker' => $fp?->bitlocker_status,
+                'RDP' => $onOff($fp?->rdp_enabled),
+                'Pending reboot' => $yesNo($fp?->pending_reboot),
+            ],
+            'Installed software' => [
+                'Programs' => $fp?->software_count,
+                'Startup items' => $fp?->startup_count,
+            ],
         ];
+    }
 
-        $security = [
-            'Antivirus' => $fp?->antivirus_product,
-            'AV enabled' => $yesNo($fp?->antivirus_enabled),
-            'AV signature' => $fp?->antivirus_signature_age_days !== null ? $fp->antivirus_signature_age_days.'d old' : null,
-            'Firewall' => $onOff($fp?->firewall_enabled),
-            'UAC' => $onOff($fp?->uac_enabled),
-            'Secure boot' => $onOff($fp?->secure_boot_enabled),
-            'TPM' => $fp?->tpm_present === null ? null : ($fp->tpm_present ? 'present' : 'absent'),
-            'BitLocker' => $fp?->bitlocker_status,
-            'RDP' => $onOff($fp?->rdp_enabled),
-            'Pending reboot' => $yesNo($fp?->pending_reboot),
-            'Windows' => $fp?->windows_edition,
-            'Activation' => $fp?->activation_status,
-            'Licence' => $fp?->license_channel,
-            'OS build' => $fp?->os_build,
-            'Domain' => $fp?->domain,
-            'Disk type' => $fp?->disk_type,
-            'SMART' => $fp?->smart_health,
-            'CPU cores' => $fp?->cpu_cores,
-            'Monitor' => $fp?->monitor,
-            'Programs' => $fp?->software_count,
-            'Startup' => $fp?->startup_count,
-        ];
+    /**
+     * Free-space percentage, derived when the column is empty.
+     *
+     * The column itself is only filled by the heartbeat path, so a device whose
+     * last reading came from a full scan has both numbers and no ratio. Showing
+     * "—" there would suggest the sensor failed when the answer is arithmetic.
+     */
+    private function diskFreePercent(?AgentTelemetry $t): ?string
+    {
+        if ($t?->disk_free_percent !== null) {
+            return round((float) $t->disk_free_percent).'%';
+        }
 
-        return array_merge($telemetry, $security);
+        if ($t?->disk_free_gb === null || ! $t->disk_total_gb) {
+            return null;
+        }
+
+        return round((float) $t->disk_free_gb / (float) $t->disk_total_gb * 100).'%';
+    }
+
+    /**
+     * One readable network line: "<type> <adapter>", without repeating the type
+     * when the adapter description already contains it.
+     *
+     * The agent reports them separately (network_type = "ethernet", adapter =
+     * "Ethernet Realtek PCIe GbE Family Controller"), so a plain concatenation
+     * produced "Ethernet Ethernet Realtek..." on every wired machine.
+     */
+    private function networkLabel(?AgentTelemetry $t): ?string
+    {
+        if (! $t) {
+            return null;
+        }
+
+        $type = $t->network_type ? ucfirst($t->network_type) : null;
+        $adapter = $t->network_adapter;
+
+        if ($type && $adapter) {
+            return str_starts_with(strtolower($adapter), strtolower($type))
+                ? $adapter
+                : $type.' '.$adapter;
+        }
+
+        return $type ?? $adapter;
     }
 
     /**
