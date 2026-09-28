@@ -56,46 +56,60 @@
         <x-badge variant="success">all clear</x-badge>
     @endif
 </div>
-<x-card title="Active Devices" subtitle="Every reading the agent reports. Refreshes every 30 seconds.">
+<x-card title="Active Devices" subtitle="Click any device to see everything it reports.">
     @if($activeDevices->isEmpty())
         <p class="py-8 text-center text-theme-sm text-gray-400">
             No active devices. Open <a href="{{ route('agent.index') }}" class="font-medium text-brand-500 hover:text-brand-600">Tokens</a> and download the agent to enrol a laptop.
         </p>
     @else
 
-    {{-- Was a 1520px-wide table with nine columns, which meant horizontal
-         scrolling and cells too narrow to hold a hostname, an SSID or a GPU
-         string. Each device is now a block that wraps, so every value the
-         agent sends is actually readable. --}}
-    <div class="space-y-4">
-        @foreach($paginatedDevices as $device)
-            @php
-                $telemetry = $device->telemetry;
-                $fp = $device->fingerprint;
-                $audit = $telemetry?->asset_id ? ($latestAudits[$telemetry->asset_id] ?? null) : null;
-                // An agent older than the heartbeat never re-reports readings, but
-                // it still polls the inbox, so a recent last_used_at is proof of
-                // life. Without this every un-updated machine would show "stale"
-                // once the 2-minute telemetry window lapsed.
-                $polling = $device->last_used_at?->gt(now()->subSeconds(90)) ?? false;
-                $online = $telemetry?->isOnline() ?? false;
-                $deviceFindings = $findingsByToken[$device->id] ?? [];
-                $auditVariant = match ($audit?->result) {
-                    'MATCH' => 'success',
-                    'MISMATCH' => 'warning',
-                    'NEW DEVICE' => 'brand',
-                    default => 'gray',
-                };
-            @endphp
-
-            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-                {{-- Header: identity + status + actions. --}}
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <a href="{{ route('agent.fingerprint', $device) }}" class="break-all text-theme-sm font-semibold text-gray-800 hover:text-brand-600 dark:text-white">
-                                {{ $device->name }}
-                            </a>
+    {{-- A compact table, because 36 readings per device inline turned the page
+         into a wall of text. The row carries the three things an operator scans
+         a fleet for - is it up, is the battery dying, is the disk full - and
+         everything else waits one click away in the detail modal. --}}
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-100 dark:border-gray-800">
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Device</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Battery</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disk</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security</th>
+                    <th class="py-2.5 px-3 text-right text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($paginatedDevices as $device)
+                    @php
+                        $telemetry = $device->telemetry;
+                        $fp = $device->fingerprint;
+                        $audit = $telemetry?->asset_id ? ($latestAudits[$telemetry->asset_id] ?? null) : null;
+                        // An agent older than the heartbeat never re-reports readings, but
+                        // it still polls the inbox, so a recent last_used_at is proof of
+                        // life. Without this every un-updated machine would show "stale"
+                        // once the 2-minute telemetry window lapsed.
+                        $polling = $device->last_used_at?->gt(now()->subSeconds(90)) ?? false;
+                        $online = $telemetry?->isOnline() ?? false;
+                        $deviceFindings = $findingsByToken[$device->id] ?? [];
+                    @endphp
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
+                        <td class="py-3 px-3">
+                            <button type="button"
+                                    class="text-left"
+                                    @click="$dispatch('open-modal', 'device-{{ $device->id }}')">
+                                <span class="block break-words text-theme-sm font-medium text-gray-800 hover:text-brand-600 dark:text-white">
+                                    {{ $device->name }}
+                                </span>
+                                <span class="mt-0.5 block break-all text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ $telemetry?->hostname ?? $device->device_id ?? '—' }}
+                                    @if($telemetry?->logged_in_user)
+                                        · {{ $telemetry->logged_in_user }}
+                                    @endif
+                                </span>
+                            </button>
+                        </td>
+                        <td class="py-3 px-3">
                             @if(! $device->isUsable())
                                 <x-badge variant="error" :dot="true">revoked</x-badge>
                             @elseif($online || $polling)
@@ -105,82 +119,78 @@
                             @else
                                 <x-badge variant="warning" :dot="true">stale</x-badge>
                             @endif
-                        </div>
-                        <p class="mt-0.5 break-all text-theme-xs text-gray-500 dark:text-gray-400">
-                            {{ $telemetry?->hostname ?? '—' }}
-                            @if($telemetry?->asset)
-                                · <a href="{{ route('assets.show', $telemetry->asset) }}" class="font-medium text-brand-500 hover:text-brand-600">{{ $telemetry->asset->asset_id }}</a>
+                            <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400">
+                                {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans() : 'no report yet' }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300">
+                            @if($telemetry?->battery_percent !== null)
+                                <span @class([
+                                    'font-medium',
+                                    'text-error-500' => $telemetry->hasLowBattery() || $telemetry->hasWeakBattery(),
+                                    'text-gray-700 dark:text-gray-300' => ! $telemetry->hasLowBattery() && ! $telemetry->hasWeakBattery(),
+                                ])>{{ $telemetry->battery_percent }}%</span>
+                                <span class="block text-theme-xs text-gray-500 dark:text-gray-400">health {{ $telemetry->battery_health ?? '—' }}%</span>
+                            @else
+                                <span class="text-gray-400">—</span>
                             @endif
-                        </p>
-                    </div>
+                        </td>
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300">
+                            @if($telemetry?->disk_free_percent !== null)
+                                <span @class([
+                                    'font-medium',
+                                    'text-error-500' => $telemetry->hasLowDisk(),
+                                    'text-gray-700 dark:text-gray-300' => ! $telemetry->hasLowDisk(),
+                                ])>{{ round((float) $telemetry->disk_free_percent) }}%</span>
+                                <span class="block text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ number_format((float) $telemetry->disk_free_gb, 0) }} GB free
+                                </span>
+                            @else
+                                <span class="text-gray-400">—</span>
+                            @endif
+                        </td>
+                        <td class="py-3 px-3">
+                            @if($deviceFindings)
+                                <x-badge :variant="collect($deviceFindings)->contains('severity', 'danger') ? 'error' : 'warning'">
+                                    {{ count($deviceFindings) }} {{ count($deviceFindings) === 1 ? 'issue' : 'issues' }}
+                                </x-badge>
+                            @elseif($fp)
+                                <x-badge variant="success">clean</x-badge>
+                            @else
+                                <span class="text-theme-sm text-gray-400">—</span>
+                            @endif
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="flex items-center justify-end gap-x-3 gap-y-1">
+                                <button type="button"
+                                        class="whitespace-nowrap text-theme-sm font-medium text-brand-500 hover:text-brand-600"
+                                        @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>
 
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        @if($device->isUsable())
-                            <form method="POST" action="{{ route('agent.scan', $device) }}">
-                                @csrf
-                                <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-brand-500 hover:text-brand-600">Scan Now</button>
-                            </form>
-                        @endif
-                        <a href="{{ route('agent.download', $device) }}" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Reinstall</a>
+                                @if($device->isUsable())
+                                    <form method="POST" action="{{ route('agent.scan', $device) }}">
+                                        @csrf
+                                        <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Scan</button>
+                                    </form>
+                                @endif
 
-                        {{-- Removing an agent deletes files on someone else's
-                             machine, so it is the one action that asks twice:
-                             once in this modal, once more on the server side.
-                             Only reachable here: a revoked device lives in its own
-                             card, where nothing can be queued any more. --}}
-                        @if($pendingUninstalls->has($device->id))
-                            <x-badge variant="warning" :dot="true">Uninstall queued</x-badge>
-                        @else
-                            <button type="button"
-                                    class="whitespace-nowrap text-theme-sm font-medium text-error-500 hover:text-error-600"
-                                    @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</button>
-                        @endif
-                    </div>
-                </div>
-
-                {{-- Every telemetry and fingerprint reading the agent reports, in a
-                     wrapping label/value grid. `break-words` on the values is what
-                     keeps a long SSID or GPU string from stretching the column, and
-                     the list is built by the controller so the template only lays
-                     it out. --}}
-                <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-theme-xs sm:grid-cols-3 lg:grid-cols-4">
-                    @foreach($rowsByDevice[$device->id] ?? [] as $label => $value)
-                        <div class="min-w-0">
-                            <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                            <dd class="break-words text-gray-800 dark:text-gray-200">
-                                {{ $value !== null && $value !== '' ? $value : '—' }}
-                            </dd>
-                        </div>
-                    @endforeach
-                </dl>
-
-                <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-theme-xs dark:border-gray-800">
-                    @if($deviceFindings)
-                        @foreach($deviceFindings as $finding)
-                            <x-badge :variant="$finding['severity'] === 'danger' ? 'error' : 'warning'">{{ $finding['label'] }}</x-badge>
-                        @endforeach
-                    @elseif($fp)
-                        <x-badge variant="success">security clean</x-badge>
-                    @else
-                        {{-- "Not yet reported" rather than a grey dash: the agent
-                             sends its first report on the poll after install, so
-                             a blank here is usually just timing. --}}
-                        <span class="text-gray-400">security not yet reported</span>
-                    @endif
-
-                    @if($audit)
-                        <x-badge :variant="$auditVariant">audit {{ $audit->result }}</x-badge>
-                        <span class="text-gray-500 dark:text-gray-400">{{ $audit->audit_date?->diffForHumans() }}</span>
-                    @endif
-
-                    @if($fp?->collected_at)
-                        <span class="text-gray-500 dark:text-gray-400">inventory {{ $fp->collected_at->diffForHumans() }}</span>
-                    @endif
-
-                    <a href="{{ route('agent.fingerprint', $device) }}" class="ml-auto font-medium text-brand-500 hover:text-brand-600">Detail →</a>
-                </div>
-            </div>
-        @endforeach
+                                {{-- Removing an agent deletes files on someone else's
+                                     machine, so it is the one action that asks twice:
+                                     once in this modal, once more on the server side.
+                                     Only reachable here: a revoked device lives in its own
+                                     card, where nothing can be queued any more. --}}
+                                @if($pendingUninstalls->has($device->id))
+                                    <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
+                                @else
+                                    <button type="button"
+                                            class="whitespace-nowrap text-theme-sm font-medium text-error-500 hover:text-error-600"
+                                            @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</button>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
     </div>
 
     {{-- Page size is a dropdown rather than a bare number field: the useful
@@ -210,12 +220,78 @@
     <div class="mt-3">
         {{ $paginatedDevices->links() }}
     </div>
+
+    {{-- One detail modal per device on this page. Everything the agent reports
+         is here, in a wrapping grid, so the table above stays scannable without
+         hiding a single reading. Rendered only for the current page: looping the
+         whole collection would put every laptop's name in the HTML regardless of
+         pagination. --}}
+    @foreach($paginatedDevices as $device)
+        @php
+            $t = $device->telemetry;
+            $fp = $device->fingerprint;
+            $deviceFindings = $findingsByToken[$device->id] ?? [];
+            $audit = $t?->asset_id ? ($latestAudits[$t->asset_id] ?? null) : null;
+        @endphp
+        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="2xl">
+            <div class="max-h-[70vh] overflow-y-auto pr-1">
+                @if($t?->asset)
+                    <p class="mb-3 text-theme-sm">
+                        <a href="{{ route('assets.show', $t->asset) }}" class="font-medium text-brand-500 hover:text-brand-600">
+                            {{ $t->asset->asset_id }}
+                        </a>
+                    </p>
+                @endif
+
+                @if($deviceFindings)
+                    <div class="mb-4 flex flex-wrap gap-1">
+                        @foreach($deviceFindings as $finding)
+                            <x-badge :variant="$finding['severity'] === 'danger' ? 'error' : 'warning'">{{ $finding['label'] }}</x-badge>
+                        @endforeach
+                    </div>
+                @endif
+
+                <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-theme-xs sm:grid-cols-3">
+                    @foreach($rowsByDevice[$device->id] ?? [] as $label => $value)
+                        <div class="min-w-0">
+                            <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                            <dd class="break-words text-gray-800 dark:text-gray-200">
+                                {{ $value !== null && $value !== '' ? $value : '—' }}
+                            </dd>
+                        </div>
+                    @endforeach
+                </dl>
+
+                @if($audit)
+                    <p class="mt-4 border-t border-gray-100 pt-3 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                        Last audit {{ $audit->result }} · {{ $audit->audit_date?->diffForHumans() }}
+                        @if($fp?->collected_at)
+                            · inventory {{ $fp->collected_at->diffForHumans() }}
+                        @endif
+                    </p>
+                @elseif($fp?->collected_at)
+                    <p class="mt-4 border-t border-gray-100 pt-3 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                        Inventory {{ $fp->collected_at->diffForHumans() }}
+                    </p>
+                @endif
+            </div>
+
+            <x-slot:footer>
+                <a href="{{ route('agent.fingerprint', $device) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                    Full inventory & software
+                </a>
+                <a href="{{ route('agent.download', $device) }}" class="text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">
+                    Reinstall
+                </a>
+            </x-slot:footer>
+        </x-modal>
+    @endforeach
     @endif
-    {{-- One confirm dialog per device, rendered only for the devices on this
-         page. Iterating the full collection here (as the table version did)
-         would put every laptop's name in the HTML regardless of pagination,
-         which both bloats the response and makes the page say a machine is
-         present when it is not. --}}
+
+    {{-- Uninstall stays a separate dialog rather than living inside the detail
+         modal: it deletes files on someone else's machine, and a confirmation
+         that shares a surface with 36 read-only fields makes the one dangerous
+         action easy to hit by accident. --}}
     @foreach($paginatedDevices as $device)
         @continue($pendingUninstalls->has($device->id))
 
