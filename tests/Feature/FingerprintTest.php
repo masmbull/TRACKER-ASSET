@@ -425,6 +425,100 @@ class FingerprintTest extends TestCase
      * The fleet page shows them as "2 of 4" rather than two separate numbers:
      * the reader wants occupancy, not a pair they have to subtract.
      */
+    /**
+     * The software list is paged and filtered on the server, not shipped whole
+     * and hidden with client-side JS.
+     *
+     * These use explicit query strings on purpose: route()'s third argument is
+     * extra route parameters, not a query string, so route('...', $token, ['q' =>
+     * 'x']) silently drops the filter. That mistake is easy to make and looks
+     * like a broken filter rather than a wrong call.
+     */
+    public function test_the_software_list_is_paginated_and_filtered_on_the_server(): void
+    {
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'software' => collect(range(1, 30))->map(fn ($i) => [
+                'name' => sprintf('Program %02d', $i),
+                'version' => '1.0',
+                'publisher' => $i % 3 === 0 ? 'Microsoft' : 'Other',
+            ])->all(),
+        ]), $this->headers())->assertOk();
+
+        $url = route('agent.fingerprint', $this->agentToken);
+
+        // 10 of every 30 are Microsoft.
+        $filtered = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get($url.'?q=Microsoft&per_page=25')->getContent();
+
+        $this->assertStringContainsString('10 of 30', $filtered);
+        $this->assertStringContainsString('Program 03', $filtered);
+        $this->assertStringNotContainsString('Program 01', $filtered);
+
+        // A smaller page size truncates the list. Program 30 is the 30th row, so
+        // at 25 per page it belongs on page two - asserting it were visible here
+        // would be asserting the pagination does not work.
+        $firstPage = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get($url.'?per_page=25')->getContent();
+
+        $this->assertStringContainsString('1–25', $firstPage);
+        $this->assertStringContainsString('of 30', $firstPage);
+        $this->assertStringNotContainsString('Program 30', $firstPage);
+
+        $secondPage = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get($url.'?per_page=25&page=2')->getContent();
+
+        $this->assertStringContainsString('Program 30', $secondPage);
+    }
+
+    /**
+     * A % or _ typed into the filter box must search for that character, not
+     * turn into a wildcard that silently returns every program.
+     */
+    public function test_the_software_filter_does_not_treat_wildcards_as_wildcards(): void
+    {
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'software' => [
+                ['name' => 'Program One'],
+                ['name' => 'Program Two'],
+            ],
+        ]), $this->headers())->assertOk();
+
+        $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('agent.fingerprint', $this->agentToken).'?q=%')
+            ->getContent();
+
+        $this->assertStringNotContainsString('Program One', $html);
+    }
+
+    /**
+     * Fields the agent reports but the page used to drop: the ones an audit
+     * asks for and never saw.
+     */
+    public function test_the_page_shows_every_reported_security_and_system_field(): void
+    {
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'firewall_profiles_off' => 'Domain,Public',
+            'bitlocker_method' => 'TPM',
+            'secure_boot_enabled' => 'true',
+            'ram_modules' => 1,
+            'ram_slots' => 2,
+            'timezone' => 'SE Asia Standard Time',
+        ]), $this->headers())->assertOk();
+
+        $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('agent.fingerprint', $this->agentToken))
+            ->getContent();
+
+        $this->assertStringContainsString('Firewall profiles off', $html);
+        $this->assertStringContainsString('Domain,Public', $html);
+        $this->assertStringContainsString('BitLocker method', $html);
+        $this->assertStringContainsString('TPM', $html);
+        $this->assertStringContainsString('Secure boot', $html);
+        $this->assertStringContainsString('RAM slots', $html);
+        $this->assertStringContainsString('1 of 2', $html);
+        $this->assertStringContainsString('Time zone', $html);
+    }
+
     public function test_the_fleet_detail_shows_ram_slot_occupancy(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
