@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\ScheduleHeartbeat;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -288,34 +290,49 @@ class ServiceHealthChecker
     private function probeScheduler(): array
     {
         return $this->probe(function () {
-            $events = collect(Artisan::all())->keys();
+            $registered = collect(Artisan::all())->keys();
 
             $commands = [
-                'audit:sweep' => 'weekly re-verification of the register',
-                'agent:resolve-stale-commands' => 'closes undeliverable agent commands',
+                'agent:resolve-stale-commands' => 'every 5 min',
+                'audit:sweep' => 'weekly',
             ];
 
-            $missing = [];
-
-            foreach (array_keys($commands) as $command) {
-                if (! $events->contains($command)) {
-                    $missing[] = $command;
-                }
-            }
+            $missing = array_keys(array_filter($commands, fn ($c, $name) => ! $registered->contains($name), ARRAY_FILTER_USE_BOTH));
 
             if ($missing !== []) {
                 throw new ProbeFailure('not registered: '.implode(', ', $missing));
             }
 
-            $due = [];
+            // Registration is not execution. Without this the page says the
+            // scheduler is fine while nothing has fired it since the deploy -
+            // the single most likely way this whole system quietly stops.
+            $stale = array_values(array_filter(
+                array_keys($commands),
+                fn (string $command) => ScheduleHeartbeat::isStale($command)
+            ));
 
-            foreach ($commands as $command => $purpose) {
-                $event = collect(Artisan::all())->get($command);
-                $due[] = $command.': '.$purpose;
+            if ($stale !== []) {
+                $never = array_values(array_filter(
+                    $stale,
+                    fn (string $command) => ScheduleHeartbeat::lastRun($command) === null
+                ));
+
+                $reason = $never !== []
+                    ? 'never run: '.implode(', ', $never).' - is the scheduler started? (schedule:work or cron)'
+                    : 'missed runs: '.implode(', ', $stale).' - is the scheduler stopped?';
+
+                throw new ProbeFailure($reason);
             }
 
-            return sprintf('%d registered · %s', count($events), implode('; ', $due));
-        }, 'Scheduler', 'Recurring jobs; the stale-command sweep runs every 5 minutes');
+            $last = [];
+
+            foreach (array_keys($commands) as $command) {
+                $at = ScheduleHeartbeat::lastRun($command);
+                $last[] = $command.' '.$commands[$command].' · last run '.Carbon::createFromTimestamp($at)->diffForHumans();
+            }
+
+            return sprintf('%d commands · %s', count($registered), implode(' · ', $last));
+        }, 'Scheduler', 'Recurring jobs; a stale-command sweep that stops is invisible elsewhere');
     }
 
     private function probeHealthEndpoint(): array
