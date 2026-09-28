@@ -39,4 +39,12 @@ class AgentApiToken extends Model
     {
         return $this->hasOne(AgentTelemetry::class, 'agent_token_id')->latestOfMany('reported_at');
     }
+
+    /**
+     * Latest deep-inventory snapshot (software, security posture, licensing).
+     */
+    public function fingerprint(): HasOne
+    {
+        return $this->hasOne(AgentFingerprint::class, 'agent_token_id')->latestOfMany('collected_at');
+    }
 }

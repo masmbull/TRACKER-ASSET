@@ -732,10 +732,12 @@ public partial class InstallerWindow : Window
     private const string GlyphOk = "\uE73E";   // Accept (check)
     private const string GlyphError = "\uE783"; // Error (cross in circle)
 
-    private static readonly System.Windows.Media.Brush SuccessBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80));
+    // Chosen to stay legible on the brand-red window: the previous light greens and
+// pinks disappeared into #EB1C24.
+private static readonly System.Windows.Media.Brush SuccessBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x04, 0x7A, 0x3D));
     private static readonly System.Windows.Media.Brush ErrorBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71));
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB3, 0x0F, 0x16));
 
     /// <summary>
     /// Fills the result card in one place. The badge is filled with a
@@ -752,21 +754,24 @@ public partial class InstallerWindow : Window
     }
 
     /// <summary>
-    /// Tints the badge from the accent colour: a low-alpha fill behind the glyph
-    /// and a brighter ring around it. Built as brushes rather than by setting
-    /// <c>Opacity</c> on the badge - opacity on a parent also fades its children,
-    /// which would wash the glyph out almost completely.
+    /// Paints the result badge. The window is now the brand red, so the badge is
+    /// solid white and the accent colour is used for the glyph and the ring.
     /// </summary>
+    /// <remarks>
+    /// The old version tinted the badge with a low-alpha wash of the accent,
+    /// which was correct on the dark navy surface. On #EB1C24 a translucent red
+    /// error badge disappeared into the background, so the fill is now opaque
+    /// white and the accent only tints the ring.
+    /// </remarks>
     private void SetBadgeTint(System.Windows.Media.Brush accent)
     {
         var rgb = accent is SolidColorBrush solid
             ? solid.Color
             : System.Windows.Media.Colors.White;
 
-        ResultIconBadge.Background = new SolidColorBrush(
-            System.Windows.Media.Color.FromArgb((byte)0x26, rgb.R, rgb.G, rgb.B));
+        ResultIconBadge.Background = new SolidColorBrush(System.Windows.Media.Colors.White);
         ResultIconBadge.BorderBrush = new SolidColorBrush(
-            System.Windows.Media.Color.FromArgb((byte)0x66, rgb.R, rgb.G, rgb.B));
+            System.Windows.Media.Color.FromArgb((byte)0xCC, rgb.R, rgb.G, rgb.B));
     }
 
     private async void RetryButton_Click(object sender, RoutedEventArgs e)

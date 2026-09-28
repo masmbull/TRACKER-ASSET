@@ -39,6 +39,121 @@ class AuditApiController extends Controller
         'disk_free_gb', 'disk_total_gb', 'wifi_signal', 'uptime_hours',
     ];
 
+    /**
+     * Telemetry heartbeat (PRD §11). Deliberately narrow: the daemon sends this
+     * every minute whether or not anyone clicks "Scan Now", so it must not
+     * create an asset_audits row. At one row a minute a single laptop would
+     * bury months of real audit history.
+     */
+    public function heartbeat(Request $request)
+    {
+        $this->normaliseTelemetryInput($request);
+
+        $payload = $request->validate($this->telemetryValidationRules());
+
+        $telemetry = AgentTelemetry::where('agent_token_id', $request->attributes->get('agent_token_id'))->first();
+
+        if (! $telemetry) {
+            // The device has never completed a scan, so there is no asset to
+            // attach readings to yet. Tell the agent to run a full scan instead
+            // of silently inventing a fleet row.
+            return response()->json([
+                'ok' => false,
+                'message' => 'No telemetry snapshot yet. Run a full scan to register this device.',
+            ], 202);
+        }
+
+        $telemetry->fill($this->telemetryDelta($request, $payload, $telemetry));
+        $telemetry->save();
+
+        return response()->json([
+            'ok' => true,
+            'reported_at' => $telemetry->reported_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Build the partial update for a heartbeat. Only fields the agent actually
+     * sent are touched, so a reader that fails to report one value (a laptop
+     * with no battery, a flaky Wi-Fi probe) keeps its last known good reading
+     * instead of having it blanked out every minute.
+     */
+    private function telemetryDelta(Request $request, array $payload, AgentTelemetry $current): array
+    {
+        $columns = [
+            'hostname', 'logged_in_user', 'os', 'ip_address', 'gpu', 'ram_config',
+            'wifi_ssid', 'battery_percent', 'battery_health', 'battery_cycle_count',
+            'wifi_signal', 'network_type', 'network_adapter', 'network_speed',
+            'uptime_hours',
+        ];
+
+        $updates = [];
+
+        foreach ($columns as $column) {
+            // Both checks, deliberately. `$request->has()` alone was the trap:
+            // a key can be present in the request and still be missing from the
+            // validated payload, because Laravel drops every field that has no
+            // validation rule. Reading it anyway threw a 500 on every real
+            // heartbeat. `array_key_exists` makes the builder depend only on
+            // what actually survived validation.
+            if ($request->has($column) && array_key_exists($column, $payload)) {
+                $updates[$column] = $payload[$column];
+            }
+        }
+
+        // Disk free is a percentage derived from both halves, so a heartbeat
+        // that only sends one of them would otherwise recompute a wrong ratio.
+        if ($request->has('disk_free_gb') || $request->has('disk_total_gb')) {
+            $free = $request->has('disk_free_gb')
+                ? $this->numericOrNull($payload['disk_free_gb'])
+                : $current->disk_free_gb;
+            $total = $request->has('disk_total_gb')
+                ? $this->numericOrNull($payload['disk_total_gb'])
+                : $current->disk_total_gb;
+
+            $updates['disk_free_gb'] = $free;
+            $updates['disk_total_gb'] = $total;
+            $updates['disk_free_percent'] = ($free !== null && $total)
+                ? round($free / $total * 100, 2)
+                : null;
+        }
+
+        return [...$updates, 'reported_at' => now()];
+    }
+
+    /**
+     * The subset of readings the heartbeat endpoint accepts. Kept separate from
+     * the audit's identity fields so a ping can never create or resolve an asset.
+     */
+    private function telemetryValidationRules(): array
+    {
+        return [
+            'hostname' => 'nullable|string|max:255',
+            // `os` must be listed here as well as in telemetryDelta(): the
+            // collector always sends it, and a validated payload only carries
+            // keys that have a rule. Without this the delta builder read
+            // $payload['os'] on a key Laravel had already discarded, which made
+            // every real heartbeat die with a 500 while the unit tests — which
+            // only ever sent rule-listed fields — stayed green.
+            'os' => 'nullable|string|max:255',
+            'ip_address' => 'nullable|string|max:255',
+            'logged_in_user' => 'nullable|string|max:255',
+            'gpu' => 'nullable|string|max:255',
+            'ram_config' => 'nullable|string|max:255',
+            'wifi_ssid' => 'nullable|string|max:255',
+            'battery_percent' => 'nullable|numeric|between:0,100',
+            'battery_health' => 'nullable|numeric|between:0,100',
+            'battery_cycle_count' => 'nullable|numeric|min:0',
+            'disk_free_gb' => 'nullable|numeric|min:0',
+            'disk_total_gb' => 'nullable|numeric|min:0',
+            'wifi_signal' => 'nullable|numeric|between:0,100',
+            'network_type' => 'nullable|string|max:32',
+            'network_adapter' => 'nullable|string|max:255',
+            'network_speed' => 'nullable|string|max:64',
+            'uptime_hours' => 'nullable|numeric|min:0',
+        ];
+    }
+
     public function submit(Request $request, AuditComparisonService $comparison)
     {
         $this->normaliseTelemetryInput($request);
@@ -66,6 +181,9 @@ class AuditApiController extends Controller
             'disk_free_gb' => 'nullable|numeric|min:0',
             'disk_total_gb' => 'nullable|numeric|min:0',
             'wifi_signal' => 'nullable|numeric|between:0,100',
+            'network_type' => 'nullable|string|max:32',
+            'network_adapter' => 'nullable|string|max:255',
+            'network_speed' => 'nullable|string|max:64',
             'uptime_hours' => 'nullable|numeric|min:0',
         ]);
 
@@ -266,6 +384,9 @@ class AuditApiController extends Controller
             'gpu' => $payload['gpu'] ?? null,
             'wifi_ssid' => $payload['wifi_ssid'] ?? null,
             'wifi_signal' => $this->intOrNull($payload['wifi_signal'] ?? null),
+            'network_type' => $payload['network_type'] ?? null,
+            'network_adapter' => $payload['network_adapter'] ?? null,
+            'network_speed' => $payload['network_speed'] ?? null,
             'uptime_hours' => $this->numericOrNull($payload['uptime_hours'] ?? null),
             'payload' => $payload,
             'reported_at' => now(),

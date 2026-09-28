@@ -90,6 +90,7 @@ public static class HardwareCollector
         CollectMemoryLayout(data);
         CollectGraphics(data);
         CollectWifi(data);
+        CollectNetwork(data);
         CollectUptime(data);
 
         return data.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
@@ -350,6 +351,101 @@ public static class HardwareCollector
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Which link is actually carrying traffic, and how fast.
+    /// </summary>
+    /// <remarks>
+    /// `netsh wlan show interfaces` only ever describes wireless, so a machine on
+    /// a cable reported nothing at all and the fleet page fell through to
+    /// "no adapter data" — indistinguishable from being offline. This reads the
+    /// physical adapters instead, so an Ethernet laptop reports its NIC.
+    ///
+    /// Only physical adapters count. Virtual ones (VPN, Hyper-V, WSL, Tailscale)
+    /// are skipped: they would otherwise win the "up and enabled" filter and
+    /// report a 100 Gbps tunnel instead of the real 1 Gbps cable.
+    /// </remarks>
+    static void CollectNetwork(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Name, NetEnabled, Speed, AdapterType, PhysicalAdapter " +
+                "FROM Win32_NetworkAdapter WHERE NetEnabled = TRUE");
+
+            foreach (var obj in searcher.Get())
+            {
+                var enabled = obj["NetEnabled"];
+                if (enabled is not bool isEnabled || !isEnabled)
+                {
+                    continue;
+                }
+
+                // 0 / null is what a disconnected or virtual interface reports.
+                if (obj["PhysicalAdapter"] is not bool physical || !physical)
+                {
+                    continue;
+                }
+
+                var speed = Convert.ToUInt64(obj["Speed"] ?? 0UL);
+                if (speed == 0)
+                {
+                    continue;
+                }
+
+                var name = obj["Name"]?.ToString()?.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                data["network_adapter"] = name;
+                data["network_speed"] = FormatLinkSpeed(speed);
+                data["network_type"] = ClassifyAdapter(name);
+                return;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>"ethernet", "wifi" or "unknown", from the adapter description.</summary>
+    static string ClassifyAdapter(string name)
+    {
+        var lowered = name.ToLowerInvariant();
+
+        if (lowered.Contains("wi-fi") || lowered.Contains("wifi")
+            || lowered.Contains("wireless") || lowered.Contains("wlan"))
+        {
+            return "wifi";
+        }
+
+        if (lowered.Contains("ethernet") || lowered.Contains("gbe")
+            || lowered.Contains("gbic") || lowered.Contains("lan")
+            || lowered.Contains("realtek") || lowered.Contains("intel"))
+        {
+            return "ethernet";
+        }
+
+        return "unknown";
+    }
+
+    /// <summary>Adapter speed in the largest unit that keeps a useful number.</summary>
+    static string FormatLinkSpeed(ulong bitsPerSecond)
+    {
+        if (bitsPerSecond >= 1_000_000_000)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture, $"{bitsPerSecond / 1_000_000_000.0:0.#} Gbps");
+        }
+
+        if (bitsPerSecond >= 1_000_000)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture, $"{bitsPerSecond / 1_000_000.0:0.#} Mbps");
+        }
+
+        return $"{bitsPerSecond} bps";
     }
 
     /// <summary>Hours since the last boot (Live Fleet freshness check).</summary>

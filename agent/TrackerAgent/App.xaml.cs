@@ -113,15 +113,18 @@ public partial class App : System.Windows.Application
     private static bool IsCliFlag(string arg) => arg.ToLowerInvariant() switch
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
-        "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update" => true,
+        "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
+            or "--self-test-icon" => true,
         _ => false,
     };
 
     private void StartTray(AgentConfig config)
     {
+        // The MITO mark, not SystemIcons.Information: a deployed agent should be
+        // recognisable in the notification area at a glance.
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Information,
+            Icon = MitoIcon.Create() ?? SystemIcons.Information,
             Text = "Mito Audit Tracker",
             Visible = true,
             ContextMenuStrip = new ContextMenuStrip()
@@ -161,6 +164,34 @@ public partial class App : System.Windows.Application
                             {
                                 Environment.Exit(0);
                             }
+                        }
+                        else if (command == "uninstall")
+                        {
+                            // This branch used to be missing entirely, so an
+                            // uninstall landed in the generic `else` below and was
+                            // merely acked "done": the server showed the device as
+                            // removed while every file stayed on the machine.
+                            //
+                            // Ack FIRST (the token is burned server-side by this
+                            // marker, and the loop cannot poll again afterwards),
+                            // then hand the actual teardown to AgentRunner, which
+                            // owns the delete-self-and-exit sequence.
+                            Api.Ack(config.ServerUrl, config.Token, id, "done",
+                                new Dictionary<string, string>
+                                {
+                                    ["message"] = "Agent removed itself after receiving the uninstall command.",
+                                });
+
+                            _trayIcon.Visible = false;
+                            _trayIcon.Dispose();
+
+                            // The tray loop runs on a background task with no
+                            // console, so give the operator a moment to see the
+                            // notice before this process disappears for good.
+                            await Task.Delay(1500);
+
+                            AgentRunner.SelfRemove();
+                            return;
                         }
                         else
                         {

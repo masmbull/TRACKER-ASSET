@@ -23,8 +23,6 @@ Windows hardware collector that runs on each laptop/workstation and reports back
 |---|---|
 | `TrackerAgent/` | C# .NET 8 source code |
 | `TrackerAgent.exe` | Pre-built single-file executable (after build) |
-| `tracker-audit-agent.ps1` | PowerShell one-shot collector |
-| `tracker-agent-daemon.ps1` | PowerShell daemon (supports auto-update) |
 
 ## Prerequisites
 
@@ -104,16 +102,6 @@ Push **Update All Agents** from the web UI (`/agent` page). The command lands in
 the agent's inbox; on the next poll the daemon acks it, downloads the current
 exe from `/agent/download`, swaps it via a detached helper script, and restarts
 itself with the exact same flags.
-
-## PowerShell Alternative
-
-```powershell
-# One-shot
-.\tracker-audit-agent.ps1 -ApiUrl http://127.0.0.1:8000 -Token tat_xxx
-
-# Daemon
-.\tracker-agent-daemon.ps1 -ApiUrl http://127.0.0.1:8000 -Token tat_xxx
-```
 
 ## Fleet Deployment
 

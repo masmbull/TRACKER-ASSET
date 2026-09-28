@@ -1,6 +1,6 @@
-@props(['headers' => [], 'emptyText' => 'No data found.', 'striped' => false])
-<div class="w-full overflow-x-auto">
-    <table class="w-full">
+@props(['headers' => [], 'emptyText' => 'No data found.', 'striped' => false, 'minWidth' => null])
+<div {{ $attributes->class(['w-full overflow-x-auto']) }}>
+    <table class="w-full" @if($minWidth) style="min-width: {{ $minWidth }}" @endif>
         <thead>
             <tr class="border-b border-gray-100 dark:border-gray-800">
                 @foreach($headers as $header)

@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         FontFamily="Segoe UI"
-        Background="#1e293b"
+        Background="#EB1C24"
         AllowsTransparency="False">
 
     <Window.Resources>
@@ -69,16 +69,18 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
+            <!-- Header: icon badge + wordmark. The badge is white because the MITO
+                 mark is itself a red square: red-on-red would be invisible. -->
             <Border Grid.Column="0" Width="46" Height="46" CornerRadius="11"
-                    Background="#0f172a" BorderBrush="#3b82f6" BorderThickness="1">
+                    Background="#FFFFFF" BorderBrush="#FFFFFF" BorderThickness="1">
                 <Image Source="mito-icon.png" Width="34" Height="34" Stretch="Uniform"/>
             </Border>
 
             <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="TRACKER-ASSET" FontSize="23" FontWeight="Bold"
-                           Foreground="#60a5fa"/>
+                           Foreground="#FFFFFF"/>
                 <TextBlock Text="Zero-configuration agent install"
-                           FontSize="12.5" Foreground="#94a3b8" Margin="0,3,0,0"/>
+                           FontSize="12.5" Foreground="#FFD6D9" Margin="0,3,0,0"/>
             </StackPanel>
         </Grid>
 
@@ -86,16 +88,16 @@
             <!-- Progress: the only UI while installing (no URL / token input) -->
             <StackPanel x:Name="StatusPanel" VerticalAlignment="Center">
                 <TextBlock x:Name="StatusText" Text="Starting installation..."
-                           Foreground="#e2e8f0" FontSize="15" Margin="0,0,0,16"
+                           Foreground="#FFFFFF" FontSize="15" Margin="0,0,0,16"
                            TextWrapping="Wrap" MaxWidth="430"
                            HorizontalAlignment="Center" TextAlignment="Center"/>
 
-                <Border Background="#0f172a" BorderBrush="#334155" BorderThickness="1"
+                <Border Background="#33FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1"
                         CornerRadius="14" ClipToBounds="True" Height="28"
                         Width="440" HorizontalAlignment="Center">
                     <Grid>
                         <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0"
-                                     Background="Transparent" BorderThickness="0" Foreground="#3b82f6"/>
+                                     Background="Transparent" BorderThickness="0" Foreground="#FFFFFF"/>
                         <Rectangle Width="160" Opacity="0.30" IsHitTestVisible="False">
                             <Rectangle.Fill>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -111,7 +113,7 @@
                     </Grid>
                 </Border>
 
-                <TextBlock x:Name="PercentText" Text="0%" Foreground="#94a3b8"
+                <TextBlock x:Name="PercentText" Text="0%" Foreground="#FFD6D9"
                            FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"
                            FontWeight="Medium"/>
             </StackPanel>
@@ -119,7 +121,7 @@
             <!-- Result (hidden until finished). -->
             <StackPanel x:Name="ResultPanel" Visibility="Collapsed" VerticalAlignment="Center">
                 <Border x:Name="ResultIconBadge" Width="64" Height="64" CornerRadius="32"
-                        Background="#0f172a" BorderThickness="1"
+                        Background="#FFFFFF" BorderThickness="1"
                         HorizontalAlignment="Center">
                     <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets"
                                FontSize="29" HorizontalAlignment="Center"
@@ -127,19 +129,19 @@
                 </Border>
 
                 <TextBlock x:Name="ResultText" FontSize="19" FontWeight="SemiBold"
-                           Foreground="#f1f5f9" HorizontalAlignment="Center"
+                           Foreground="#FFFFFF" HorizontalAlignment="Center"
                            TextAlignment="Center" TextWrapping="Wrap"
                            MaxWidth="440" Margin="0,16,0,0"/>
 
                 <!-- The message card scrolls internally (MaxHeight) instead of
                      letting the whole card scroll: a long failure message
                      then never pushes the icon/title out of the window. -->
-                <Border Background="#0f172a" BorderBrush="#283548" BorderThickness="1"
+                <Border Background="#33FFFFFF" BorderBrush="#59FFFFFF" BorderThickness="1"
                         CornerRadius="10" Padding="16,12" MaxWidth="440" MaxHeight="152"
                         HorizontalAlignment="Center" Margin="0,12,0,0">
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
-                        <TextBlock x:Name="ResultDetail" FontSize="12.5" Foreground="#94a3b8"
+                        <TextBlock x:Name="ResultDetail" FontSize="12.5" Foreground="#FFE9EA"
                                    HorizontalAlignment="Center" TextAlignment="Center"
                                    TextWrapping="Wrap" LineHeight="19"/>
                     </ScrollViewer>
@@ -157,11 +159,13 @@
 
             <Button x:Name="RetryButton" Grid.Column="1" Content="Retry"
                     Height="40" MinWidth="112" Visibility="Collapsed"
-                    Style="{StaticResource FlatButton}" Background="#3b82f6"
+                    Style="{StaticResource FlatButton}" Background="#FFFFFF"
+                    Foreground="#EB1C24"
                     Click="RetryButton_Click"/>
             <Button x:Name="CloseButton" Grid.Column="2" Content="Close"
                     Height="40" MinWidth="104" Margin="10,0,0,0" Visibility="Collapsed"
-                    Style="{StaticResource FlatButton}" Background="#475569"
+                    Style="{StaticResource FlatButton}" Background="#33FFFFFF"
+                    Foreground="#FFFFFF"
                     Click="CloseButton_Click"/>
         </Grid>
     </Grid>

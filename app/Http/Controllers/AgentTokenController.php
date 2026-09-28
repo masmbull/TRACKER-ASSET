@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use Illuminate\Http\Request;
 
 class AgentTokenController extends Controller
@@ -95,6 +96,22 @@ class AgentTokenController extends Controller
     {
         $token->update(['is_active' => false]);
 
-        return back()->with('success', "Device '{$token->name}' revoked.");
+        // Close out the commands that can no longer be delivered. Leaving them
+        // pending would pin the fleet page to an endless "Uninstall queued" for
+        // a machine the server cannot even authenticate any more.
+        $orphaned = AgentCommand::query()
+            ->where('agent_token_id', $token->id)
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'failed',
+                'executed_at' => now(),
+                'result' => ['message' => 'Not delivered: the agent token was revoked.'],
+            ]);
+
+        return back()->with('success', sprintf(
+            "Device '%s' revoked.%s",
+            $token->name,
+            $orphaned > 0 ? sprintf(' %d queued command(s) closed as undeliverable.', $orphaned) : ''
+        ));
     }
 }

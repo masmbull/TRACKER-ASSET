@@ -22,9 +22,41 @@ class AgentRegistrationController extends Controller
         // Check if device already registered
         $existing = AgentApiToken::where('device_id', $deviceId)->first();
         if ($existing) {
+            // A revoked/expired device stays revoked. Re-registering must not be
+            // a way around the Revoke button on the Tokens page, otherwise
+            // "revoke" is meaningless: the machine would mint itself a new
+            // active token on its very next poll.
+            if (! $existing->isUsable()) {
+                return response()->json([
+                    'message' => 'This device was revoked. Re-enable it on the Tokens page first.',
+                ], 403);
+            }
+
+            // token_plain is an encrypted cast, so a populated column can be
+            // handed back as-is.
+            if (filled($existing->token_plain)) {
+                return response()->json([
+                    'token' => $existing->token_plain,
+                    'message' => 'Device already registered',
+                ]);
+            }
+
+            // Active, but the plaintext is gone: the row was created by
+            // `audit:token`, which deliberately never stores it. The SHA-256
+            // hash is one-way, so the old token cannot be recovered - but the
+            // device needs *a* token to keep reporting. Rotate instead of
+            // returning '', which used to leave the agent polling with an empty
+            // bearer and silently never reaching the server again.
+            $rotated = bin2hex(random_bytes(32));
+            $existing->update([
+                'token_hash' => hash('sha256', $rotated),
+                'token_plain' => $rotated,
+            ]);
+
             return response()->json([
-                'token' => $existing->token_plain ?? '',
-                'message' => 'Device already registered',
+                'token' => $rotated,
+                'rotated' => true,
+                'message' => 'Device re-registered (previous token could not be recovered)',
             ]);
         }
 

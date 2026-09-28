@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Serve the lightweight audit agent (`tracker-audit-agent`, PRD §11 — preferred
-audit architecture). The client only collects hardware data and posts JSON;
+Serve the audit agent (`TrackerAgent.exe`, PRD §11 — preferred audit
+architecture). The client only collects hardware data and posts JSON;
 **all business logic stays in Laravel**, so agent results are identical to the
 browser audit flow.
 
@@ -61,60 +61,111 @@ and revocation (`is_active = false`).
 See `tests/Feature/AuditApiTest.php` — auth rejection, MATCH, MISMATCH with
 field detail, UNKNOWN DEVICE immutability, inactive/expired tokens.
 
-## Fleet rollout (web, no .exe) — `/agent`
+## Fleet rollout — `/agent`
 
 Admin-only page (`/agent`, nav → Master Data → Audit Agents):
 
-1. Create a token (name + expiry) → copy the **one-line install command**. It
-   downloads `/agent/daemon.ps1` (with site URL + token already baked in),
-   saves it to `%LOCALAPPDATA%\TRACKER\`, registers autostart and starts it
-   **hidden** — no window, no tray, no popup.
-2. The script endpoint validates the token on every download: unknown or
-   revoked tokens get `404`, so a leaked/removed token cannot pull the script.
+1. Create a token (name + expiry) → download **TrackerAgent.exe** for that
+   token. The zero-config installer double-clicked on the target laptop asks
+   for nothing: the server URL and token travel in a config trailer appended to
+   the binary itself.
+2. The download route validates the token on every request: unknown or revoked
+   tokens get `404`, so a leaked/removed token cannot pull the binary.
 3. **Revoke** any token on the spot: affected laptops get `401` on their next poll.
-4. `last_used_at` refreshes on every inbox poll and powers the online indicator
-   on `/agent/commands`.
+4. `last_used_at` refreshes on every authenticated request and powers the
+   online indicator on `/agent/commands`.
 
 Only the SHA-256 hash is stored; plaintext appears once at creation.
 
+## Agent Client (PRD §11) — resident daemon
 
-
-## Agent Client (PRD §11 — resident daemon, no .exe)
-
-`agent/tracker-agent-daemon.ps1` is a **resident** background collector:
+`agent/TrackerAgent.exe` is a **resident** background collector:
 
 - Runs **hidden** — no console window, no tray icon, no popup
 - Polls the command inbox every 10 seconds
+- Pushes a **telemetry heartbeat** every 60 seconds to `POST /api/agent/heartbeat`
 - Executes `scan` (collect hardware via WMI/CIM → `POST /api/audits`) and
   `update` (re-pull itself from the server, replace, restart) commands
 - Autostarts via the `HKCU\...\Run` key — **no admin rights, no installer**
-- Idle footprint ≈ 55–70 MB RAM (script runs in a hosted PowerShell process)
 
-### Install (one line, generated on `/agent`)
+### Telemetry heartbeat
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "iwr '<site>/agent/daemon.ps1?token=TAT' -OutFile '%LOCALAPPDATA%\TRACKER\daemon.ps1'; powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '%LOCALAPPDATA%\TRACKER\daemon.ps1'"
-```
+The inbox poll only carries commands, so on its own a laptop nobody ever
+clicks "Scan Now" on would keep the same snapshot forever and Live Fleet would
+drift out of date. The daemon therefore pushes its own reading every 60 seconds.
 
-The daemon saves itself to `%LOCALAPPDATA%\TRACKER\`, registers autostart and
-keeps polling. Token + server URL are already baked into the served script.
+`POST /api/agent/heartbeat` accepts the same readings as `/api/audits` but:
 
-### Remove
+- **never writes an `asset_audits` row** — a minute of history per laptop would
+  bury real audits. Only the `agent_telemetries` snapshot is refreshed.
+- applies a **partial update**: a reading the agent did not send keeps its last
+  known value, so a laptop with no battery (which reports `""` every minute)
+  does not lose its other data.
+- returns `202` when the device has never completed a scan — there is no fleet
+  row to update yet, and the response asks the agent to run a full scan rather
+  than inventing a half-populated row.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\TRACKER\daemon.ps1" -Uninstall
-```
+`AgentTelemetry::isOnline()` uses a **2-minute** window: twice the heartbeat
+interval, so exactly one dropped ping is tolerated before a machine flips to
+offline. The fleet page also treats a recent inbox poll (90 s) as proof of life,
+so an agent predating the heartbeat is not reported offline mid-rollout.
 
-Or revoke the token on `/agent` — the daemon then gets `401` on every poll.
+See `tests/Feature/LiveFleetTest.php` for the heartbeat contract.
 
-### One-shot collector (no daemon)
+### Deep inventory — `POST /api/agent/fingerprint`
 
-`agent/tracker-audit-agent.ps1` collects and posts once, then exits — useful for
-spot checks or packaging to `.exe` with ps2exe:
+The heartbeat is deliberately cheap. The installed-software list alone is several
+hundred rows and costs a registry walk, so putting it on a 60-second timer would
+slow the poll loop across the whole fleet and bloat the database. Deep inventory
+is therefore a **separate endpoint**, posted on the first poll after install and
+then **once every 24 hours**.
 
-```powershell
-.\agent\tracker-audit-agent.ps1 -ApiUrl https://your-domain -Token tat_xxx
-```
+| Field group | Examples |
+|---|---|
+| Security | `antivirus_product`, `antivirus_enabled`, `antivirus_signature_age_days`, `firewall_enabled`, `firewall_profiles_off`, `uac_enabled`, `tpm_present`, `bitlocker_status`, `rdp_enabled`, `local_admin_count` |
+| Licensing | `windows_edition`, `license_channel`, `activation_status` |
+| OS state | `os_build`, `os_installed_at`, `last_boot_at`, `pending_reboot`, `domain`, `timezone` |
+| Storage / capacity | `disk_type`, `smart_health`, `smart_predicted_failure`, `cpu_cores`, `cpu_physical_cores`, `monitor` |
+| Inventory | `software[]` (`name`, `version`, `publisher`, `installed_at`), `software_count`, `startup_count` |
+
+`software[]` is replaced wholesale on every report. A diff would be cheaper but
+the registry gives no stable per-entry key, and a stale row is worse than a
+re-scan: keeping an entry for an uninstalled program would make the fleet report
+software that is no longer on the machine.
+
+Two behaviours worth knowing:
+
+- **Unparsable booleans become `null`, not `false`.** The agent sends strings, so
+  values are normalised before validation (Laravel's `boolean` rule only accepts
+  real booleans and `0`/`1`, which would 422 the entire report). An unreadable
+  sensor must not destroy several hundred valid software rows, and `null` stays
+  distinguishable from a genuine "off".
+- **The asset link is inherited from telemetry.** Nothing in the app writes
+  `device_serial` / `device_hostname` back onto an asset — the audit only reads
+  them to compare — so identity-column matching finds nothing. The fingerprint
+  takes the asset from the device's own `agent_telemetries` row instead.
+
+`AgentFingerprint::findings()` turns the readings into operator-facing badges
+(antivirus off, firewall off, BitLocker off, disk predicted failure, unlicensed
+Windows, stale signatures, pending reboot, RDP enabled). A device that has simply
+not reported is **not** a finding — that is a liveness question answered by
+`AgentTelemetry::isOnline()`.
+
+> Collector sources are Windows-version-sensitive and were chosen after the
+> obvious ones produced wrong answers. Defender state and signature age come from
+> `MSFT_MpComputerStatus`; the SecurityCenter2 `productState` bitfield reads a
+> fully enabled Defender as "off" at mask `0x10` (the real flag is `0x1000`).
+> Firewall state comes from `MSFT_NetFirewallProfile` because `FirewallProduct`
+> is empty and the `EnableFirewall` registry values are gone on Windows 11.
+> TPM presence falls back to the `TPM\WMI` service key because `Win32_Tpm` is an
+> "Invalid class" on most consumer machines. Software is read from the registry
+> Uninstall keys and never from `Win32_Product`, which triggers an unsolicited MSI
+> repair across the machine.
+
+Browse it at `/agent/{token}/fingerprint`; the fleet page shows a per-device
+finding summary and a `Security Findings` KPI.
+
+See `tests/Feature/FingerprintTest.php` for the endpoint contract.
 
 ## Fleet Command Center — `/agent/commands`
 
@@ -125,14 +176,15 @@ and provides 1-click fleet actions:
 |---|---|
 | **Scan Now** (per laptop) | queues a `scan` command for that token only |
 | **Scan All Laptops** | broadcast `scan` (`agent_token_id = null` → every daemon) |
-| **Update All Agents** | broadcast `update`; each daemon re-pulls `/agent/daemon.ps1`, swaps the file and restarts hidden |
+| **Update All Agents** | broadcast `update`; each daemon re-pulls `/agent/download`, swaps the exe and restarts |
 
-### Command API (Bearer token)
+### Agent API (Bearer token)
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/agent/inbox` | returns up to 10 pending commands for this token (plus broadcasts) |
 | `POST /api/agent/commands/{id}/ack` | body `{"status":"done"\|"failed","result":{...}}` |
+| `POST /api/agent/heartbeat` | refreshes the Live Fleet snapshot; no audit row written |
 
 Each daemon poll also refreshes `last_used_at`, which powers the online/offline
 indicator. Commands are never delivered twice: the daemon acks each one.

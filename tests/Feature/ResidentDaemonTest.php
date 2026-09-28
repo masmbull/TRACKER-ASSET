@@ -51,6 +51,45 @@ class ResidentDaemonTest extends TestCase
         $this->assertCount(2, $response->json('commands'));
     }
 
+    /**
+     * `agent_token_id` is nullOnDelete, so deleting a token row rewrites its
+     * pending uninstall into a fleet-wide broadcast. A live agent then picks it
+     * up and removes itself — verified in production, where a single deleted
+     * token took out every machine that polled in the next 10 seconds.
+     *
+     * Uninstall is only ever created per device, so a null target is always
+     * corruption rather than an intent, and the inbox must refuse it.
+     */
+    public function test_uninstall_is_never_delivered_as_a_broadcast(): void
+    {
+        $orphan = AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $this->getJson('/api/agent/inbox', $this->bearer())
+            ->assertOk()
+            ->assertJsonPath('commands', [])
+            ->assertJsonMissing(['id' => $orphan->id]);
+
+        $this->assertSame('pending', $orphan->fresh()->status, 'The command must be left alone, not silently taken.');
+    }
+
+    /** A broadcast scan is legitimate and must keep working. */
+    public function test_broadcast_commands_are_still_delivered(): void
+    {
+        AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $this->getJson('/api/agent/inbox', $this->bearer())
+            ->assertOk()
+            ->assertJsonCount(1, 'commands');
+    }
+
     public function test_ack_marks_command_done()
     {
         $command = AgentCommand::create(['agent_token_id' => $this->apiToken->id, 'command' => 'scan']);
@@ -125,6 +164,29 @@ class ResidentDaemonTest extends TestCase
         ]);
     }
 
+    /**
+     * The update command must advertise the binary download, not the retired
+     * PowerShell script endpoint. A deployed agent only ever fetches an exe, so
+     * pointing the payload at a .ps1 meant the fleet page promised a file that
+     * no installed agent would ever look for.
+     */
+    public function test_update_all_points_agents_at_the_binary_download()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('agent.updateAll'))->assertRedirect();
+
+        $command = AgentCommand::firstOrFail();
+
+        $this->assertSame('update', $command->command);
+        $this->assertSame(
+            route('agent.download.latest'),
+            $command->payload['url'] ?? null,
+            'The update payload must carry the exe download route.'
+        );
+        $this->assertStringNotContainsString('.ps1', $command->payload['url'] ?? '');
+    }
+
     public function test_viewer_cannot_enqueue()
     {
         $viewer = User::factory()->create(['role' => 'viewer']);
@@ -133,47 +195,16 @@ class ResidentDaemonTest extends TestCase
         $this->actingAs($viewer)->post(route('agent.scanAll'))->assertForbidden();
     }
 
-    // --- Daemon script endpoint ---------------------------------------------
-
-    public function test_daemon_script_injects_token_and_url()
+    // --- Retired PowerShell agent -------------------------------------------
+    //
+    // The .ps1 collector and daemon were replaced by TrackerAgent.exe. The
+    // serving endpoints (/agent/run.ps1, /agent/daemon.ps1) are gone; this test
+    // exists to prove it, so a stale install command fails loudly instead of
+    // silently downloading nothing.
+    public function test_retired_powershell_agent_endpoints_are_gone(): void
     {
-        $url = config('app.url');
-
-        $this->get(route('agent.daemon', ['token' => $this->token]))
-            ->assertOk()
-            ->assertSee($url, false)
-            ->assertSee($this->token, false)
-            ->assertDontSee('$env:TRACKER_API_URL')
-            ->assertDontSee('$env:TRACKER_AUDIT_TOKEN')
-            ->assertSee('Invoke-Scan')
-            ->assertSee('Update-Self');
-    }
-
-    public function test_daemon_script_rejects_invalid_token()
-    {
-        $this->get(route('agent.daemon', ['token' => 'tat_bogus']))
-            ->assertNotFound();
-    }
-
-    public function test_daemon_script_registers_hidden_autostart()
-    {
-        $body = $this->get(route('agent.daemon', ['token' => $this->token]))->getContent();
-
-        // Starts hidden, registers HKCU Run autostart, polls the inbox, self-updates.
-        $this->assertStringContainsString('-WindowStyle Hidden', $body);
-        $this->assertStringContainsString('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', $body);
-        $this->assertStringContainsString('/api/agent/inbox', $body);
-        $this->assertStringContainsString('Update-Self', $body);
-        $this->assertStringContainsString('LOCALAPPDATA', $body);
-    }
-
-    public function test_daemon_script_is_ascii_only()
-    {
-        // PowerShell 5.1 parses BOM-less files as ANSI: a stray multi-byte
-        // character (e.g. an em dash) breaks the script on older clients.
-        $body = $this->get(route('agent.daemon', ['token' => $this->token]))->getContent();
-
-        $this->assertSame(0, preg_match('/[^\x00-\x7F]/', $body));
+        $this->get('/agent/run.ps1?token='.$this->token)->assertNotFound();
+        $this->get('/agent/daemon.ps1?token='.$this->token)->assertNotFound();
     }
 
     public function test_commands_page_renders_with_sweep_button()
@@ -205,6 +236,74 @@ class ResidentDaemonTest extends TestCase
             ->assertOk()
             ->assertSee('Agent Fleet')
             ->assertViewHas('fleet', fn (array $fleet) => $fleet['online'] === 1 && $fleet['pending_commands'] === 1);
+    }
+
+    /**
+     * A pending command aimed at a revoked token is undeliverable by
+     * construction: the agent middleware answers 401 before the inbox is read.
+     * Without a sweep it stayed `pending` forever, which is what pinned the
+     * fleet page to a permanent "Uninstall queued" badge.
+     */
+    public function test_stale_resolver_fails_commands_whose_token_is_revoked(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['created_at' => now()->subHour()])->save();
+        $this->apiToken->update(['is_active' => false]);
+
+        $this->artisan('agent:resolve-stale-commands')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('Resolved 1');
+
+        $command->refresh();
+
+        $this->assertSame('failed', $command->status);
+        $this->assertNotNull($command->executed_at);
+        $this->assertStringContainsString('revoked', $command->result['message']);
+    }
+
+    /**
+     * An offline laptop is a normal state: its queued uninstall must survive so
+     * it still runs when the machine comes back.
+     */
+    public function test_stale_resolver_leaves_deliverable_commands_alone(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['created_at' => now()->subDays(3)])->save();
+
+        $this->artisan('agent:resolve-stale-commands')->assertExitCode(0);
+
+        $this->assertSame('pending', $command->fresh()->status);
+    }
+
+    /**
+     * A broadcast is claimed by any live agent, so revoking one token must not
+     * fail the broadcast for everyone else.
+     */
+    public function test_stale_resolver_leaves_broadcasts_alone(): void
+    {
+        $this->apiToken->update(['is_active' => false]);
+
+        $command = AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['created_at' => now()->subDays(3)])->save();
+
+        $this->artisan('agent:resolve-stale-commands')->assertExitCode(0);
+
+        $this->assertSame('pending', $command->fresh()->status);
     }
 
     public function test_audit_sweep_queues_scan_per_active_token()

@@ -499,7 +499,7 @@ If browser APIs can reliably collect the required information, an agent may not 
 If not, create:
 
 ```text
-tracker-audit-agent.exe
+TrackerAgent.exe
 ```
 
 The agent should only:
@@ -531,7 +531,29 @@ agent/TrackerAgent/
 2. Binary is downloaded via `GET /agent/download/{token}` into a staging file (`TrackerAgent.exe.pending`).
 3. SHA256 checksum is validated if provided by the server.
 4. Auto-update helper launches a detached process that replaces `TrackerAgent.exe` once the running instance exits, then restarts the agent.
-5. In addition to the C# agent, a lightweight PowerShell resident daemon (`agent/tracker-agent-daemon.ps1`) is supported for headless environments.
+5. The C# agent (`agent/TrackerAgent/TrackerAgent.exe`) is the only supported collector. The earlier PowerShell daemon has been retired; its serving endpoints were removed.
+
+**Telemetry Heartbeat**:
+
+Polling the command inbox is not enough to keep the fleet view current: the inbox
+only carries commands, so a laptop nobody ever clicks "Scan Now" on would keep
+the same reading forever. The daemon therefore pushes its own hardware reading
+on a timer.
+
+1. Every **60 seconds** the agent collects hardware data and calls
+   `POST /api/agent/heartbeat` with the same reading set as a full audit.
+2. The endpoint refreshes the `agent_telemetries` snapshot only — it must **never**
+   write an `asset_audits` row, or a minute of history per laptop would bury the
+   real audit trail.
+3. Readings the agent did not send keep their previous value (a desktop with no
+   battery reports an empty battery reading on every ping), so a partial update
+   never erases good data.
+4. A device that has never completed a scan receives `202` and is asked to run a
+   full scan, rather than having a half-populated fleet row created for it.
+5. A device is **online** when it reported within **2 minutes** — twice the
+   heartbeat interval, so exactly one dropped ping is tolerated. A recent inbox
+   poll also counts as proof of life, so an agent predating the heartbeat is not
+   reported offline during a rollout.
 
 ### Fleet Deployment Constraints (standard users, no UAC)
 

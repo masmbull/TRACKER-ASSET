@@ -16,6 +16,23 @@ public static class AgentRunner
 
     private const int AttachParentProcess = -1;
 
+    /// <summary>
+    /// How often the daemon pushes a telemetry ping while idle (PRD §11).
+    /// </summary>
+    /// <remarks>
+    /// 60 seconds against a 2-minute online window on the server gives exactly
+    /// one missed ping of slack before a machine flips to offline. The inbox poll
+    /// (default 10s) is much faster but only proves the agent can reach the
+    /// server; the heartbeat is what refreshes the fleet readings themselves.
+    /// </remarks>
+    // Deep inventory cadence. 24h is the trade-off between an inventory that
+    // reflects reality and a registry + WMI walk per device every hour: the
+    // software list changes on a scale of weeks, and the security posture only
+    // matters when it changes.
+    private const int FingerprintSeconds = 24 * 60 * 60;
+
+    private const int HeartbeatSeconds = 60;
+
     [DllImport("kernel32.dll")]
     static extern bool AttachConsole(int pid);
 
@@ -68,6 +85,26 @@ public static class AgentRunner
         if (uninstall)
         {
             Uninstall();
+            return 0;
+        }
+
+        // Branding self-test: proves the tray icon really resolves to the embedded
+        // MITO mark instead of silently falling back to SystemIcons.Information.
+        // A wrong pack URI fails quietly at runtime and the only symptom is a
+        // generic blue "i" in the notification area - which this rules out.
+        if (args.Any(a => a.Equals("--self-test-icon", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var icon = MitoIcon.Create();
+
+            if (icon is null)
+            {
+                Console.Error.WriteLine("[X] MITO icon could not be loaded (embedded resource missing).");
+
+                return 1;
+            }
+
+            Console.WriteLine($"OK: tray icon {icon.Width}x{icon.Height} loaded from the embedded mark.");
+
             return 0;
         }
 
@@ -198,12 +235,123 @@ public static class AgentRunner
             }
 
             PrintResult(result.Value);
+
+            // The audit and the deep inventory are complementary halves of the
+            // same report: the audit identifies and compares the hardware, the
+            // fingerprint answers "what is installed and how safe is it". A
+            // full scan is the natural moment to refresh the second one, since
+            // the user is already waiting and the registry walk costs seconds.
+            //
+            // Failure is non-fatal on purpose — a laptop with a locked-down
+            // registry should still register and audit successfully.
+            SendFingerprint(url, token);
+
             return 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[X] {ex.Message}");
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Credential self-heal: the server answered 401, so the token we are
+    /// holding is dead (it was rotated, revoked-then-restored, or issued by a
+    /// server whose database was reset). Re-register the device, then persist
+    /// the new token everywhere the daemon reads it from on the next start.
+    /// </summary>
+    /// <remarks>
+    /// Persisting is the part that matters. Without it the agent would heal in
+    /// memory and then silently go stale again on the next reboot, which looked
+    /// exactly like "the tray is running but the web page never updates".
+    /// </remarks>
+    /// <returns>
+    /// True when a fresh token was obtained and written; <paramref name="healed"/>
+    /// tells the caller whether anything actually changed.
+    /// </returns>
+    static bool TryHealToken(string url, ref string token, out bool healed)
+    {
+        healed = false;
+
+        var deviceId = TryReadDeviceId();
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            Console.Error.WriteLine("[!] No device id on this machine; cannot re-register.");
+            return false;
+        }
+
+        var issued = Api.Register(url, deviceId, Environment.MachineName);
+        if (string.IsNullOrWhiteSpace(issued))
+        {
+            return false;
+        }
+
+        Console.WriteLine("[OK] Token was rejected - re-registered and obtained a new one.");
+
+        token = issued;
+        PersistToken(issued);
+        healed = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Mirror a freshly issued token into config.json and the HKCU registry so
+    /// the next launch (autostart, manual run, or the installer) starts with the
+    /// same working credential. Best-effort: a failure here only costs us the
+    /// heal, never the running daemon.
+    /// </summary>
+    static void PersistToken(string token)
+    {
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker"))
+            {
+                key?.SetValue("Token", token);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Could not update registry token: {ex.Message}");
+        }
+
+        try
+        {
+            var configPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER",
+                "config.json");
+
+            if (!File.Exists(configPath))
+            {
+                return;
+            }
+
+            // Read-modify-write as plain text: the config is a small flat object
+            // whose key order is not meaningful, and this keeps the file
+            // human-readable the way the installer writes it.
+            //
+            // A MatchEvaluator is used deliberately instead of a replacement
+            // string: Regex treats "$1" in a replacement as a group reference,
+            // and a token that starts with a digit turns "$1" + token into a
+            // reference to a group that does not exist ("$156..."), which
+            // silently deleted the "token": " prefix and left the file corrupt.
+            var json = File.ReadAllText(configPath);
+            var updated = System.Text.RegularExpressions.Regex.Replace(
+                json,
+                "(\"token\"\\s*:\\s*\")[^\"]*(\")",
+                match => match.Groups[1].Value + token + match.Groups[2].Value,
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(2));
+
+            if (updated != json)
+            {
+                File.WriteAllText(configPath, updated);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Could not update config.json: {ex.Message}");
         }
     }
 
@@ -216,11 +364,47 @@ public static class AgentRunner
         RegisterAutostart(url, token, assetId, pollSeconds);
         Console.WriteLine($"[OK] Daemon started - polling {url} every {pollSeconds}s.");
 
+        // Telemetry heartbeat. The inbox only carries commands, so a device that
+        // nobody ever clicks "Scan Now" on would keep the same snapshot forever
+        // and Live Fleet would show it as stale. Push a fresh reading on this
+        // interval so the page reflects reality without operator action.
+        // MinValue means the first ping fires on the very first loop pass, not
+        // 60 seconds after start: a freshly installed agent should show up on
+        // the fleet page immediately rather than looking dead for a minute.
+        var nextHeartbeat = DateTimeOffset.MinValue;
+
+        // Same reasoning for the deep inventory: MinValue so a freshly installed
+        // agent reports its software and security posture immediately instead of
+        // the fleet page showing "never fingerprinted" for a day.
+        var nextFingerprint = DateTimeOffset.MinValue;
+
         while (true)
         {
             try
             {
-                var commands = Api.GetInbox(url, token);
+                // `token` is a local copy so a healed credential replaces it for
+                // every later poll in this process.
+                var commands = Api.GetInbox(url, token, out var unauthorized);
+                var healed = false;
+
+                if (unauthorized && !TryHealToken(url, ref token, out healed))
+                {
+                    // The server rejected us and re-registration did not work
+                    // either. Back off a little so we do not hammer it while it
+                    // is down, but keep trying: this loop is the only thing that
+                    // brings the machine back on the fleet page.
+                    Console.Error.WriteLine("[!] Token rejected and re-registration failed; retrying.");
+                    Thread.Sleep(TimeSpan.FromSeconds(Math.Max(pollSeconds, 30)));
+                    continue;
+                }
+
+                if (healed)
+                {
+                    // The Run key still carries the dead token, so a reboot
+                    // would resurrect the broken credential.
+                    RegisterAutostart(url, token, assetId, pollSeconds);
+                }
+
                 if (commands is not null)
                 {
                     foreach (var cmd in commands)
@@ -233,6 +417,11 @@ public static class AgentRunner
                             int rc = RunOnce(url, token, assetId);
                             Api.Ack(url, token, id, rc == 0 ? "done" : "failed");
                             Console.WriteLine($"[OK] Command #{id} scan -> {(rc == 0 ? "done" : "failed")}");
+
+                            // A scan just wrote a fresh full snapshot, so postpone
+                            // the heartbeat rather than collecting the same
+                            // hardware twice within seconds.
+                            nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
                         }
                         else if (command == "update")
                         {
@@ -275,6 +464,100 @@ public static class AgentRunner
             }
 
             Thread.Sleep(TimeSpan.FromSeconds(pollSeconds));
+
+            if (DateTimeOffset.UtcNow >= nextHeartbeat)
+            {
+                SendHeartbeat(url, token, assetId);
+
+                // Advance regardless of success. On failure the retry waits a
+                // full interval rather than hammering an unreachable server from
+                // inside the poll loop.
+                nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+            }
+
+        if (DateTimeOffset.UtcNow >= nextFingerprint)
+        {
+            SendFingerprint(url, token);
+
+            nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+        }
+
+        }
+    }
+
+    /// <summary>
+    /// Collects the deep inventory and pushes it to /api/agent/fingerprint.
+    /// </summary>
+    /// <remarks>
+    /// Runs off the poll loop's own thread but never throws: a machine with a
+    /// locked-down registry, a missing WMI class or a half-dead Office install
+    /// must still keep reporting telemetry. The collector itself swallows
+    /// per-reader failures for the same reason.
+    /// </remarks>
+    static void SendFingerprint(string url, string token)
+    {
+        try
+        {
+            var payload = FingerprintCollector.Collect();
+
+            // Reuse the same device id the daemon registers with. The collector
+            // deliberately does not derive one itself: reading a different
+            // source (the ComputerSystemProduct GUID) produced an id that
+            // matched no registered device, so the report never linked to an
+            // asset.
+            var deviceId = TryReadDeviceId();
+
+            if (!string.IsNullOrWhiteSpace(deviceId))
+            {
+                payload["device_id"] = deviceId;
+            }
+
+            if (Api.Fingerprint(url, token, payload))
+            {
+                Console.WriteLine(
+                    $"[OK] Deep inventory sent ({payload.GetValueOrDefault("software_count", "0")} programs).");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Fingerprint error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Collects a fresh hardware reading and pushes it to /api/agent/heartbeat.
+    /// </summary>
+    /// <remarks>
+    /// Reuses the same collector as a full audit, because the readings are the
+    /// same ones; what differs is the destination endpoint, which updates the
+    /// Live Fleet snapshot without writing an asset_audits row. A failure here
+    /// is only logged: liveness reporting must never take down the daemon or
+    /// block command handling.
+    /// </remarks>
+    static void SendHeartbeat(string url, string token, string? assetId)
+    {
+        try
+        {
+            var payload = HardwareCollector.Collect();
+
+            var deviceId = TryReadDeviceId();
+            if (!string.IsNullOrWhiteSpace(deviceId))
+            {
+                payload["device_id"] = deviceId;
+            }
+
+            if (Api.Heartbeat(url, token, payload))
+            {
+                Console.WriteLine("[OK] Telemetry heartbeat sent.");
+            }
+            else
+            {
+                Console.Error.WriteLine("[!] Telemetry heartbeat rejected or unreachable.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Heartbeat error: {ex.Message}");
         }
     }
 
@@ -377,6 +660,15 @@ public static class AgentRunner
     /// therefore delete everything we can, then hand our own file to a detached
     /// cmd that removes it (and the folder) once we have exited.
     /// </summary>
+    /// <remarks>
+    /// Reached from two places, which is why <see cref="SelfRemove"/> exists:
+    /// the CLI daemon calls it after the poll loop returns, and the tray
+    /// <c>CommandLoop</c> calls it when the server sends an uninstall command.
+    /// One implementation, because the tray path had no teardown at all and
+    /// simply acked the command as done while every file stayed put.
+    /// </remarks>
+    public static void SelfRemove() => Uninstall();
+
     static void Uninstall()
     {
         try
