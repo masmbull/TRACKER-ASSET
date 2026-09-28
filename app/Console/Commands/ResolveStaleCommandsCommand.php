@@ -36,11 +36,21 @@ class ResolveStaleCommandsCommand extends Command
     {
         // Broadcasts (agent_token_id = null) are claimed by any live agent, so
         // they stay deliverable no matter how many tokens are revoked.
+        //
+        // "Not usable" has to be spelled out in SQL rather than delegated to
+        // AgentApiToken::isUsable(), because that is the single definition the
+        // middleware enforces: revoked *or* expired. Matching only `is_active`
+        // left every command aimed at an expired token stuck pending forever —
+        // the middleware rejects it 401 and the sweep kept re-creating scans for
+        // it, so the row never drained and the badge never cleared.
         $stale = AgentCommand::query()
             ->where('status', 'pending')
             ->whereNotNull('agent_token_id')
             ->where('created_at', '<=', now()->subMinutes(self::GRACE_MINUTES))
-            ->whereHas('token', fn ($q) => $q->where('is_active', false))
+            ->whereHas('token', fn ($q) => $q->where(function ($q) {
+                $q->where('is_active', false)
+                    ->orWhere(fn ($q) => $q->whereNotNull('expires_at')->where('expires_at', '<=', now()));
+            }))
             ->orderBy('id')
             ->get();
 
@@ -49,8 +59,8 @@ class ResolveStaleCommandsCommand extends Command
                 'status' => 'failed',
                 'executed_at' => now(),
                 'result' => [
-                    'message' => 'Not delivered: the agent token was revoked before it could poll this command. '.
-                        'Remove the program from that machine manually.',
+                    'message' => 'Not delivered: the agent token was revoked or had expired before it could poll '.
+                        'this command. Remove the program from that machine manually.',
                 ],
             ]);
         }

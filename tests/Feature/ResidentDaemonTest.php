@@ -306,6 +306,66 @@ class ResidentDaemonTest extends TestCase
         $this->assertSame('pending', $command->fresh()->status);
     }
 
+    /**
+     * Expired is the same dead end as revoked: `isUsable()` refuses it, so the
+     * middleware answers 401 before the inbox is read. Matching only
+     * `is_active` here left these rows pending forever.
+     */
+    public function test_stale_resolver_fails_commands_whose_token_has_expired(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['created_at' => now()->subHour()])->save();
+        $this->apiToken->update(['expires_at' => now()->subDay()]);
+
+        $this->artisan('agent:resolve-stale-commands')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('Resolved 1');
+
+        $this->assertSame('failed', $command->fresh()->status);
+        $this->assertStringContainsString('expired', $command->fresh()->result['message']);
+    }
+
+    /**
+     * A token that is still valid but expires tomorrow is offline, not dead.
+     * Failing its queued command would uninstall the agent from a laptop that
+     * is simply switched off.
+     */
+    public function test_stale_resolver_leaves_commands_for_a_token_that_has_not_expired_yet(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->apiToken->id,
+            'command' => 'uninstall',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['created_at' => now()->subDays(3)])->save();
+        $this->apiToken->update(['expires_at' => now()->addDay()]);
+
+        $this->artisan('agent:resolve-stale-commands')->assertExitCode(0);
+
+        $this->assertSame('pending', $command->fresh()->status);
+    }
+
+    /**
+     * Queuing a scan for an expired token creates a command that can never be
+     * delivered, and the weekly sweep would re-create one every run.
+     */
+    public function test_audit_sweep_does_not_queue_scans_for_expired_tokens(): void
+    {
+        $this->apiToken->update(['expires_at' => now()->subDay()]);
+
+        $this->artisan('audit:sweep')
+            ->assertExitCode(0)
+            ->expectsOutputToContain('No active agent tokens found.');
+
+        $this->assertDatabaseCount('agent_commands', 0);
+    }
+
     public function test_audit_sweep_queues_scan_per_active_token()
     {
         $second = AgentApiToken::create(['name' => 'other', 'token_hash' => hash('sha256', 'bogus')]);

@@ -29,6 +29,11 @@ class AuditSweepCommand extends Command
     {
         $tokens = AgentApiToken::query()
             ->where('is_active', true)
+            // An expired token answers 401 just like a revoked one, so queuing a
+            // scan for it produces a command that can never be delivered. Filter
+            // on the same usability rule the middleware enforces rather than
+            // trusting `is_active` alone.
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->when($this->option('token'), fn ($q, $name) => $q->where('name', $name))
             ->get();
 
