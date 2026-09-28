@@ -287,6 +287,19 @@ class AgentFleetController extends Controller
                 'Pending reboot' => $yesNo($fp?->pending_reboot),
                 'Last hotfix' => $fp?->last_hotfix_installed_at?->format('Y-m-d'),
                 'Hotfixes' => $fp?->hotfix_count,
+                // CVE tracking. The pending counts are null whenever the search
+                // timed out, and that is rendered as "not checked" rather than as
+                // 0 - "0 pending" is a claim the fleet is fully patched, and it
+                // must never be inferred from a search we gave up on.
+                'Updates waiting' => $this->pendingUpdatesLabel($fp),
+                'Security waiting' => $fp?->security_updates_pending === null ? null : (string) $fp->security_updates_pending,
+                // A failed update is not protection. It is invisible to the
+                // hotfix count, which lists it as though it applied, so it is
+                // surfaced on its own.
+                'Updates failed' => $fp?->updates_failed === null ? null : ((int) $fp->updates_failed > 0 ? (string) $fp->updates_failed : 'none'),
+                'Updates applied' => $fp?->updates_succeeded,
+                'Last security update' => $fp?->last_security_update_at?->format('Y-m-d'),
+                'Security updates' => $fp?->security_updates_installed,
                 'Local admins' => $fp?->local_admin_count,
                 'Domain' => $fp?->domain,
             ],
@@ -295,6 +308,26 @@ class AgentFleetController extends Controller
                 'Startup items' => $fp?->startup_count,
             ],
         ];
+    }
+
+    /**
+     * Updates waiting, or an explicit statement that nobody looked.
+     *
+     * The search behind this number takes about half a minute and the agent
+     * gives it 25 seconds, so on a laptop behind a slow or captive network the
+     * field is simply absent. Rendering that as "0" would assert the fleet is
+     * fully patched on the exact machines least likely to be - the single most
+     * damaging thing this page could do with a null.
+     */
+    private function pendingUpdatesLabel(?AgentFingerprint $fp): ?string
+    {
+        $pending = $fp?->windows_updates_pending;
+
+        if ($pending === null) {
+            return $fp === null ? null : 'not checked (search timed out)';
+        }
+
+        return $pending === 0 ? 'up to date' : (string) $pending;
     }
 
     /**

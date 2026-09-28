@@ -220,6 +220,17 @@ class AgentFingerprintController extends Controller
             'defender_last_scan_days' => $this->boundedIntOrNull($payload['defender_last_scan_days'] ?? null, 3650),
             'hotfix_count' => $this->boundedIntOrNull($payload['hotfix_count'] ?? null, 10000),
             'last_hotfix_installed_at' => $this->dateOrNull($payload['last_hotfix_installed_at'] ?? null),
+
+            // Windows Update. A pending count of 0 is meaningful and kept; a
+            // count above a few hundred is a machine that has been offline for
+            // months, and storing it as-is would produce a number no operator
+            // can act on. The ceiling is only there to keep the column honest.
+            'windows_updates_pending' => $this->boundedIntOrNull($payload['windows_updates_pending'] ?? null, 500),
+            'security_updates_pending' => $this->boundedIntOrNull($payload['security_updates_pending'] ?? null, 500),
+            'updates_succeeded' => $this->boundedIntOrNull($payload['updates_succeeded'] ?? null, 10000),
+            'updates_failed' => $this->boundedIntOrNull($payload['updates_failed'] ?? null, 10000),
+            'security_updates_installed' => $this->boundedIntOrNull($payload['security_updates_installed'] ?? null, 10000),
+            'last_security_update_at' => $this->dateOrNull($payload['last_security_update_at'] ?? null),
             'software_count' => $this->intOrNull($payload['software_count'] ?? null),
             'startup_count' => $this->intOrNull($payload['startup_count'] ?? null),
         ];
@@ -331,7 +342,18 @@ class AgentFingerprintController extends Controller
             'pending_reboot' => $bool,
             'domain' => $text,
             'timezone' => $text,
+
+            // Windows Update state. The pending counts come from a search the
+            // agent gives a hard 25-second budget, so they are null on any
+            // machine that could not answer in time - a different fact from zero,
+            // and the distinction the UI depends on.
+            'windows_updates_pending' => $int,
+            'security_updates_pending' => $int,
+            'updates_succeeded' => $int,
+            'updates_failed' => $int,
+            'security_updates_installed' => $int,
             'last_hotfix_installed_at' => 'nullable|date',
+            'last_security_update_at' => 'nullable|date',
 
             'disk_type' => $text,
             'smart_health' => $text,
