@@ -9,7 +9,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-    <Version>1.1.0</Version>
+    <!-- Bumped for the extended inventory release: 15 new readings (Secure Boot,
+         BitLocker strength, autologon, screen lock, Guest account, Defender
+         detail, patch/CVE state, BIOS, chassis, architecture) plus the six
+         hardware fields the probes were silently dropping.
+
+         The bump is not cosmetic. The install check compares the clicked build
+         against the installed one and refuses to run when they match, so a fix
+         shipped under an unchanged version number can never be installed - the
+         machine answers "Aplikasi Sudah Pernah Diinstall" and the new binary
+         simply never lands. That is exactly what happened here. -->
+    <Version>1.2.0</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
