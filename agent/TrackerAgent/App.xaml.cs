@@ -57,18 +57,24 @@ public partial class App : System.Windows.Application
             //   • same version      → notice "Aplikasi Sudah Pernah Diinstall"
             //   • different version → in-place update (swap exe, keep config)
             // Clicking the installed executable itself still opens the tray.
-            var clickedVersion = InstallCheck.ReadVersion(Environment.ProcessPath);
-            var installedVersion = InstallCheck.ReadVersion(InstallCheck.InstalledExe);
+            var clickedIdentity = InstallCheck.ReadBuildIdentity(Environment.ProcessPath);
+            var installedIdentity = InstallCheck.ReadBuildIdentity(InstallCheck.InstalledExe);
 
             if (!InstallCheck.IsSameFile(Environment.ProcessPath, InstallCheck.InstalledExe) &&
-                clickedVersion != null && installedVersion != null)
+                clickedIdentity != null && installedIdentity != null)
             {
+                // Compared on the full build identity, not the version number. Two
+                // binaries that both say 1.2.0 but were built from different
+                // commits are different builds, and treating them as the same
+                // silently blocked every bug fix published under an unchanged
+                // version - the machine reported the agent was already installed
+                // and the new binary never landed.
                 MainWindow = new InstallerWindow(
-                    clickedVersion == installedVersion
+                    InstallCheck.IsSameBuild(clickedIdentity, installedIdentity)
                         ? InstallerMode.AlreadyInstalled
                         : InstallerMode.Update,
-                    installedVersion,
-                    clickedVersion);
+                    InstallCheck.ReadVersion(InstallCheck.InstalledExe),
+                    InstallCheck.ReadVersion(Environment.ProcessPath));
                 MainWindow.Show();
                 return;
             }
