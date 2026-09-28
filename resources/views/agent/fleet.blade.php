@@ -233,12 +233,11 @@
             $deviceFindings = $findingsByToken[$device->id] ?? [];
             $audit = $t?->asset_id ? ($latestAudits[$t->asset_id] ?? null) : null;
         @endphp
-        {{-- xl rather than 2xl: two section columns need width to stay readable,
-             and the extra 128px of a 2xl modal was empty gutter on a 1440 screen.
-             The scroll container stays - an agent reporting every field can still
-             outrun the viewport on a short display. --}}
-        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="xl">
-            <div class="max-h-[65vh] overflow-y-auto pr-1">
+        {{-- 2xl, not xl: this modal carries two side-by-side columns of readings,
+             and at xl a value like the Windows edition wrapped onto three lines
+             for every device. The scroll container stays for the very tall case. --}}
+        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="2xl">
+            <div class="max-h-[70vh] overflow-y-auto pr-1">
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                     @if($t?->asset)
                         <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
@@ -258,37 +257,62 @@
                     </div>
                 @endif
 
-                {{-- CSS multi-column, not a 2-column grid.
-                     A grid gives every section its own cell, so a 10-row Security
-                     section and a 2-row Software section left one column short and
-                     the other long - the ragged, unbalanced look. `columns` fills
-                     column one to the height, then flows into column two, which
-                     is what a two-column list should do.
+                {{-- Two explicit columns.
+                     Neither of the previous approaches worked. A plain grid gave
+                     every section its own cell, so a 10-row Security section
+                     next to a 2-row Software one left the columns badly uneven.
+                     CSS `columns` balanced the height but then let a section
+                     split across the break, cutting "Security" in half.
 
-                     Each row is label-then-value on one line. The value cell
-                     carries min-w-0 because a flex item defaults to
-                     min-width:auto: without it a long value like "Microsoft
+                     So the split is done here: sections are dealt round-robin
+                     into two column lists, which keeps the reading order (Device,
+                     Hardware, Storage...) intact while keeping the two columns
+                     close to the same height.
+
+                     The value cell carries min-w-0 because a flex item defaults
+                     to min-width:auto: without it a long value like "Microsoft
                      Windows 11 Home Single Language 10.0.26200" refuses to
-                     shrink, spills past its own section and lands on top of the
-                     next column's label. break-words handles a single
-                     unbreakable token. --}}
-                <div class="gap-x-8 text-theme-xs [column-fill:balance] sm:columns-2">
-                    @foreach($rowsByDevice[$device->id] ?? [] as $section => $fields)
-                        <section class="mb-5 min-w-0 break-inside-avoid">
-                            <h4 class="mb-2 border-b border-gray-100 pb-1.5 font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                                {{ $section }}
-                            </h4>
-                            <dl class="space-y-1">
-                                @foreach($fields as $label => $value)
-                                    <div class="flex items-baseline gap-2">
-                                        <dt class="w-[7.5rem] shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                                        <dd class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
-                                            {{ $value !== null && $value !== '' ? $value : '—' }}
-                                        </dd>
-                                    </div>
-                                @endforeach
-                            </dl>
-                        </section>
+                     shrink, spills out of its column and lands on top of the
+                     neighbouring label. break-words handles a single token with
+                     no spaces in it. --}}
+                @php
+                    // The sections arrive keyed by name, so a string is used as
+                    // the index - `$index % 2` on "Device" is a TypeError, not a
+                    // silent slip. Re-key them numerically, keeping the names
+                    // alongside for the headings.
+                    $names = array_keys($rowsByDevice[$device->id] ?? []);
+                    $left = [];
+                    $right = [];
+                    foreach (array_values($rowsByDevice[$device->id] ?? []) as $index => $fields) {
+                        if ($index % 2 === 0) {
+                            $left[$index] = $fields;
+                        } else {
+                            $right[$index] = $fields;
+                        }
+                    }
+                @endphp
+
+                <div class="grid gap-x-10 sm:grid-cols-2">
+                    @foreach([$left, $right] as $column)
+                        <div class="space-y-5">
+                            @foreach($column as $index => $fields)
+                                <section>
+                                    <h4 class="mb-2 border-b border-gray-100 pb-1.5 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                                        {{ $names[$index] }}
+                                    </h4>
+                                    <dl class="space-y-1 text-theme-xs">
+                                        @foreach($fields as $label => $value)
+                                            <div class="flex items-baseline gap-3">
+                                                <dt class="w-24 shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                                                <dd class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
+                                                    {{ $value !== null && $value !== '' ? $value : '—' }}
+                                                </dd>
+                                            </div>
+                                        @endforeach
+                                    </dl>
+                                </section>
+                            @endforeach
+                        </div>
                     @endforeach
                 </div>
                 </dl>
