@@ -27,8 +27,6 @@ use Illuminate\Support\Str;
  */
 class AuditApiController extends Controller
 {
-    private const FIND_FIELDS = ['hostname', 'serial_number', 'mac_address'];
-
     /**
      * Live Fleet health readings sent alongside the hardware audit (PRD §11).
      * All values arrive as strings from the agent collector, so numeric fields

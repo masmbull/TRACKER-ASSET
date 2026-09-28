@@ -156,6 +156,97 @@ class FingerprintTest extends TestCase
     }
 
     /**
+     * MAC matching has to be reachable on its own, and that means it needs a
+     * validation rule of its own.
+     *
+     * Request::validate() returns only the keys that have a rule, so when
+     * `mac_address` was missing from rules() it was stripped from the payload
+     * before resolveAssetId could read it. The existing asset-linking test did
+     * not catch this because its serial and hostname both matched, so the lookup
+     * returned on the first key and never reached the MAC branch — the code
+     * looked like it supported MAC matching while the field could not arrive.
+     *
+     * Here only the MAC is a match, so the link can only be made through it.
+     */
+    public function test_it_links_an_asset_by_mac_alone(): void
+    {
+        $asset = $this->makeAsset([
+            'asset_id' => 'AST-FP-MAC',
+            // Deliberately different from the reported values: only mac_address
+            // may be used to find this row.
+            'serial_number' => 'SN-NOT-REPORTED',
+            'hostname' => 'HOST-NOT-REPORTED',
+            // Stored the way the register actually stores it: dashed.
+            'mac_address' => '34-5A-60-9A-F0-92',
+        ]);
+
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'serial_number' => 'SN-DIFFERENT-01',
+            'hostname' => 'HOST-DIFFERENT-01',
+            // Reported the way WMI actually reports it: colons.
+            'mac_address' => '34:5A:60:9A:F0:92',
+        ]), $this->headers())->assertOk();
+
+        $fingerprint = AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail();
+
+        $this->assertSame(
+            $asset->id,
+            $fingerprint->asset_id,
+            'mac_address survived validation and was used to resolve the asset link.'
+        );
+    }
+
+    /**
+     * The register stores dashes, WMI reports colons, and an operator may type
+     * either. Comparing the raw strings meant this branch matched nothing for
+     * any device in the fleet — 245/245 asset rows are dashed, so no amount of
+     * correct agent code would have found them.
+     */
+    public function test_it_matches_a_mac_regardless_of_separator_or_case(): void
+    {
+        $asset = $this->makeAsset([
+            'asset_id' => 'AST-FP-MAC2',
+            'serial_number' => 'SN-NOPE',
+            'hostname' => 'HOST-NOPE',
+            'mac_address' => 'aa-bb-cc-dd-ee-ff',
+        ]);
+
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'serial_number' => 'SN-STILL-NOPE',
+            'hostname' => 'HOST-STILL-NOPE',
+            'mac_address' => 'AA:BB:CC:DD:EE:FF',
+        ]), $this->headers())->assertOk();
+
+        $this->assertSame(
+            $asset->id,
+            AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail()->asset_id
+        );
+    }
+
+    /**
+     * "N/A" and other placeholders must not be turned into a lookup, and must not
+     * silently link a report to whichever asset happens to have a junk value.
+     */
+    public function test_a_placeholder_mac_is_ignored(): void
+    {
+        $this->makeAsset([
+            'asset_id' => 'AST-FP-MAC3',
+            'serial_number' => 'SN-REAL',
+            'hostname' => 'HOST-REAL',
+            'mac_address' => '11-22-33-44-55-66',
+        ]);
+
+        $this->postJson('/api/agent/fingerprint', $this->payload([
+            'mac_address' => 'N/A',
+        ]), $this->headers())->assertOk();
+
+        // Falls through to the hostname match, not the placeholder.
+        $this->assertNull(
+            AgentFingerprint::where('agent_token_id', $this->agentToken->id)->firstOrFail()->asset_id
+        );
+    }
+
+    /**
      * When identity matching finds nothing, the device's own telemetry row is
      * the fallback — it is the only record that says which asset a token
      * reports as.
