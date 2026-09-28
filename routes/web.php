@@ -14,6 +14,7 @@ use App\Http\Controllers\IkeBastInspectionController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
@@ -104,14 +105,24 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
-    // Deep inventory detail for one device. Declared before the token-scoped
-    // POST routes so "fingerprint" can never be read as a token id.
-    Route::get('/agent/{token}/fingerprint', [AgentFleetController::class, 'fingerprint'])->name('agent.fingerprint');
+        // Deep inventory detail for one device. Declared before the token-scoped
+        // POST routes so "fingerprint" can never be read as a token id.
+        Route::get('/agent/{token}/fingerprint', [AgentFleetController::class, 'fingerprint'])->name('agent.fingerprint');
         Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
         Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');
         Route::post('/agent/update-all', [AgentFleetController::class, 'updateAll'])->name('agent.updateAll');
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
+    });
+
+    // Infrastructure monitor: which backing services are up. Admin-only
+    // because the checks expose the database driver, mail host and cache
+    // backend, and a support or technician account has no reason to see any
+    // of it. The JSON variant answers 503 when anything is down so a load
+    // balancer reads the status code rather than trusting a cheerful body.
+    Route::middleware('can:manage-users')->group(function () {
+        Route::get('/services', [ServiceMonitorController::class, 'index'])->name('services.index');
+        Route::get('/services/health.json', [ServiceMonitorController::class, 'json'])->name('services.health');
     });
 
     Route::middleware('can:manage-master-data')->group(function () {
