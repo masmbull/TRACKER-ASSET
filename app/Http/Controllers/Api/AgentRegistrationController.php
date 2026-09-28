@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -78,6 +79,24 @@ class AgentRegistrationController extends Controller
             'token_hash' => $tokenHash,
             'token_plain' => $token,
             'is_active' => true,
+        ]);
+
+        // Queue a scan immediately, so a freshly enrolled device appears in the
+        // fleet within seconds instead of waiting for somebody to notice it was
+        // missing.
+        //
+        // This is not a nicety. The heartbeat endpoint deliberately refuses to
+        // invent a telemetry row: with no snapshot it answers 202 "run a full
+        // scan". Nothing else queues that scan - only the weekly audit sweep and
+        // a manual button on the fleet page - so a device that enrolled on a
+        // Monday reported nothing at all until the sweep ran days later, and the
+        // fleet looked like the deployment had simply failed. The agent then
+        // treats 202 as success, so nothing anywhere reported a problem.
+        AgentCommand::create([
+            'agent_token_id' => $agentToken->id,
+            'command' => 'scan',
+            'payload' => null,
+            'status' => 'pending',
         ]);
 
         return response()->json([
