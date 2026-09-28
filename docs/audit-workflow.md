@@ -9,8 +9,8 @@ Compare registered asset data against actual device data. Record discrepancies f
 ```text
 Windows Device
        ↓
-Lightweight Audit Agent (tracker-audit-agent.exe) [optional]
-       ↓ (HTTP API, JSON)
+TrackerAgent.exe (resident daemon)
+       ↓ (POST /api/audits on scan, /api/agent/heartbeat every 60s)
 Laravel API
        ↓
 PostgreSQL (store audit record)

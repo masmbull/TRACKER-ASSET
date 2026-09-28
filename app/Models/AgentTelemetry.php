@@ -17,8 +17,9 @@ class AgentTelemetry extends Model
         'agent_token_id', 'asset_id', 'device_id', 'hostname', 'logged_in_user', 'os', 'ip_address',
         'battery_percent', 'battery_health', 'battery_cycle_count',
         'disk_free_gb', 'disk_total_gb', 'disk_free_percent',
-        'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal', 'uptime_hours',
-        'payload', 'reported_at',
+        'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
+        'network_type', 'network_adapter', 'network_speed',
+        'uptime_hours', 'payload', 'reported_at',
     ];
 
     protected function casts(): array
@@ -49,8 +50,14 @@ class AgentTelemetry extends Model
 
     /**
      * Telemetry is considered live when the device reported within the window.
+     *
+     * The window is deliberately twice the daemon's 60-second heartbeat: that
+     * gives one heartbeat of slack for a request that was slow or dropped
+     * before a machine is called offline. The previous 5 minutes was tuned
+     * against a poll-only agent and made "online" meaningless — a laptop that
+     * had been shut down for an hour still showed a green dot.
      */
-    public function isOnline(int $minutes = 5): bool
+    public function isOnline(int $minutes = 2): bool
     {
         return $this->reported_at !== null && $this->reported_at->gt(now()->subMinutes($minutes));
     }

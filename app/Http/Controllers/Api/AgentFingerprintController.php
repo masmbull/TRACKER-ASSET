@@ -1,0 +1,351 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\AgentApiToken;
+use App\Models\AgentFingerprint;
+use App\Models\AgentSoftware;
+use App\Models\AgentTelemetry;
+use App\Models\Asset;
+use Illuminate\Http\Request;
+
+/**
+ * Receiver for the agent's deep-inventory report (software, security posture,
+ * licensing, storage health).
+ *
+ * Kept separate from AuditApiController::heartbeat because the two have very
+ * different costs and cadences: the heartbeat runs every 60 seconds with cheap
+ * readings, this runs once at install and then daily. Sending the software list
+ * on the heartbeat would mean a registry walk per device per minute.
+ */
+class AgentFingerprintController extends Controller
+{
+    /**
+     * Guard against an agent bug turning into an unbounded insert. A normal
+     * Windows machine tops out near 400 entries; the cap leaves headroom for
+     * heavily-loaded dev boxes without letting a single report blow up the
+     * table.
+     */
+    private const MAX_SOFTWARE_ROWS = 2000;
+
+    /**
+     * Fields the agent sends as "true"/"false" strings.
+     */
+    private const BOOLEAN_FIELDS = [
+        'antivirus_enabled', 'firewall_enabled', 'uac_enabled', 'secure_boot_enabled',
+        'tpm_present', 'rdp_enabled', 'pending_reboot', 'smart_predicted_failure',
+    ];
+
+    /**
+     * Convert the agent's stringly-typed booleans before validation.
+     *
+     * Laravel's `boolean` rule only accepts real booleans, 0/1 and "0"/"1", so a
+     * payload of "true" would be rejected with 422 â€” taking the whole report
+     * down with it, including several hundred software rows that were fine.
+     *
+     * An unrecognised value becomes null rather than an error, deliberately: a
+     * single unreadable sensor must not destroy the rest of the inventory, and
+     * null is distinguishable from a genuine "false" later on. This mirrors what
+     * AuditApiController::normaliseTelemetryInput already does for telemetry.
+     */
+    private function normaliseBooleanInput(Request $request): void
+    {
+        $clean = [];
+
+        foreach (self::BOOLEAN_FIELDS as $field) {
+            if (! $request->has($field)) {
+                continue;
+            }
+
+            $value = $request->input($field);
+
+            if (is_bool($value)) {
+                continue;
+            }
+
+            if (is_string($value)) {
+                $value = strtolower(trim($value));
+
+                $clean[$field] = match ($value) {
+                    '1', 'true', 'yes', 'on' => true,
+                    '0', 'false', 'no', 'off' => false,
+                    default => null,
+                };
+            }
+        }
+
+        if ($clean !== []) {
+            $request->merge($clean);
+        }
+    }
+
+    public function store(Request $request)
+    {
+        $this->normaliseBooleanInput($request);
+
+        $payload = $request->validate($this->rules());
+
+        $token = AgentApiToken::find($request->attributes->get('agent_token_id'));
+
+        if (! $token) {
+            return response()->json(['ok' => false, 'message' => 'Unknown agent token.'], 422);
+        }
+
+        $fingerprint = AgentFingerprint::updateOrCreate(
+            ['agent_token_id' => $token->id],
+            [
+                'asset_id' => $this->resolveAssetId($token, $payload),
+                'device_id' => $payload['device_id'] ?? $token->device_id,
+                ...$this->attributes($payload),
+                'payload' => $payload,
+                'collected_at' => now(),
+            ]
+        );
+
+        $software = $this->replaceSoftware($fingerprint, $payload['software'] ?? []);
+
+        return response()->json([
+            'ok' => true,
+            'software' => $software,
+            'collected_at' => $fingerprint->collected_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Replace the software list wholesale.
+     *
+     * A diff would be cheaper but needs a stable per-entry key the registry does
+     * not provide, and a stale entry is worse than a re-scan: uninstalling a
+     * program and keeping its row would make the fleet report software that is
+     * no longer on the machine.
+     */
+    private function replaceSoftware(AgentFingerprint $fingerprint, array $software): int
+    {
+        $fingerprint->software()->delete();
+
+        $rows = [];
+
+        foreach (array_slice($software, 0, self::MAX_SOFTWARE_ROWS) as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $name = trim((string) ($entry['name'] ?? ''));
+
+            // Registry keys exist with an empty DisplayName (broken installs and
+            // some update stubs), which would otherwise become nameless rows.
+            if ($name === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'agent_fingerprint_id' => $fingerprint->id,
+                'asset_id' => $fingerprint->asset_id,
+                'name' => $name,
+                'version' => $this->clean($entry['version'] ?? null),
+                'publisher' => $this->clean($entry['publisher'] ?? null),
+                'installed_at' => $this->dateOrNull($entry['installed_at'] ?? null),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Chunked so a large inventory cannot blow past the placeholder limit on
+        // drivers that cap a single multi-row statement.
+        foreach (array_chunk($rows, 200) as $chunk) {
+            AgentSoftware::insert($chunk);
+        }
+
+        return count($rows);
+    }
+
+    private function attributes(array $payload): array
+    {
+        return [
+            'antivirus_product' => $this->clean($payload['antivirus_product'] ?? null),
+            'antivirus_enabled' => $this->boolOrNull($payload['antivirus_enabled'] ?? null),
+            'antivirus_signature_age_days' => $this->intOrNull($payload['antivirus_signature_age_days'] ?? null),
+            'firewall_enabled' => $this->boolOrNull($payload['firewall_enabled'] ?? null),
+            'firewall_profiles_off' => $this->clean($payload['firewall_profiles_off'] ?? null),
+            'uac_enabled' => $this->boolOrNull($payload['uac_enabled'] ?? null),
+            'secure_boot_enabled' => $this->boolOrNull($payload['secure_boot_enabled'] ?? null),
+            'tpm_present' => $this->boolOrNull($payload['tpm_present'] ?? null),
+            'bitlocker_status' => $this->clean($payload['bitlocker_status'] ?? null),
+            'bitlocker_method' => $this->clean($payload['bitlocker_method'] ?? null),
+            'rdp_enabled' => $this->boolOrNull($payload['rdp_enabled'] ?? null),
+            'local_admin_count' => $this->intOrNull($payload['local_admin_count'] ?? null),
+            'windows_edition' => $this->clean($payload['windows_edition'] ?? null),
+            'license_channel' => $this->clean($payload['license_channel'] ?? null),
+            'activation_status' => $this->clean($payload['activation_status'] ?? null),
+            'os_build' => $this->clean($payload['os_build'] ?? null),
+            'os_installed_at' => $this->dateOrNull($payload['os_installed_at'] ?? null),
+            'last_boot_at' => $this->dateOrNull($payload['last_boot_at'] ?? null),
+            'pending_reboot' => $this->boolOrNull($payload['pending_reboot'] ?? null),
+            'domain' => $this->clean($payload['domain'] ?? null),
+            'timezone' => $this->clean($payload['timezone'] ?? null),
+            'disk_type' => $this->clean($payload['disk_type'] ?? null),
+            'smart_health' => $this->clean($payload['smart_health'] ?? null),
+            'smart_predicted_failure' => $this->boolOrNull($payload['smart_predicted_failure'] ?? null),
+            'cpu_cores' => $this->intOrNull($payload['cpu_cores'] ?? null),
+            'cpu_physical_cores' => $this->intOrNull($payload['cpu_physical_cores'] ?? null),
+            'monitor' => $this->clean($payload['monitor'] ?? null),
+            'software_count' => $this->intOrNull($payload['software_count'] ?? null),
+            'startup_count' => $this->intOrNull($payload['startup_count'] ?? null),
+        ];
+    }
+
+    /**
+     * Attach the report to an asset.
+     * </summary>
+     *
+     * <remarks>
+     * The column names are the ones AuditApiController::resolveAsset already
+     * uses: assets.serial_number / hostname / mac_address. There is no
+     * device_ prefix on this table.
+     *
+     * An earlier version of this method looked for device_serial and
+     * device_hostname, which do not exist. SQLite quietly returned nothing for
+     * the unknown column, so the broken branch hid behind the telemetry
+     * fallback and the feature tests still passed, while on MySQL the same
+     * query would have thrown a 500 on every single fingerprint report.
+     * FingerprintTest asserts the column list for exactly that reason.
+     *
+     * The telemetry fallback is kept as a safety net for a device whose asset
+     * has since been renamed, but it is no longer the main path.
+     * </remarks>
+     */
+    private function resolveAssetId(AgentApiToken $token, array $payload): ?int
+    {
+        $columns = [
+            'asset_id' => 'asset_id',
+            'serial_number' => 'serial_number',
+            'hostname' => 'hostname',
+            'mac_address' => 'mac_address',
+        ];
+
+        foreach ($columns as $key => $column) {
+            $value = $this->clean($payload[$key] ?? null);
+
+            if ($value === null) {
+                continue;
+            }
+
+            $asset = Asset::where($column, $value)->first();
+
+            if ($asset) {
+                return $asset->id;
+            }
+        }
+
+        return AgentTelemetry::where('agent_token_id', $token->id)
+            ->whereNotNull('asset_id')
+            ->orderByDesc('reported_at')
+            ->value('asset_id');
+    }
+
+    private function rules(): array
+    {
+        $bool = 'nullable|boolean';
+        $int = 'nullable|integer|min:0';
+        $text = 'nullable|string|max:255';
+
+        return [
+            'device_id' => $text,
+            'asset_id' => $text,
+            'serial_number' => $text,
+            'hostname' => $text,
+
+            'antivirus_product' => $text,
+            'antivirus_enabled' => $bool,
+            'antivirus_signature_age_days' => $int,
+            'firewall_enabled' => $bool,
+            'firewall_profiles_off' => $text,
+            'uac_enabled' => $bool,
+            'secure_boot_enabled' => $bool,
+            'tpm_present' => $bool,
+            'bitlocker_status' => $text,
+            'bitlocker_method' => $text,
+            'rdp_enabled' => $bool,
+            'local_admin_count' => $int,
+
+            'windows_edition' => $text,
+            'license_channel' => $text,
+            'activation_status' => $text,
+
+            'os_build' => $text,
+            'os_installed_at' => 'nullable|date',
+            'last_boot_at' => 'nullable|date',
+            'pending_reboot' => $bool,
+            'domain' => $text,
+            'timezone' => $text,
+
+            'disk_type' => $text,
+            'smart_health' => $text,
+            'smart_predicted_failure' => $bool,
+            'cpu_cores' => $int,
+            'cpu_physical_cores' => $int,
+            'monitor' => $text,
+
+            'software_count' => $int,
+            'startup_count' => $int,
+
+            'software' => 'nullable|array|max:'.self::MAX_SOFTWARE_ROWS,
+            'software.*.name' => 'required|string|max:255',
+            'software.*.version' => 'nullable|string|max:255',
+            'software.*.publisher' => 'nullable|string|max:255',
+            'software.*.installed_at' => 'nullable|date',
+        ];
+    }
+
+    private function clean(mixed $value): ?string
+    {
+        $value = is_string($value) ? trim($value) : $value;
+
+        return $value === null || $value === '' ? null : (string) $value;
+    }
+
+    /**
+     * The agent sends booleans as "true"/"false" strings because its telemetry
+     * dictionary is string-typed. Anything unparsable is dropped rather than
+     * guessed, so an unreadable sensor is never recorded as a passing check.
+     */
+    private function boolOrNull(mixed $value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $value = strtolower(trim($value));
+
+            if (in_array($value, ['1', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+
+            if (in_array($value, ['0', 'false', 'no', 'off'], true)) {
+                return false;
+            }
+        }
+
+        return null;
+    }
+
+    private function intOrNull(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) round((float) $value) : null;
+    }
+
+    private function dateOrNull(mixed $value): ?string
+    {
+        $value = $this->clean($value);
+
+        // WMI hands back 0000-00-00 style sentinels for "never"; storing those
+        // would make the column unreadable instead of simply empty.
+        if ($value === null || ! preg_match('/\d{4}-\d{2}-\d{2}/', $value)) {
+            return null;
+        }
+
+        return $value;
+    }
+}

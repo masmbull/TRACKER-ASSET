@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AgentFleetController;
-use App\Http\Controllers\AgentScriptController;
 use App\Http\Controllers\AgentTokenController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetImportController;
@@ -31,10 +30,6 @@ Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallbac
 // Public agent download (for installer) - outside auth middleware
 Route::get('/agent/download', [AgentTokenController::class, 'downloadLatest'])->name('agent.download.latest');
 Route::get('/agent/{token}/download', [AgentTokenController::class, 'download'])->name('agent.download');
-
-// Audit agent scripts (PRD §11) — public, token in query is the credential.
-Route::get('/agent/run.ps1', [AgentScriptController::class, 'script'])->name('agent.run');
-Route::get('/agent/daemon.ps1', [AgentScriptController::class, 'daemon'])->name('agent.daemon');
 
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
@@ -109,6 +104,9 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
+    // Deep inventory detail for one device. Declared before the token-scoped
+    // POST routes so "fingerprint" can never be read as a token id.
+    Route::get('/agent/{token}/fingerprint', [AgentFleetController::class, 'fingerprint'])->name('agent.fingerprint');
         Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
         Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');
         Route::post('/agent/update-all', [AgentFleetController::class, 'updateAll'])->name('agent.updateAll');

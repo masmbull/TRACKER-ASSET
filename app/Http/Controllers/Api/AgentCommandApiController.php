@@ -34,6 +34,15 @@ class AgentCommandApiController extends Controller
                 $query->whereNull('agent_token_id')
                     ->orWhere('agent_token_id', $tokenId);
             })
+            // A targeted "remove this machine" command must never go out as a
+            // broadcast. `agent_token_id` is nullOnDelete, so deleting a token
+            // row silently rewrites its pending uninstall into a fleet-wide one
+            // and every agent removes itself. Uninstall is only ever created
+            // per device, so a null target is always corruption, not an intent.
+            ->where(function ($query) {
+                $query->where('command', '!=', 'uninstall')
+                    ->orWhereNotNull('agent_token_id');
+            })
             ->limit(10)
             ->get(['id', 'command', 'payload']);
 

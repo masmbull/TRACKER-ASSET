@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AgentCommandApiController;
+use App\Http\Controllers\Api\AgentFingerprintController;
 use App\Http\Controllers\Api\AgentRegistrationController;
 use App\Http\Controllers\Api\AuditApiController;
 use App\Http\Middleware\AuthenticateAuditAgent;
@@ -23,6 +24,15 @@ Route::post('/agent/register', [AgentRegistrationController::class, 'register'])
 
 Route::middleware(AuthenticateAuditAgent::class)->group(function () {
     Route::post('/audits', [AuditApiController::class, 'submit']);
+
+    // Telemetry heartbeat: the daemon pings this on its own schedule so Live
+    // Fleet reflects reality without anyone pressing "Scan Now".
+    Route::post('/agent/heartbeat', [AuditApiController::class, 'heartbeat']);
+
+    // Deep inventory (software, security posture, licensing). Separate from the
+    // heartbeat on purpose: this is a registry + WMI walk costing seconds, so
+    // the agent posts it at install and then daily, never every minute.
+    Route::post('/agent/fingerprint', [AgentFingerprintController::class, 'store']);
 
     Route::get('/agent/inbox', [AgentCommandApiController::class, 'inbox']);
     Route::post('/agent/commands/{command}/ack', [AgentCommandApiController::class, 'ack']);

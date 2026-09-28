@@ -187,7 +187,34 @@ class AgentScanButtonTest extends TestCase
             ->get(route('agent.fleet'))
             ->assertOk()
             ->assertSee('Uninstall queued')
-            ->assertDontSee('Remove the agent from field-laptop?', false);
+            ->assertDontSee('Remove the agent from')
+            ->assertDontSee('uninstall-agent-'.$token->id, false);
+    }
+
+    /**
+     * The uninstall confirmation is an in-app modal, not a native confirm().
+     * A native dialog froze the whole page and could not carry the explanation
+     * of what the agent is about to delete.
+     */
+    public function test_fleet_uninstall_asks_for_confirmation_in_a_modal(): void
+    {
+        $token = $this->enrollAgent();
+
+        $this->actingAs($this->admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            // The trigger button and the dialog that it opens.
+            ->assertSee('open-modal', false)
+            ->assertSee('uninstall-agent-'.$token->id, false)
+            ->assertSee('Remove the agent from', false)
+            // The consequences spelled out, as prose rather than one run-on line.
+            ->assertSee('deletes its autostart entry', false)
+            ->assertSee('cannot be undone', false)
+            // The dialog carries the real POST form, so no JS confirm() needed.
+            ->assertSee(route('agent.uninstall', $token), false)
+            // Nothing may fall back to the browser's built-in dialog.
+            ->assertDontSee('confirm(', false)
+            ->assertDontSee('onsubmit', false);
     }
 
     public function test_uninstall_requires_authentication(): void
@@ -198,6 +225,70 @@ class AgentScanButtonTest extends TestCase
             ->assertRedirect('/login');
 
         $this->assertSame(0, AgentCommand::count());
+    }
+
+    public function test_uninstall_is_refused_for_an_already_revoked_token(): void
+    {
+        $token = $this->enrollAgent(['name' => 'revoked-laptop']);
+        $token->update(['is_active' => false]);
+
+        // The agent middleware answers 401 for an inactive token, so a command
+        // queued here could never be picked up. Queueing it anyway left the
+        // fleet page showing "Uninstall queued" forever.
+        $this->actingAs($this->admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.uninstall', $token))
+            ->assertRedirect(route('agent.fleet'))
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, AgentCommand::count(), 'A revoked token must not accumulate commands.');
+    }
+
+    /**
+     * A revoked device is moved to its own card, which is what finally clears
+     * the stuck "Uninstall queued" badge: an agent whose token cannot
+     * authenticate is never listed among the machines you can act on.
+     */
+    public function test_fleet_moves_a_revoked_device_to_the_revoked_card(): void
+    {
+        $token = $this->enrollAgent(['name' => 'revoked-laptop']);
+
+        $this->actingAs($this->admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.uninstall', $token))
+            ->assertRedirect(route('agent.fleet'));
+
+        $token->update(['is_active' => false]);
+
+        // The redirect above left a "Uninstall queued for ..." flash banner, which
+        // would be a false positive here. Consume it on a throwaway render.
+        $this->actingAs($this->admin)->get(route('agent.fleet'))->assertOk();
+
+        $this->actingAs($this->admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('Revoked Devices')
+            ->assertViewHas('revokedDevices', fn ($list) => $list->contains('id', $token->id))
+            // Out of the actionable table, so no queue badge and no button.
+            ->assertViewHas('activeDevices', fn ($list) => ! $list->contains('id', $token->id))
+            ->assertDontSee('Uninstall queued')
+            ->assertDontSee('uninstall-agent-'.$token->id, false);
+    }
+
+    public function test_fleet_still_shows_queued_for_a_deliverable_uninstall(): void
+    {
+        $token = $this->enrollAgent();
+
+        $this->actingAs($this->admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.uninstall', $token))
+            ->assertRedirect(route('agent.fleet'));
+
+        $this->actingAs($this->admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('Uninstall queued')
+            ->assertDontSee('Not delivered', false);
     }
 
     public function test_user_without_permission_cannot_uninstall_an_agent(): void

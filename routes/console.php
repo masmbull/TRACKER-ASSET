@@ -24,3 +24,13 @@ Schedule::command('audit:sweep')
     ->weeklyOn(1, '06:00')
     ->withoutOverlapping()
     ->when(fn () => AgentApiToken::where('is_active', true)->exists());
+
+/*
+| A pending command aimed at a revoked token can never be delivered: the agent
+| middleware answers 401 before the inbox is ever read. Without this sweep such
+| rows stay `pending` forever, and the fleet page shows a permanent "Uninstall
+| queued" badge for a machine nobody can reach any more.
+*/
+Schedule::command('agent:resolve-stale-commands')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
