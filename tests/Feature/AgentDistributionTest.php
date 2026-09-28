@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AgentApiToken;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class AgentDistributionTest extends TestCase
@@ -23,63 +24,172 @@ class AgentDistributionTest extends TestCase
         $this->actingAs($support)->get(route('agent.index'))->assertForbidden();
     }
 
-    public function test_download_latest_redirects_to_an_enrolled_agent(): void
+    /**
+     * The latest-binary route serves the binary directly, with no token involved.
+     *
+     * It used to look up an enrolled agent and redirect to that device's
+     * token-scoped URL. That made the very first deployment impossible: with an
+     * empty token table the route refused to serve anything, so there was no way
+     * to obtain the agent that would have registered the first token. The Tokens
+     * page still tells the operator that "a unique token is generated
+     * automatically" on download, which is true - the agent mints it against
+     * /api/agent/register from the server address in the config trailer - but the
+     * redirect meant the download that starts all of that could never happen.
+     */
+    public function test_download_latest_serves_the_binary_directly(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $token = AgentApiToken::create([
-            'name' => 'existing-device',
-            'device_id' => 'ZGV2aWNlLTAwMQ==',
-            'token_hash' => hash('sha256', 'tok'),
-            'token_plain' => 'tok',
-        ]);
 
-        $this->actingAs($admin)->get(route('agent.download.latest'))
-            ->assertRedirect(route('agent.download', $token));
+        $this->withStubbedExe(function () use ($admin) {
+            $response = $this->actingAs($admin)->get(route('agent.download.latest'))
+                ->assertOk()
+                ->assertDownload('TrackerAgent.exe')
+                ->assertHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+
+            // The whole point: a real binary, not a redirect page saved as .exe.
+            // An agent that does not follow redirects would otherwise write this
+            // HTML to disk as TrackerAgent.exe and fail to run.
+            //
+            // The first two bytes are read straight off the stream callback. The
+            // obvious alternative, streamedContent(), buffers the whole binary in
+            // memory and exhausts the runner's limit - which is also a fair
+            // warning that the real 162 MB must never be read that way anywhere.
+            $this->assertSame(
+                'MZ',
+                substr($this->capturedStream($response, 2), 0, 2),
+                'A Windows PE must start with MZ.'
+            );
+        });
     }
 
     /**
-     * The auto-update download route must never invent a device.
+     * A public download must never grow the token table.
      *
-     * It used to create a token with an empty hash and no device_id when the
-     * table was empty, so the binary would be served against a credential that
-     * can never authenticate and a row the fleet page lists as a machine.
-     * A public endpoint must not be able to grow the token table.
+     * This is the real reason the route originally reached for a token: it used
+     * to invent one with an empty hash and no device_id, so the binary would be
+     * served against a credential that could never authenticate, alongside a row
+     * the fleet page would list as a machine. Serving the binary directly keeps
+     * that guarantee and makes it unconditional - there is no code path left that
+     * can write a token from a GET.
      */
     public function test_download_latest_does_not_invent_a_token_when_none_is_enrolled(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
+        $this->withStubbedExe(function () use ($admin) {
+            $this->actingAs($admin)->get(route('agent.download.latest'))->assertOk();
 
-        $this->actingAs($admin)->get(route('agent.download.latest'))
-            ->assertRedirect(route('agent.index'))
-            ->assertSessionHas('error');
+            $this->assertSame(0, AgentApiToken::count(), 'A public download must not create tokens.');
+        });
+    }
 
-        $this->assertSame(0, AgentApiToken::count(), 'A public download must not create tokens.');
+    /**
+     * The first agent must be obtainable on an empty fleet.
+     *
+     * This is the regression that mattered: with no enrolled device the download
+     * bounced back to the Tokens page, so nobody could ever install the agent
+     * that would have created the first row. Locked separately from the
+     * no-token-created rule because those are different properties - one is
+     * "it works", the other is "it does not write".
+     */
+    public function test_the_first_agent_can_be_downloaded_from_an_empty_fleet(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->withStubbedExe(function () use ($admin) {
+            $this->actingAs($admin)->get(route('agent.download.latest'))
+                ->assertOk()
+                ->assertDownload('TrackerAgent.exe');
+        });
     }
 
     /**
      * Rows without a device_id are bookkeeping, not machines: they are what the
-     * `audit:token` command and older enrollments leave behind, and serving an
-     * update against one gives the agent an identity the fleet cannot show.
+     * `audit:token` command and older enrollments leave behind. The download no
+     * longer selects a token at all, which makes that distinction moot here - but
+     * it must still hold that a download against such a table stays anonymous and
+     * creates nothing.
      */
     public function test_download_latest_ignores_tokens_with_no_device(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $real = AgentApiToken::create([
-            'name' => 'real-device',
-            'device_id' => 'ZGV2aWNlLTAwMQ==',
-            'token_hash' => hash('sha256', 'tok'),
-            'token_plain' => 'tok',
-        ]);
 
-        // A newer bookkeeping row with no device: must not win.
+        // A bookkeeping row with no device must not become the download's identity.
         AgentApiToken::create([
             'name' => 'bookkeeping',
             'token_hash' => hash('sha256', 'other'),
             'token_plain' => 'other',
         ]);
 
-        $this->actingAs($admin)->get(route('agent.download.latest'))
-            ->assertRedirect(route('agent.download', $real));
+        $this->withStubbedExe(function () use ($admin) {
+            $this->actingAs($admin)->get(route('agent.download.latest'))
+                ->assertOk()
+                ->assertDownload('TrackerAgent.exe');
+        });
+    }
+
+    /**
+     * Send a streamed response, keeping only its first $limit bytes.
+     *
+     * The buffer handler returns an empty string, which discards each chunk as
+     * it arrives. That is the entire point: a plain ob_start() would hold the
+     * full 162 MB self-contained binary and blow the memory limit, which is
+     * exactly what the earlier streamedContent() attempt did.
+     */
+    private function capturedStream(TestResponse $response, int $limit): string
+    {
+        $captured = '';
+
+        ob_start(function (string $chunk) use (&$captured, $limit): string {
+            if (strlen($captured) < $limit) {
+                $captured .= substr($chunk, 0, $limit - strlen($captured));
+            }
+
+            return '';
+        });
+
+        $response->baseResponse->sendContent();
+
+        ob_end_flush();
+
+        return $captured;
+    }
+
+    /**
+     * Run a callback against a stub executable, restoring the real one after.
+     *
+     * Forcing the stub even when a real build exists is deliberate. The real
+     * self-contained agent is 162 MB, and a test that actually streams it
+     * exhausts the runner's 128 MB memory limit before it can assert anything.
+     * The thing under test is the download path, not the size of the binary, so
+     * the test must not depend on a build artifact being present at all.
+     */
+    private function withStubbedExe(callable $test): void
+    {
+        $exePath = storage_path('app/agent/TrackerAgent.exe');
+        $backup = $exePath.'.realtest';
+
+        $hadReal = file_exists($exePath);
+
+        if ($hadReal) {
+            rename($exePath, $backup);
+        }
+
+        if (! is_dir(dirname($exePath))) {
+            mkdir(dirname($exePath), 0755, true);
+        }
+
+        // "MZ" plus a little filler, so the assertions exercise a real PE prefix
+        // without dragging the 162 MB along.
+        file_put_contents($exePath, "MZ\x90\x00stub-binary");
+
+        try {
+            $test();
+        } finally {
+            unlink($exePath);
+
+            if ($hadReal) {
+                rename($backup, $exePath);
+            }
+        }
     }
 
     public function test_download_serves_exe(): void
