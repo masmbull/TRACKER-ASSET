@@ -24,7 +24,7 @@ class AgentFingerprint extends Model
         'windows_edition', 'license_channel', 'activation_status',
         'os_build', 'os_installed_at', 'last_boot_at', 'pending_reboot', 'domain', 'timezone',
         'disk_type', 'smart_health', 'smart_predicted_failure',
-        'cpu_cores', 'cpu_physical_cores', 'monitor',
+        'cpu_cores', 'cpu_physical_cores', 'ram_modules', 'ram_slots', 'monitor',
         'software_count', 'startup_count',
         'payload', 'collected_at',
     ];
@@ -44,6 +44,8 @@ class AgentFingerprint extends Model
             'local_admin_count' => 'integer',
             'cpu_cores' => 'integer',
             'cpu_physical_cores' => 'integer',
+            'ram_modules' => 'integer',
+            'ram_slots' => 'integer',
             'software_count' => 'integer',
             'startup_count' => 'integer',
             'os_installed_at' => 'date',

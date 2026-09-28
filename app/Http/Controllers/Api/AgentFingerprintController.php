@@ -189,6 +189,14 @@ class AgentFingerprintController extends Controller
             'smart_predicted_failure' => $this->boolOrNull($payload['smart_predicted_failure'] ?? null),
             'cpu_cores' => $this->intOrNull($payload['cpu_cores'] ?? null),
             'cpu_physical_cores' => $this->intOrNull($payload['cpu_physical_cores'] ?? null),
+            // Zero means "the firmware did not tell us", not "this machine has no
+            // memory". An agent old enough to send the field without a real count
+            // would otherwise store 0 and the page would show a board with no
+            // slots at all, which reads as a hardware fault rather than a gap in
+            // the data. Defensive on the server too, since the agent already
+            // omits the key when its reading is 0.
+            'ram_slots' => $this->positiveIntOrNull($payload['ram_slots'] ?? null),
+            'ram_modules' => $this->positiveIntOrNull($payload['ram_modules'] ?? null),
             'monitor' => $this->clean($payload['monitor'] ?? null),
             'software_count' => $this->intOrNull($payload['software_count'] ?? null),
             'startup_count' => $this->intOrNull($payload['startup_count'] ?? null),
@@ -307,6 +315,11 @@ class AgentFingerprintController extends Controller
             'smart_predicted_failure' => $bool,
             'cpu_cores' => $int,
             'cpu_physical_cores' => $int,
+            // Slot counts, so the register can answer "can this take more RAM?".
+            // capped at 16 because no consumer board has more, and it keeps a
+            // bad reading from becoming a silly number in the UI.
+            'ram_modules' => $int.'|max:16',
+            'ram_slots' => $int.'|max:16',
             'monitor' => $text,
 
             'software_count' => $int,
@@ -356,6 +369,20 @@ class AgentFingerprintController extends Controller
     private function intOrNull(mixed $value): ?int
     {
         return is_numeric($value) ? (int) round((float) $value) : null;
+    }
+
+    /**
+     * A count that must be at least 1, or null.
+     *
+     * Zero is the sentinel firmware uses for "I could not read this", so storing
+     * it verbatim would report a machine with zero of something. Anything
+     * non-positive becomes null, which the views render as a dash.
+     */
+    private function positiveIntOrNull(mixed $value): ?int
+    {
+        $int = $this->intOrNull($value);
+
+        return $int !== null && $int > 0 ? $int : null;
     }
 
     /**

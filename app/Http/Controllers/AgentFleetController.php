@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AgentFingerprint;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
 use Illuminate\Http\Request;
@@ -217,6 +218,7 @@ class AgentFleetController extends Controller
             'Hardware' => [
                 'CPU cores' => $fp?->cpu_cores,
                 'RAM' => $t?->ram_config,
+                'RAM slots' => $this->ramSlotsLabel($fp),
                 'GPU' => $t?->gpu,
                 'Monitor' => $fp?->monitor,
                 'Disk type' => $fp?->disk_type,
@@ -264,6 +266,30 @@ class AgentFleetController extends Controller
                 'Startup items' => $fp?->startup_count,
             ],
         ];
+    }
+
+    /**
+     * RAM slot occupancy as "2 of 4", degrading to whatever half is known.
+     *
+     * A laptop that reports two 8GB sticks and a board with four slots reads
+     * "2 of 4" - full enough that capacity tells you nothing, and the free
+     * slots are the fact worth having. When the firmware only reports one of
+     * the two numbers, showing that one beats showing a dash.
+     */
+    private function ramSlotsLabel(?AgentFingerprint $fp): ?string
+    {
+        $used = $fp?->ram_modules;
+        $total = $fp?->ram_slots;
+
+        if ($used === null && $total === null) {
+            return null;
+        }
+
+        if ($total !== null) {
+            return $used === null ? "{$total} slots" : $used.' of '.$total;
+        }
+
+        return $used.' '.($used === 1 ? 'module' : 'modules').', slot count unknown';
     }
 
     /**
