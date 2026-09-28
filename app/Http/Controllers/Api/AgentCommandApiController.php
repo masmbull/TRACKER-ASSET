@@ -60,6 +60,20 @@ class AgentCommandApiController extends Controller
             'result' => 'nullable|array',
         ]);
 
+        // A command is settled exactly once. Without this guard a late ack
+        // silently overwrites the recorded outcome of a command that already
+        // finished: a broadcast is acked by whichever agent answers first, so
+        // a slow second agent reporting "failed" would replace a real "done".
+        // The stale resolver can also flip a row to 'failed' while an agent is
+        // mid-command, and that verdict must not be rewritten afterwards.
+        if ($command->status !== 'pending') {
+            return response()->json([
+                'ok' => true,
+                'status' => $command->status,
+                'message' => 'Command already settled; ack ignored.',
+            ]);
+        }
+
         $command->update([
             'status' => $validated['status'],
             'result' => $validated['result'] ?? null,
