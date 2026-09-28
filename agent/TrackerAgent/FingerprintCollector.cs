@@ -476,15 +476,24 @@ public static class FingerprintCollector
 
             foreach (var obj in searcher.Get())
             {
-                if (obj["InstallDate"] is not null)
+                // Each date is parsed on its own so one unparseable value cannot
+                // take the other down with it. They used to share a single try,
+                // and InstallDate throwing meant LastBootUpTime was never even
+                // read - both columns stayed NULL on every machine, which reads
+                // as "this laptop has no install date" rather than "the probe is
+                // broken".
+                var installed = ParseWmiDate(obj["InstallDate"]);
+
+                if (installed is not null)
                 {
-                    data["os_installed_at"] = Convert.ToDateTime(obj["InstallDate"]!)
-                        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    data["os_installed_at"] = installed.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 }
 
-                if (obj["LastBootUpTime"] is not null)
+                var booted = ParseWmiDate(obj["LastBootUpTime"]);
+
+                if (booted is not null)
                 {
-                    data["last_boot_at"] = Convert.ToDateTime(obj["LastBootUpTime"]!)
+                    data["last_boot_at"] = booted.Value.ToLocalTime()
                         .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
                 }
             }
@@ -506,6 +515,62 @@ public static class FingerprintCollector
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Parse a WMI date, which arrives as a DMTF string, not a DateTime.
+    /// </summary>
+    /// <remarks>
+    /// WMI reports timestamps as "20260813063802.000000+420". Converting that
+    /// with Convert.ToDateTime throws on every machine, and because the calls
+    /// sat inside a catch-all the failure was invisible: os_installed_at and
+    /// last_boot_at were permanently NULL across the whole fleet, and a register
+    /// showing no install date is indistinguishable from one that never asked.
+    ///
+    /// ManagementDateTimeConverter is the supported reader for this format. The
+    /// DateTimeOffset result is deliberate - it keeps the UTC offset Windows
+    /// supplied, so a machine on UTC+07:00 does not have its last-boot time
+    /// silently shifted by seven hours against every other fleet row.
+    /// </remarks>
+    static DateTimeOffset? ParseWmiDate(object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        // System.Management hands the DMTF string over as a string; be tolerant
+        // anyway, because a future provider could hand back a real DateTime.
+        if (value is DateTimeOffset already)
+        {
+            return already;
+        }
+
+        if (value is DateTime asDateTime)
+        {
+            return new DateTimeOffset(asDateTime);
+        }
+
+        try
+        {
+            return ManagementDateTimeConverter.ToDateTime(value.ToString()!);
+        }
+        catch (ManagementException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
     static void CollectStorage(Dictionary<string, string> data)
     {
@@ -661,23 +726,47 @@ public static class FingerprintCollector
         catch { }
     }
 
+    /// <summary>Connected display panel, by name.</summary>
+    /// <remarks>
+    /// The old query filtered on "CurrentHorizontalActivePixels IS NOT NULL" to
+    /// skip disconnected panels, and that filter matched nothing on this laptop:
+    /// the internal BOE panel reports the field as empty, so the whole query
+    /// returned zero rows and the column stayed NULL. The filter was meant as
+    /// tidying and ended up suppressing the one monitor that exists.
+    ///
+    /// WmiMonitorID.Active is the correct "is it plugged in right now" signal,
+    /// and filtering on it in code rather than in WQL keeps the failure mode
+    /// visible: a query that returns rows we choose to ignore is a very
+    /// different problem from a query that never returns rows at all.
+    ///
+    /// The first usable panel wins, so a docked laptop reports the external
+    /// screen the person is actually looking at rather than the internal one.
+    /// </remarks>
     static void CollectMonitor(Dictionary<string, string> data)
     {
         try
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT * FROM WmiMonitorID WHERE CurrentHorizontalActivePixels IS NOT NULL");
+                @"root\WMI", "SELECT Active, ManufacturerName, UserFriendlyName FROM WmiMonitorID");
 
             foreach (var obj in searcher.Get())
             {
+                // Active is a bool; a panel that is not connected reports false.
+                if (obj["Active"] is bool active && !active)
+                {
+                    continue;
+                }
+
                 var label = string.Join(' ', new[] {
                     DecodeMonitorString(obj["ManufacturerName"] as ushort[]),
                     DecodeMonitorString(obj["UserFriendlyName"] as ushort[]),
                 }.Where(part => !string.IsNullOrWhiteSpace(part)).Distinct());
 
-                if (!string.IsNullOrWhiteSpace(label)) data["monitor"] = label;
-
-                break;
+                if (!string.IsNullOrWhiteSpace(label))
+                {
+                    data["monitor"] = label;
+                    return;
+                }
             }
         }
         catch { }

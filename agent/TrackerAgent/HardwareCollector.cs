@@ -38,9 +38,17 @@ public static class HardwareCollector
 
         try
         {
-            using var cpu = new ManagementObjectSearcher("SELECT TOP 1 * FROM Win32_Processor");
+            // Deliberately not "SELECT TOP 1 * FROM Win32_Processor": that form
+            // matches no rows on this hardware and left `processor` permanently
+            // empty. FingerprintCollector hit the same trap and works around it
+            // there; this is the same workaround, kept identical so the two
+            // collectors cannot drift apart again.
+            using var cpu = new ManagementObjectSearcher("SELECT Name FROM Win32_Processor");
             foreach (var obj in cpu.Get())
+            {
                 data["processor"] = obj["Name"]?.ToString() ?? "";
+                break;
+            }
         }
         catch { }
 
@@ -54,11 +62,26 @@ public static class HardwareCollector
 
         try
         {
-            using var disk = new ManagementObjectSearcher("SELECT TOP 1 * FROM Win32_DiskDrive ORDER BY Size DESC");
+            // Same "TOP 1" trap as the processor above: all fixed disks are read
+            // and the largest is chosen in code, which also lets a multi-disk
+            // laptop report the drive people actually care about.
+            double largest = 0;
+
+            using var disk = new ManagementObjectSearcher("SELECT Size FROM Win32_DiskDrive");
+
             foreach (var obj in disk.Get())
             {
                 var sizeBytes = Convert.ToDouble(obj["Size"] ?? 0);
-                if (sizeBytes > 0) data["storage"] = FormatBytes(sizeBytes);
+
+                if (sizeBytes > largest)
+                {
+                    largest = sizeBytes;
+                }
+            }
+
+            if (largest > 0)
+            {
+                data["storage"] = FormatBytes(largest);
             }
         }
         catch { }
@@ -270,27 +293,92 @@ public static class HardwareCollector
     }
 
     /// <summary>Primary GPU name (Live Fleet hardware summary).</summary>
+    /// <remarks>
+    /// The third "TOP 1" casualty in this file, fixed the same way. It also has
+    /// to pick the right adapter by hand, because a laptop reports both the
+    /// integrated and the discrete GPU and the register wants the one an
+    /// operator would call the graphics card.
+    ///
+    /// The "basic display adapter" rows are what Windows falls back to when a
+    /// driver is missing or the GPU is disabled in the BIOS; they are not real
+    /// hardware and must never win, or the fleet page would report every
+    /// troubled laptop as a generic Microsoft adapter.
+    ///
+    /// AdapterRAM is a uint32 that wraps above 4 GB, so a 6 GB card reports a
+    /// tiny number and would sort below a 2 GB one. Ordering is therefore a
+    /// preference, not a truth: integrated-only machines still get their one
+    /// real adapter named, and no adapter is invented when none qualify.
+    /// </remarks>
     static void CollectGraphics(Dictionary<string, string> data)
     {
         try
         {
+            var candidates = new List<(string Name, ulong Ram)>();
+            ulong placeholderRam = 0;
+            string? placeholderName = null;
+
             using var gpu = new ManagementObjectSearcher(
-                "SELECT TOP 1 * FROM Win32_VideoController ORDER BY AdapterRAM DESC");
+                "SELECT Name, AdapterRAM FROM Win32_VideoController");
 
             foreach (var obj in gpu.Get())
             {
-                var name = obj["Name"]?.ToString();
+                var name = obj["Name"]?.ToString()?.Trim();
 
-                if (!string.IsNullOrWhiteSpace(name))
+                if (string.IsNullOrWhiteSpace(name))
                 {
-                    data["gpu"] = name.Trim();
+                    continue;
                 }
 
-                break;
+                var ram = Convert.ToUInt64(obj["AdapterRAM"] ?? 0UL);
+
+                // Remembered before the skip below, otherwise the "no real
+                // adapter" branch could never reach a placeholder name and the
+                // field would stay empty for exactly the machines that most
+                // need to be reported.
+                if (IsPlaceholderAdapter(name))
+                {
+                    if (ram > placeholderRam)
+                    {
+                        placeholderRam = ram;
+                        placeholderName = name;
+                    }
+
+                    continue;
+                }
+
+                candidates.Add((name, ram));
             }
+
+            if (candidates.Count == 0)
+            {
+                // Every adapter was a placeholder. Reporting the placeholder is
+                // more useful than nothing at all: it tells an operator the
+                // driver is gone instead of leaving the field mysteriously empty.
+                if (placeholderName is not null)
+                {
+                    data["gpu"] = placeholderName;
+                }
+
+                return;
+            }
+
+            // Prefer a discrete card over the integrated one on the same laptop.
+            // AdapterRAM wraps, so this is a tiebreak between two real names,
+            // never a measurement of which has more memory.
+            var best = candidates
+                .OrderByDescending(c => c.Ram)
+                .First();
+
+            data["gpu"] = best.Name;
         }
         catch { }
     }
+
+    /// <summary>True for the generic adapters Windows reports instead of real hardware.</summary>
+    static bool IsPlaceholderAdapter(string name) =>
+        name.Contains("Basic Display", StringComparison.OrdinalIgnoreCase)
+        || name.Contains("Basic Render", StringComparison.OrdinalIgnoreCase)
+        || name.Contains("Remote Display", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Current Wi-Fi SSID + signal strength, parsed from netsh.</summary>
     static void CollectWifi(Dictionary<string, string> data)
