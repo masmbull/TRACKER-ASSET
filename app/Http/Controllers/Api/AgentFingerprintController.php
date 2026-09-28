@@ -35,6 +35,8 @@ class AgentFingerprintController extends Controller
     private const BOOLEAN_FIELDS = [
         'antivirus_enabled', 'firewall_enabled', 'uac_enabled', 'secure_boot_enabled',
         'tpm_present', 'rdp_enabled', 'pending_reboot', 'smart_predicted_failure',
+        'auto_logon_enabled', 'screen_lock_enabled', 'guest_account_enabled',
+        'defender_realtime_enabled',
     ];
 
     /**
@@ -198,6 +200,26 @@ class AgentFingerprintController extends Controller
             'ram_slots' => $this->positiveIntOrNull($payload['ram_slots'] ?? null),
             'ram_modules' => $this->positiveIntOrNull($payload['ram_modules'] ?? null),
             'monitor' => $this->clean($payload['monitor'] ?? null),
+            'bios_version' => $this->clean($payload['bios_version'] ?? null),
+            'bios_date' => $this->dateOrNull($payload['bios_date'] ?? null),
+            'chassis_type' => $this->clean($payload['chassis_type'] ?? null),
+            'device_model' => $this->clean($payload['device_model'] ?? null),
+            'screen_resolution' => $this->clean($payload['screen_resolution'] ?? null),
+            'cpu_architecture' => $this->clean($payload['cpu_architecture'] ?? null),
+
+            'auto_logon_enabled' => $this->boolOrNull($payload['auto_logon_enabled'] ?? null),
+            'screen_lock_enabled' => $this->boolOrNull($payload['screen_lock_enabled'] ?? null),
+            // 0 is deliberately kept: it means "locks immediately", which is the
+            // strongest possible setting. A positive-int helper here would
+            // silently turn the best-configured machine in the fleet into a
+            // blank, which is the exact inversion of what it should do.
+            'lock_timeout_minutes' => $this->boundedIntOrNull($payload['lock_timeout_minutes'] ?? null, 1440),
+            'guest_account_enabled' => $this->boolOrNull($payload['guest_account_enabled'] ?? null),
+
+            'defender_realtime_enabled' => $this->boolOrNull($payload['defender_realtime_enabled'] ?? null),
+            'defender_last_scan_days' => $this->boundedIntOrNull($payload['defender_last_scan_days'] ?? null, 3650),
+            'hotfix_count' => $this->boundedIntOrNull($payload['hotfix_count'] ?? null, 10000),
+            'last_hotfix_installed_at' => $this->dateOrNull($payload['last_hotfix_installed_at'] ?? null),
             'software_count' => $this->intOrNull($payload['software_count'] ?? null),
             'startup_count' => $this->intOrNull($payload['startup_count'] ?? null),
         ];
@@ -309,18 +331,45 @@ class AgentFingerprintController extends Controller
             'pending_reboot' => $bool,
             'domain' => $text,
             'timezone' => $text,
+            'last_hotfix_installed_at' => 'nullable|date',
 
             'disk_type' => $text,
             'smart_health' => $text,
             'smart_predicted_failure' => $bool,
             'cpu_cores' => $int,
             'cpu_physical_cores' => $int,
+            'cpu_architecture' => $text,
             // Slot counts, so the register can answer "can this take more RAM?".
             // capped at 16 because no consumer board has more, and it keeps a
             // bad reading from becoming a silly number in the UI.
             'ram_modules' => $int.'|max:16',
             'ram_slots' => $int.'|max:16',
             'monitor' => $text,
+            'bios_version' => $text,
+            'bios_date' => 'nullable|date',
+            'chassis_type' => $text,
+            'device_model' => $text,
+            'screen_resolution' => $text,
+
+            // Sign-in and lock posture. A zero lock timeout is legal and means
+            // "lock immediately", so the minimum is 0 rather than 1 - rejecting
+            // it would throw away the best possible setting on the machine.
+            //
+            // The upper bounds are enforced by clamping in attributes() rather
+            // than by validation. A `max:` rule here answers 422 and discards the
+            // entire report - several hundred software rows included - because
+            // one idle-timeout reading came back as 999999. A report is the only
+            // inventory this machine will ever send, so one impossible sensor
+            // reading must not cost the rest of it.
+            'auto_logon_enabled' => $bool,
+            'screen_lock_enabled' => $bool,
+            'lock_timeout_minutes' => 'nullable|integer|min:0',
+            'guest_account_enabled' => $bool,
+
+            // Defender detail, and patch recency.
+            'defender_realtime_enabled' => $bool,
+            'defender_last_scan_days' => $int,
+            'hotfix_count' => $int,
 
             'software_count' => $int,
             'startup_count' => $int,
@@ -331,6 +380,30 @@ class AgentFingerprintController extends Controller
             'software.*.publisher' => 'nullable|string|max:255',
             'software.*.installed_at' => 'nullable|date',
         ];
+    }
+
+    /**
+     * An integer that is discarded entirely when it exceeds a plausible ceiling.
+     *
+     * The alternative - clamping to the ceiling - was tried first and is wrong:
+     * an agent reporting a 999999-minute idle timeout would have been stored as
+     * 1440, which reads in the register as "locks after a day", a confident and
+     * completely fabricated security setting. A null is honest: nobody has a
+     * reading for this machine.
+     *
+     * Zero is preserved. For lock_timeout_minutes it means "lock immediately",
+     * the strongest possible setting, and treating it as a failed read would
+     * invert the meaning of the best-configured machines in the fleet.
+     */
+    private function boundedIntOrNull(mixed $value, int $ceiling): ?int
+    {
+        $number = $this->intOrNull($value);
+
+        if ($number === null) {
+            return null;
+        }
+
+        return $number > $ceiling ? null : $number;
     }
 
     private function clean(mixed $value): ?string

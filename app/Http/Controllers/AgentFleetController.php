@@ -218,10 +218,16 @@ class AgentFleetController extends Controller
             ],
             'Hardware' => [
                 'CPU cores' => $fp?->cpu_cores,
+                'Architecture' => $fp?->cpu_architecture,
                 'RAM' => $t?->ram_config,
                 'RAM slots' => $this->ramSlotsLabel($fp),
                 'GPU' => $t?->gpu,
                 'Monitor' => $fp?->monitor,
+                'Resolution' => $fp?->screen_resolution,
+                'Device type' => $fp?->chassis_type,
+                'Model' => $fp?->device_model,
+                'BIOS' => $fp?->bios_version,
+                'BIOS date' => $fp?->bios_date?->format('Y-m-d'),
                 'Disk type' => $fp?->disk_type,
                 'SMART' => $fp?->smart_health,
             ],
@@ -266,7 +272,21 @@ class AgentFleetController extends Controller
                 'BitLocker' => $fp?->bitlocker_status,
                 'BitLocker method' => $fp?->bitlocker_method,
                 'RDP' => $onOff($fp?->rdp_enabled),
+                // Autologon is the finding that matters most on this panel: the
+                // machine signs itself in after every reboot, so a stolen laptop
+                // opens onto a desktop with no barrier - and BitLocker on the disk
+                // does nothing about it, because the volume is already unlocked.
+                'Auto sign-in' => $fp?->auto_logon_enabled === null ? null : ($fp->auto_logon_enabled ? 'ON - no password needed' : 'off'),
+                'Screen lock' => $this->screenLockLabel($fp),
+                'Guest account' => $fp?->guest_account_enabled === null ? null : ($fp->guest_account_enabled ? 'ENABLED' : 'disabled'),
+                'Defender real-time' => $onOff($fp?->defender_realtime_enabled),
+                // Fresh definitions plus an old scan means updates are arriving
+                // on a machine that is not actually being checked, which is the
+                // combination neither of the two readings exposes alone.
+                'Last Defender scan' => $fp?->defender_last_scan_days !== null ? $this->scanAgeLabel($fp->defender_last_scan_days) : null,
                 'Pending reboot' => $yesNo($fp?->pending_reboot),
+                'Last hotfix' => $fp?->last_hotfix_installed_at?->format('Y-m-d'),
+                'Hotfixes' => $fp?->hotfix_count,
                 'Local admins' => $fp?->local_admin_count,
                 'Domain' => $fp?->domain,
             ],
@@ -275,6 +295,55 @@ class AgentFleetController extends Controller
                 'Startup items' => $fp?->startup_count,
             ],
         ];
+    }
+
+    /**
+     * Screen-lock posture as one phrase rather than two loose numbers.
+     *
+     * A zero timeout means "lock immediately", which is the best possible
+     * setting and must not be rendered as a bare "0" - that reads as "no lock
+     * configured" and inverts the meaning. A missing timeout alongside an
+     * enabled lock is likewise reported as immediate rather than as unknown,
+     * because that is what Windows does with it.
+     */
+    private function screenLockLabel(?AgentFingerprint $fp): ?string
+    {
+        if ($fp?->screen_lock_enabled === null) {
+            return null;
+        }
+
+        if (! $fp->screen_lock_enabled) {
+            return 'OFF - never locks';
+        }
+
+        $minutes = $fp->lock_timeout_minutes;
+
+        if ($minutes === null || $minutes === 0) {
+            return 'immediate';
+        }
+
+        return $minutes < 60
+            ? $minutes.' min'
+            : round($minutes / 60, 1).' h';
+    }
+
+    /**
+     * Defender scan age, in words an operator can act on.
+     *
+     * The raw day count is unreadable at a glance - "287" says nothing about
+     * whether that is a problem. A machine that has never been scanned is a
+     * different finding from one that is merely overdue, so "never" is its own
+     * label rather than a large number.
+     */
+    private function scanAgeLabel(int $days): string
+    {
+        return match (true) {
+            $days <= 0 => 'today',
+            $days === 1 => 'yesterday',
+            $days <= 7 => $days.' days ago',
+            $days <= 60 => round($days / 7).' weeks ago',
+            default => round($days / 30.44, 1).' months ago',
+        };
     }
 
     /**

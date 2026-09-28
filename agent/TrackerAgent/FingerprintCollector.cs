@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Management;
@@ -50,6 +51,13 @@ public static class FingerprintCollector
         CollectMemorySlots(data);
         CollectMonitor(data);
         CollectStartup(data);
+        CollectSignIn(data);
+        CollectLockScreen(data);
+        CollectFirmware(data);
+        CollectChassis(data);
+        CollectScreen(data);
+        CollectDefenderDetail(data);
+        CollectPatchState(data);
         CollectSoftware(data);
 
         return data.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
@@ -63,6 +71,8 @@ public static class FingerprintCollector
         CollectAntivirus(data);
         CollectFirewall(data);
         CollectBitLocker(data);
+        CollectBitLockerMethod(data);
+        CollectSecureBoot(data);
         CollectDomain(data);
         CollectUac(data);
         CollectTpm(data);
@@ -276,6 +286,521 @@ public static class FingerprintCollector
             data["bitlocker_status"] = "Disabled";
         }
     }
+    /// <summary>
+    /// Secure Boot, from the firmware rather than the OS.
+    /// </summary>
+    /// <remarks>
+    /// The column and the UI row for this already existed and could only ever be
+    /// NULL, because nothing collected it. A blank there is worse than a missing
+    /// row: an operator scanning the security panel reads a blank as "unknown",
+    /// while the truth was "never asked" - and Secure Boot is exactly the field
+    /// that has to be known before a machine is trusted with a device certificate.
+    ///
+    /// Two sources, in order of authority. The registry key is what Windows
+    /// itself caches, needs no elevation, and is present on anything that has
+    /// ever booted in Secure Boot mode. Confirm-SecureBootUEFI is the direct
+    /// firmware query and is authoritative when it answers, but it fails on
+    /// legacy BIOS and where the key is missing, so it cannot be the only route.
+    ///
+    /// Reporting false is only safe when a source actually denied it. A machine
+    /// where both sources error leaves the field null rather than claiming a
+    /// definite "off": guessing "insecure" on a locked-down corporate laptop
+    /// would be a false alarm, and the register is useless if it cries wolf.
+    /// </remarks>
+    static void CollectSecureBoot(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\SecureBoot\State");
+
+            if (key?.GetValue("UEFISecureBootEnabled") is int enabled)
+            {
+                data["secure_boot_enabled"] = enabled == 1 ? "true" : "false";
+                return;
+            }
+        }
+        catch { }
+
+        try
+        {
+            var exitCode = RunProcess("powershell", "-NoProfile -NonInteractive -Command " +
+                "\"(Confirm-SecureBootUEFI) -eq $true\"", out var output);
+
+            // Exit code 0 means the command actually ran. A non-zero exit is
+            // "no UEFI Secure Boot" on a legacy BIOS box and a plain failure
+            // anywhere else; the two cannot be told apart from the exit code
+            // alone, so it stays null rather than guessed either way.
+            if (exitCode == 0)
+            {
+                data["secure_boot_enabled"] = output.Trim()
+                    .Equals("True", StringComparison.OrdinalIgnoreCase) ? "true" : "false";
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Run a command, returning its exit code and stdout.</summary>
+    static int RunProcess(string file, string arguments, out string output)
+    {
+        var info = new ProcessStartInfo(file, arguments)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(info)
+            ?? throw new InvalidOperationException("Could not start " + file);
+
+        output = process.StandardOutput.ReadToEnd();
+
+        // Bounded so a hung shell cannot stall the whole fingerprint; the
+        // commands used here answer in well under a second.
+        if (!process.WaitForExit(10_000))
+        {
+            try { process.Kill(); } catch { }
+            throw new TimeoutException(file + " did not exit in time.");
+        }
+
+        return process.ExitCode;
+    }
+
+    /// <summary>
+    /// BitLocker encryption strength, which the status flag alone does not convey.
+    /// </summary>
+    /// <remarks>
+    /// "Enabled" is not a security answer. A volume can be on XTS-AES-128 or on
+    /// plain XTS with no cipher at all, and the second is encryption in name
+    /// only. The bitlocker_method column and its UI row both already existed and
+    /// were never populated by any collector, so this pairs with
+    /// CollectBitLocker to finally make them mean something.
+    ///
+    /// ConversionMethod is the documented encoding: 0 none, 1 AES, 2 XTS,
+    /// 3 XTS-AES. The mapping lives next to the WMI constant it depends on
+    /// rather than being split into the caller.
+    /// </remarks>
+    static void CollectBitLockerMethod(Dictionary<string, string> data)
+    {
+        // root\CIMV2 is tried first and root\SecurityCenter2 second, because the
+        // class is genuinely published in only one of them depending on the SKU
+        // and BitLocker state: on this Home edition Win32_EncryptableVolume
+        // returns nothing from CIMV2 and everything from SecurityCenter2, so
+        // querying only the first quietly reported no encryption method on every
+        // machine that has never had BitLocker configured. The two namespaces are
+        // not interchangeable and picking one is a silent failure, not a fallback.
+        foreach (var scope in new[] { @"root\CIMV2", @"root\SecurityCenter2" })
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(
+                    scope, "SELECT * FROM Win32_EncryptableVolume WHERE DriveLetter = 'C:'");
+
+                foreach (var obj in searcher.Get())
+                {
+                    var method = Convert.ToInt32(obj["ConversionMethod"] ?? 0);
+
+                    data["bitlocker_method"] = method switch
+                    {
+                        3 => "XTS-AES",
+                        2 => "XTS",
+                        1 => "AES",
+                        _ => "None",
+                    };
+
+                    return;
+                }
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>Whether the built-in Guest account can sign in without a password.</summary>
+    /// <remarks>
+    /// Guest is a real exposure on a Home edition - on by default there, off in
+    /// Pro - so the register has to be able to show which of those a given laptop
+    /// is. The account name is fixed by Windows, so reading its Disabled flag is
+    /// enough and no enumeration is needed.
+    /// </remarks>
+    static void CollectGuestAccount(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Disabled FROM Win32_UserAccount WHERE Name = 'Guest' AND LocalAccount = TRUE");
+
+            foreach (var obj in searcher.Get())
+            {
+                if (obj["Disabled"] is not null)
+                {
+                    data["guest_account_enabled"] = Convert.ToBoolean(obj["Disabled"]) ? "false" : "true";
+                }
+
+                return;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Automatic sign-in: does this machine let itself in after a reboot?
+    /// </summary>
+    /// <remarks>
+    /// Autologon with a stored password is the highest-severity reading in this
+    /// collector. The machine signs itself in after every restart, so a stolen
+    /// laptop opens onto a logged-in desktop with no barrier at all - and
+    /// BitLocker on the disk does nothing about it, because the volume is already
+    /// unlocked by the time the thief touches the keyboard.
+    ///
+    /// The password itself is never read. Only its presence as a value matters,
+    /// and shipping it off the machine would create a secret the server has no
+    /// business holding. Both the username and the password must be present: a
+    /// leftover username with no password is not an autologon.
+    /// </remarks>
+    static void CollectSignIn(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var winlogon = Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon");
+
+            var user = winlogon?.GetValue("DefaultUserName") as string;
+            var password = winlogon?.GetValue("DefaultPassword") as string;
+
+            data["auto_logon_enabled"] =
+                !string.IsNullOrWhiteSpace(user) && !string.IsNullOrWhiteSpace(password)
+                    ? "true"
+                    : "false";
+        }
+        catch { }
+
+        CollectGuestAccount(data);
+    }
+
+    /// <summary>
+    /// Whether the screen locks on its own, and after how long.
+    /// </summary>
+    /// <remarks>
+    /// This is the practical half of a lost-laptop assessment. BitLocker protects
+    /// a machine that is powered down, but a session left unlocked by a walk-away
+    /// is fully readable, so "encrypted" and "safe to lose" are not the same
+    /// answer and the register has to be able to show both.
+    ///
+    /// These settings live under the user profile rather than on the machine, so
+    /// this reads the profile belonging to the account the agent runs as. Where
+    /// the person at the keyboard differs from that account it is a partial
+    /// answer; nothing is invented to cover the gap, because publishing one
+    /// person's screen-lock setting as the machine's would be a security finding
+    /// in the wrong direction. That user's next fingerprint corrects it.
+    ///
+    /// A zero timeout with the switch on means "lock immediately". That is a real
+    /// and desirable setting, so it is reported as lock-on with no minute count,
+    /// never as "no timeout configured".
+    /// </remarks>
+    static void CollectLockScreen(Dictionary<string, string> data)
+    {
+        try
+        {
+            // The per-user desktop settings live at "Control Panel\Desktop"
+            // directly under the profile root, NOT inside the "Desktop" folder -
+            // there is no such profile subfolder at all, so the previous lookup
+            // found no directory, silently returned, and left both screen-lock
+            // fields absent on every machine.
+            var desktop = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+
+            if (desktop?.GetValue("ScreenSaveActive") is not string active)
+            {
+                return;
+            }
+
+            var enabled = active == "1";
+            data["screen_lock_enabled"] = enabled ? "true" : "false";
+
+            if (! enabled) return;
+
+            // A missing or zero timeout with the switch on means "lock
+            // immediately", which is a real and desirable setting. It is
+            // reported as lock-on with no minute count rather than as a
+            // malformed reading, and never as "no timeout configured".
+            if (desktop.GetValue("ScreenSaveTimeOut") is string timeout
+                && int.TryParse(timeout, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds)
+                && seconds > 0)
+            {
+                data["lock_timeout_minutes"] = Math.Round(seconds / 60.0)
+                    .ToString(CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                data["lock_timeout_minutes"] = "0";
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>BIOS/UEFI version and its release date.</summary>
+    /// <remarks>
+    /// Firmware age decides whether a machine is even eligible for current
+    /// security features, and a Secure Boot reading cannot be interpreted without
+    /// knowing what the firmware supports at all.
+    ///
+    /// ReleaseDate goes through the DMTF parser for the same reason the OS install
+    /// date needs it: it arrives as a string, and Convert.ToDateTime throws on it,
+    /// which is what kept this field empty every time it was filled in by hand.
+    /// </remarks>
+    static void CollectFirmware(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT SMBIOSBIOSVersion, ReleaseDate FROM Win32_BIOS");
+
+            foreach (var obj in searcher.Get())
+            {
+                data["bios_version"] = (obj["SMBIOSBIOSVersion"]?.ToString() ?? "").Trim();
+
+                var released = ParseWmiDate(obj["ReleaseDate"]);
+
+                if (released is not null)
+                {
+                    data["bios_date"] = released.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                }
+
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Laptop-or-desktop, and the model string, read rather than typed in.</summary>
+    /// <remarks>
+    /// Chassis is what separates a laptop from a desktop in an asset register, and
+    /// today somebody types it by hand into every record - the one field where
+    /// transcription errors are a matter of time.
+    ///
+    /// ChassisTypes is a bitfield of the shapes the case *could* be, not a
+    /// statement of what this machine is, so it is read as a hint only: every
+    /// bit Windows uses for a portable enclosure is checked, and anything else
+    /// that is not genuinely unspecified is reported as a desktop.
+    /// </remarks>
+    static void CollectChassis(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_SystemEnclosure");
+
+            foreach (var obj in searcher.Get())
+            {
+                // ChassisTypes is a uint16 ARRAY on most firmware, not the single
+                // uint32 the documentation implies, and it arrives boxed as
+                // object. Convert.ToUInt32 on the array threw, the catch-all ate
+                // it, and chassis_type was never set on any machine - which is
+                // how the one field an operator would never have typed by hand
+                // turned out to be silently empty too.
+                //
+                // Every value in the array is considered, because the list means
+                // "any of these shapes", and a portable bit alongside a generic
+                // one still makes it a laptop.
+                var raw = obj["ChassisTypes"];
+
+                var types = new List<ulong>();
+
+                if (raw is Array list)
+                {
+                    foreach (var entry in list)
+                    {
+                        try
+                        {
+                            types.Add(entry is null ? 0UL : Convert.ToUInt64(entry));
+                        }
+                        catch { }
+                    }
+                }
+                else if (raw is not null)
+                {
+                    try { types.Add(Convert.ToUInt64(raw)); } catch { }
+                }
+
+                // 8, 9, 10, 14, 30, 31, 32, 33 are portable, laptop, notebook,
+                // sub-notebook, handheld, docking station and all-in-one. Only
+                // the genuinely portable ones count; a docking station is a
+                // laptop accessory, not a laptop.
+                var portableBits = new ulong[] { 8, 9, 10, 14, 30, 31, 32, 33 };
+                bool portable = types.Any(t => portableBits.Contains(t));
+
+                if (portable)
+                {
+                    data["chassis_type"] = "Laptop";
+                }
+                else if (types.Any(t => t != 0))
+                {
+                    data["chassis_type"] = "Desktop";
+                }
+
+                break;
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT Model FROM Win32_ComputerSystem");
+
+            foreach (var obj in searcher.Get())
+            {
+                data["device_model"] = (obj["Model"]?.ToString() ?? "").Trim();
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Screen resolution, when there is a real session to measure.</summary>
+    /// <remarks>
+    /// Reported only for an interactive session. A service session has no
+    /// meaningful resolution, and publishing the 1024x768 placeholder from one
+    /// would look exactly like a real finding about a broken display driver.
+    /// </remarks>
+    static void CollectScreen(Dictionary<string, string> data)
+    {
+        try
+        {
+            if (! Environment.UserInteractive) return;
+
+            var screen = System.Windows.Forms.Screen.PrimaryScreen;
+
+            if (screen is null) return;
+
+            var size = screen.Bounds.Size;
+
+            if (size.Width > 0 && size.Height > 0)
+            {
+                data["screen_resolution"] = size.Width.ToString(CultureInfo.InvariantCulture)
+                    + 'x'
+                    + size.Height.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Real-time protection, and how long ago Defender last scanned.</summary>
+    /// <remarks>
+    /// antivirus_enabled already exists but reports the product as a whole.
+    /// Real-time protection is a separate switch that can read as on while the
+    /// engine is not actually inspecting anything, and a machine that has never
+    /// run a scan is a materially different risk from one that scans daily. Both
+    /// readings are needed before "antivirus: yes" can be taken at face value.
+    ///
+    /// The scan age is in whole days to match antivirus_signature_age_days so the
+    /// two compare directly. Fresh definitions on a machine whose last scan was
+    /// months ago means updates are arriving on a device that is not being
+    /// checked - the pair together catches what either one misses.
+    /// </remarks>
+    static void CollectDefenderDetail(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\Defender",
+                "SELECT RealTimeProtectionEnabled, QuickScanEndTime, FullScanEndTime FROM MSFT_MpComputerStatus");
+
+            foreach (var obj in searcher.Get())
+            {
+                var realTime = obj["RealTimeProtectionEnabled"];
+
+                if (realTime is not null)
+                {
+                    data["defender_realtime_enabled"] = Convert.ToBoolean(realTime) ? "true" : "false";
+                }
+
+                // The newer scan wins. A machine that ran a quick scan this
+                // morning is better protected than one whose last full scan was
+                // recent but whose quick scans have silently stopped, and
+                // reporting only one of the two would miss exactly that case.
+                var quick = ParseWmiDate(obj["QuickScanEndTime"]);
+                var full = ParseWmiDate(obj["FullScanEndTime"]);
+
+                var last = quick is null
+                    ? full
+                    : (full is null ? quick : (quick > full ? quick : full));
+
+                if (last is not null)
+                {
+                    var days = (int) Math.Max(0, (DateTime.Now.Date - last.Value.LocalDateTime.Date).TotalDays);
+
+                    data["defender_last_scan_days"] = days.ToString(CultureInfo.InvariantCulture);
+                }
+
+                break;
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Hotfix count, and when the last patch was applied.</summary>
+    /// <remarks>
+    /// The existing pending_reboot flag only says a servicing operation did not
+    /// finish; it says nothing about how far behind the machine is. A laptop one
+    /// reboot from current and one that has been off the network for two months
+    /// both report pending_reboot = true, and they need completely different
+    /// responses from whoever owns the device.
+    ///
+    /// What is published is the applied side - how many hotfixes and how recent -
+    /// rather than a count of updates waiting. That count needs Windows Update
+    /// orchestrator COM activation, unavailable in a service session and
+    /// unreliable when present. A number that is sometimes readable and sometimes
+    /// not would be read as an accurate patch state on exactly the machines where
+    /// it is missing, which is worse than leaving it out. Patch recency is what a
+    /// fleet decision turns on anyway.
+    /// </remarks>
+    static void CollectPatchState(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT * FROM Win32_QuickFixEngineering");
+
+            var installed = 0;
+            DateTimeOffset? newest = null;
+
+            foreach (var obj in searcher.Get())
+            {
+                installed++;
+
+                // Per-row isolation, for the same reason the licensing scan has
+                // it: one unreadable row must not cost the whole field.
+                //
+                // ParseWmiDate handles every shape this column arrives in -
+                // a real DateTime, a DMTF string, or the localised "9/8/2026"
+                // that Win32_QuickFixEngineering actually sends. Testing the
+                // types here instead duplicated that knowledge and got the
+                // short-date case wrong.
+                try
+                {
+                    var patched = ParseWmiDate(obj["InstalledOn"]);
+
+                    if (patched is not null && (newest is null || patched > newest))
+                    {
+                        newest = patched;
+                    }
+                }
+                catch { }
+            }
+
+            if (newest is not null)
+            {
+                data["last_hotfix_installed_at"] = newest.Value
+                    .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+
+            if (installed > 0)
+            {
+                data["hotfix_count"] = installed.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+        catch { }
+    }
+
     static void CollectDomain(Dictionary<string, string> data)
     {
         try
@@ -551,9 +1076,78 @@ public static class FingerprintCollector
             return new DateTimeOffset(asDateTime);
         }
 
+        // The WMI provider is not obliged to hand back DMTF, and the two shapes
+        // have to be told apart before either parser is tried - in the wrong
+        // order they produce confidently wrong dates rather than no date.
+        //
+        // Win32_OperatingSystem.InstallDate is DMTF: "20260813063802.000000+420",
+        // which ManagementDateTimeConverter reads and DateTimeOffset.TryParse
+        // rejects outright. Win32_QuickFixEngineering.InstalledOn is a localised
+        // short date: "9/8/2026", which the converter rejects with
+        // ArgumentOutOfRangeException.
+        //
+        // Detecting DMTF by shape rather than by trying one parser and seeing
+        // what happens is what makes this safe. A bare TryParse accepts the DMTF
+        // string under some locales and misreads it - reading a September install
+        // as 8 December - and a hotfix date silently landing in the wrong month
+        // is far worse than a field left empty.
+        var text = value.ToString()?.Trim() ?? "";
+
+        if (text.Length == 0)
+        {
+            return null;
+        }
+
+        bool looksLikeDmtf = text.Length >= 14
+            && text[0..4].All(char.IsDigit)
+            && text.All(c => char.IsDigit(c) || c == '.' || c == '+' || c == '-');
+
+        if (looksLikeDmtf)
+        {
+            try
+            {
+                return ManagementDateTimeConverter.ToDateTime(text);
+            }
+            catch (ManagementException) { return null; }
+            catch (ArgumentException) { return null; }
+            catch (FormatException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+            catch (OverflowException) { return null; }
+        }
+
+        // Not DMTF, so a localised date string. The CURRENT culture is the only
+        // correct reader here, and using the invariant one instead is a
+        // month-level data error rather than a formatting quirk.
+        //
+        // This machine reports CurrentCulture = en-ID, under which "9/8/2026" is
+        // the 8th of September. Parsed invariant it becomes the 9th of September,
+        // and parsed against an en-US locale - which is what a hard-coded
+        // invariant assumption implies - it would be the 9th again. The month is
+        // wrong either way except by accident, and a patch register that claims
+        // a December install for a September hotfix is worse than useless.
+        //
+        // The current culture is therefore authoritative and the invariant parse
+        // is a last resort for a machine whose locale genuinely rejects the
+        // string. Neither is trusted enough to be worth a second opinion when
+        // they disagree: the machine's own locale is the only evidence there is.
         try
         {
-            return ManagementDateTimeConverter.ToDateTime(value.ToString()!);
+            if (DateTimeOffset.TryParse(
+                    text,
+                    CultureInfo.CurrentCulture,
+                    DateTimeStyles.AllowWhiteSpaces,
+                    out var localised))
+            {
+                return localised;
+            }
+
+            return DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces,
+                out var invariant)
+                ? invariant
+                : null;
         }
         catch (ManagementException)
         {
@@ -571,7 +1165,12 @@ public static class FingerprintCollector
         {
             return null;
         }
+        catch (OverflowException)
+        {
+            return null;
+        }
     }
+
     static void CollectStorage(Dictionary<string, string> data)
     {
         try
@@ -660,6 +1259,17 @@ public static class FingerprintCollector
                     .ToString(CultureInfo.InvariantCulture);
                 data["cpu_physical_cores"] = Convert.ToInt32(obj["NumberOfCores"] ?? 0)
                     .ToString(CultureInfo.InvariantCulture);
+
+                // 64-bit is not a formality: Credential Guard, memory integrity
+                // and VBS are not available on a 32-bit build, so this reading is
+                // what qualifies a machine for remediation rather than for
+                // replacement - the difference between patching and retiring it.
+                var addressWidth = Convert.ToInt32(obj["AddressWidth"] ?? 0);
+
+                if (addressWidth > 0)
+                {
+                    data["cpu_architecture"] = addressWidth == 64 ? "x64" : "x86";
+                }
 
                 break;
             }
