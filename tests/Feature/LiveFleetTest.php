@@ -156,6 +156,14 @@ class LiveFleetTest extends TestCase
         $this->assertSame(412, $telemetry->battery_cycle_count);
     }
 
+    /**
+     * The fleet page shows every reading the agent sends, as a wrapping
+     * label/value grid per device rather than a nine-column table.
+     *
+     * The assertions below are deliberately about *values* surviving the
+     * redesign, not about the old layout strings ("health 74%", "412 cycles"),
+     * which no longer exist: the same facts are now labelled cells.
+     */
     public function test_live_fleet_page_lists_devices_with_telemetry(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -172,9 +180,61 @@ class LiveFleetTest extends TestCase
             ->assertSee('HOST-LIVE-01')
             ->assertSee('mbul')
             ->assertSee('MITO-OFFICE')
+            // Labels proving the grid is rendered, plus the readings that used
+            // to be squeezed into single table cells.
+            ->assertSee('RAM')
             ->assertSee('2x 8GB @ 3200 MHz')
-            ->assertSee('health 74%')
-            ->assertSee('412 cycles');
+            ->assertSee('Battery health')
+            ->assertSee('74%')
+            ->assertSee('Battery cycles')
+            ->assertSee('412')
+            ->assertSee('Wi-Fi')
+            ->assertSee('MITO-OFFICE');
+    }
+
+    /**
+     * A device is one tall block, so the page gets long fast. It is paginated
+     * and the page size is user-selectable; without this a 40-laptop fleet
+     * would render 40 blocks in one scroll.
+     */
+    public function test_live_fleet_paginates_active_devices(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        foreach (range(1, 12) as $i) {
+            AgentApiToken::create([
+                'name' => sprintf('laptop-%02d', $i),
+                'device_id' => base64_encode("device-$i"),
+                'token_hash' => hash('sha256', "tok-$i"),
+                'token_plain' => "tok-$i",
+            ]);
+        }
+
+        $this->actingAs($admin)->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('Showing 1')
+            // Default page size is 10, so the 11th and 12th are not rendered.
+            ->assertDontSee('laptop-11')
+            ->assertDontSee('laptop-12');
+
+        $this->actingAs($admin)->get(route('agent.fleet', ['page' => 2]))
+            ->assertOk()
+            ->assertSee('laptop-11')
+            ->assertSee('laptop-12');
+    }
+
+    /**
+     * The page size is whitelisted in the controller. A crafted value must fall
+     * back to the default rather than asking Laravel for an enormous paginator.
+     */
+    public function test_live_fleet_ignores_an_out_of_range_page_size(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('agent.fleet', ['per_page' => 100000]))
+            ->assertOk()
+            ->assertViewHas('perPage', 10);
     }
 
     public function test_live_fleet_requires_the_manage_agents_gate(): void
