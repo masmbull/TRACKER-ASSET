@@ -55,74 +55,14 @@
             </div>
         </x-card>
     @endif
-    <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <x-card>
-            <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security</p>
-            <dl class="mt-3 space-y-2 text-theme-sm">
-                @php
-                    $security = [
-                        'Antivirus' => $fingerprint->antivirus_product,
-                        'Real-time protection' => $fingerprint->antivirus_enabled === null ? null : ($fingerprint->antivirus_enabled ? 'On' : 'Off'),
-                        'Signature age' => $fingerprint->antivirus_signature_age_days !== null ? $fingerprint->antivirus_signature_age_days.' days' : null,
-                        'Firewall' => $fingerprint->firewall_enabled === null ? null : ($fingerprint->firewall_enabled ? 'On' : 'Off'),
-                        'Firewall profiles off' => $fingerprint->firewall_profiles_off ?: null,
-                        'Secure boot' => $fingerprint->secure_boot_enabled === null ? null : ($fingerprint->secure_boot_enabled ? 'On' : 'Off'),
-                        'BitLocker' => $fingerprint->bitlocker_status,
-                        'BitLocker method' => $fingerprint->bitlocker_method,
-                        'User Account Control' => $fingerprint->uac_enabled === null ? null : ($fingerprint->uac_enabled ? 'On' : 'Off'),
-                        'TPM' => $fingerprint->tpm_present === null ? null : ($fingerprint->tpm_present ? 'Present' : 'Absent'),
-                        'RDP' => $fingerprint->rdp_enabled === null ? null : ($fingerprint->rdp_enabled ? 'Enabled' : 'Disabled'),
-                        'Local admins' => $fingerprint->local_admin_count,
-                        'Domain' => $fingerprint->domain,
-                    ];
-                @endphp
-                @foreach($security as $label => $value)
-                    <div class="flex items-center justify-between gap-4 border-b border-gray-100 pb-2 last:border-0 dark:border-gray-700">
-                        <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                        <dd class="text-right font-medium text-gray-800 dark:text-white">
-                            {{ $value === null || $value === '' ? '—' : $value }}
-                        </dd>
-                    </div>
-                @endforeach
-            </dl>
-        </x-card>
-
-        <x-card>
-            <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">System &amp; licensing</p>
-            <dl class="mt-3 space-y-2 text-theme-sm">
-                @php
-                    $system = [
-                        'Edition' => $fingerprint->windows_edition,
-                        'Build' => $fingerprint->os_build,
-                        'Activation' => $fingerprint->activation_status,
-                        'Licence channel' => $fingerprint->license_channel,
-                        'Installed on' => $fingerprint->os_installed_at?->format('d M Y'),
-                        'Last boot' => $fingerprint->last_boot_at,
-                        'Pending reboot' => $fingerprint->pending_reboot === null ? null : ($fingerprint->pending_reboot ? 'Yes' : 'No'),
-                        'Time zone' => $fingerprint->timezone,
-                        'Disk type' => $fingerprint->disk_type,
-                        'SMART' => $fingerprint->smart_health,
-                        'Disk predicted failure' => $fingerprint->smart_predicted_failure === null ? null : ($fingerprint->smart_predicted_failure ? 'Yes' : 'No'),
-                        'CPU cores' => $fingerprint->cpu_cores !== null ? $fingerprint->cpu_physical_cores.' physical / '.$fingerprint->cpu_cores.' logical' : null,
-                        'RAM' => $telemetry?->ram_config,
-                        'RAM slots' => $ramSlots,
-                        'GPU' => $telemetry?->gpu,
-                        'Monitor' => $fingerprint->monitor,
-                        'Startup entries' => $fingerprint->startup_count,
-                    ];
-                @endphp
-                @foreach($system as $label => $value)
-                    <div class="flex items-center justify-between gap-4 border-b border-gray-100 pb-2 last:border-0 dark:border-gray-700">
-                        <dt class="text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                        <dd class="text-right font-medium text-gray-800 dark:text-white">
-                            {{ $value === null || $value === '' ? '—' : $value }}
-                        </dd>
-                    </div>
-                @endforeach
-            </dl>
-        </x-card>
-    </div>
-
+    {{-- No spec sheet here on purpose.
+         This page used to repeat Security and System & licensing in full, but the
+         fleet detail modal already shows every one of those fields - the two
+         layouts were maintained separately and had already drifted, which is how
+         "Firewall profiles off", "BitLocker method" and "Local admins" ended up
+         visible in only one of them. Those three now live in the modal, so this
+         page keeps the readings the modal cannot show: the full software list,
+         with search and paging. --}}
     <x-card>
         <div class="flex flex-wrap items-center justify-between gap-2">
             <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">

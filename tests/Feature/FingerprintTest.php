@@ -491,32 +491,38 @@ class FingerprintTest extends TestCase
     }
 
     /**
-     * Fields the agent reports but the page used to drop: the ones an audit
-     * asks for and never saw.
+     * The fleet detail modal is the single place spec fields are shown.
+     *
+     * This page used to repeat Security and System & licensing in full, and the
+     * two drifted apart: "Firewall profiles off", "BitLocker method" and "Local
+     * admins" appeared only here. With the duplicate blocks gone, those three
+     * must be reachable from the modal instead, or they are lost entirely.
      */
-    public function test_the_page_shows_every_reported_security_and_system_field(): void
+    public function test_the_fleet_modal_shows_the_fields_the_detail_page_dropped(): void
     {
         $this->postJson('/api/agent/fingerprint', $this->payload([
             'firewall_profiles_off' => 'Domain,Public',
             'bitlocker_method' => 'TPM',
-            'secure_boot_enabled' => 'true',
+            'local_admin_count' => 3,
             'ram_modules' => 1,
             'ram_slots' => 2,
-            'timezone' => 'SE Asia Standard Time',
         ]), $this->headers())->assertOk();
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('agent.fingerprint', $this->agentToken))
-            ->getContent();
+            ->get(route('agent.fleet'))->getContent();
 
         $this->assertStringContainsString('Firewall profiles off', $html);
         $this->assertStringContainsString('Domain,Public', $html);
         $this->assertStringContainsString('BitLocker method', $html);
-        $this->assertStringContainsString('TPM', $html);
-        $this->assertStringContainsString('Secure boot', $html);
-        $this->assertStringContainsString('RAM slots', $html);
+        $this->assertStringContainsString('Local admins', $html);
         $this->assertStringContainsString('1 of 2', $html);
-        $this->assertStringContainsString('Time zone', $html);
+
+        // And the page itself must no longer repeat the spec sheet.
+        $page = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('agent.fingerprint', $this->agentToken))->getContent();
+
+        $this->assertStringNotContainsString('User Account Control', $page);
+        $this->assertStringContainsString('Installed software', $page);
     }
 
     public function test_the_fleet_detail_shows_ram_slot_occupancy(): void
@@ -567,6 +573,11 @@ class FingerprintTest extends TestCase
             ->assertSee('Antivirus off');
     }
 
+    /**
+     * The page exists for the software list now; the spec sheet moved to the
+     * fleet detail modal. This asserts the software table still renders, without
+     * re-asserting fields that deliberately no longer live here.
+     */
     public function test_the_fingerprint_page_renders_the_installed_software(): void
     {
         $this->postJson('/api/agent/fingerprint', $this->payload([
@@ -578,9 +589,9 @@ class FingerprintTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->get(route('agent.fingerprint', $this->agentToken))
             ->assertOk()
-            ->assertSee('Visual Studio Code')
             ->assertSee('Installed software')
-            ->assertSee('Windows Defender');
+            ->assertSee('Visual Studio Code')
+            ->assertSee('1.95.0');
     }
 
     public function test_the_page_explains_a_device_that_has_not_reported_yet(): void

@@ -255,12 +255,20 @@ class AgentFleetController extends Controller
                 'AV enabled' => $yesNo($fp?->antivirus_enabled),
                 'AV signature' => $fp?->antivirus_signature_age_days !== null ? $fp->antivirus_signature_age_days.'d old' : null,
                 'Firewall' => $onOff($fp?->firewall_enabled),
+                // Which profiles are off matters more than whether the firewall
+                // is on: "on" with the Public profile disabled is the machine an
+                // operator is actually worried about, and that was only visible
+                // on the old duplicate detail page.
+                'Firewall profiles off' => $fp?->firewall_profiles_off ?: null,
                 'UAC' => $onOff($fp?->uac_enabled),
                 'Secure boot' => $onOff($fp?->secure_boot_enabled),
                 'TPM' => $fp?->tpm_present === null ? null : ($fp->tpm_present ? 'present' : 'absent'),
                 'BitLocker' => $fp?->bitlocker_status,
+                'BitLocker method' => $fp?->bitlocker_method,
                 'RDP' => $onOff($fp?->rdp_enabled),
                 'Pending reboot' => $yesNo($fp?->pending_reboot),
+                'Local admins' => $fp?->local_admin_count,
+                'Domain' => $fp?->domain,
             ],
             'Installed software' => [
                 'Programs' => $fp?->software_count,
@@ -396,10 +404,6 @@ class AgentFleetController extends Controller
             'search' => $search,
             'pageSizes' => self::SOFTWARE_PAGE_SIZES,
             'perPage' => $perPage,
-            // Formatted here, not in the view: ramSlotsLabel() is private to this
-            // controller, and the fleet view already reuses the same helper so the
-            // two pages cannot drift apart on how a slot count is worded.
-            'ramSlots' => $this->ramSlotsLabel($fingerprint),
         ]);
     }
 
