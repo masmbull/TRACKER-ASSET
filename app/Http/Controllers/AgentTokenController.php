@@ -19,6 +19,31 @@ class AgentTokenController extends Controller
     {
         $token->update(['last_used_at' => now()]);
 
+        return $this->streamBinary($request);
+    }
+
+    /**
+     * Stream the self-contained binary plus the zero-config trailer.
+     *
+     * Deliberately takes no token and needs no enrolled device. The agent
+     * registers itself against /api/agent/register the first time it runs, using
+     * the server address carried in the trailer, so requiring an existing token
+     * to obtain the binary made the very first deployment impossible - a
+     * chicken-and-egg deadlock with no way out except editing the database by
+     * hand.
+     *
+     * This is also the URL every deployed agent re-pulls from when the fleet is
+     * told to update. A redirect there was doubly wrong: an agent that follows
+     * it would end up on a token-scoped URL belonging to some other machine, and
+     * one that does not follow it would save a 49 KB HTML page as TrackerAgent.exe.
+     */
+    public function downloadLatest(Request $request)
+    {
+        return $this->streamBinary($request);
+    }
+
+    private function streamBinary(Request $request)
+    {
         $exePath = storage_path('app/agent/TrackerAgent.exe');
         if (! file_exists($exePath)) {
             return back()->with('error', 'Agent executable not found. Build the agent first.');
@@ -75,26 +100,6 @@ class AgentTokenController extends Controller
         ], JSON_UNESCAPED_SLASHES));
 
         return "\n<<<TRACKER-AGENT-CONFIG:{$payload}:END>>>\n";
-    }
-
-    public function downloadLatest()
-    {
-        // Only an agent that actually reports something may be used to serve an
-        // update. Previously this took the newest row, or invented one with an
-        // empty token hash and no device_id when the table was empty — so a
-        // machine with a freshly wiped database would get a download tied to a
-        // token that can never authenticate or be shown in the fleet.
-        $token = AgentApiToken::query()
-            ->whereNotNull('device_id')
-            ->orderByDesc('id')
-            ->first();
-
-        if (! $token) {
-            return redirect()->route('agent.index')
-                ->with('error', 'No enrolled agent to serve an update from. Deploy the agent on a machine first.');
-        }
-
-        return redirect()->route('agent.download', $token);
     }
 
     public function revoke(AgentApiToken $token)
