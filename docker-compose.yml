@@ -26,6 +26,36 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
 
+  # Scheduler. Not optional: without it agent:resolve-stale-commands (every 5
+  # min) and audit:sweep (weekly) never run, so a command queued for a revoked
+  # or expired token stays "pending" forever and the fleet stops re-verifying
+  # itself. Separate from `app` on purpose - the image runs php-fpm, so
+  # overriding the app's command would take the web server down with it.
+  # Confirm it is alive with: docker compose exec app php artisan schedule:list
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tracker-asset-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - APP_ENV=local
+      - APP_KEY=${APP_KEY}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    command: php artisan schedule:work
+
   postgres:
     image: postgres:16-alpine
     container_name: tracker-asset-db

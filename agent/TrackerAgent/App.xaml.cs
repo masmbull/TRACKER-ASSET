@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -139,6 +140,18 @@ public partial class App : System.Windows.Application
 
     private async Task CommandLoop(AgentConfig config)
     {
+        // The tray app and the --daemon both keep the fleet page alive, and both
+        // must do the same work. This loop used to poll the inbox and nothing
+        // else, so a device left in tray mode — which is exactly what happens
+        // after an auto-update, since the restarted process is relaunched
+        // without the original command-line arguments — stopped refreshing its
+        // telemetry entirely. The fleet page then showed stale battery and disk
+        // readings and eventually reported the laptop offline even though it was
+        // alive and polling. Intervals match AgentRunner so the two paths are
+        // indistinguishable from the server's point of view.
+        var nextHeartbeat = DateTimeOffset.MinValue;
+        var nextFingerprint = DateTimeOffset.MinValue;
+
         while (true)
         {
             try
@@ -203,6 +216,70 @@ public partial class App : System.Windows.Application
             catch { }
 
             await Task.Delay(TimeSpan.FromSeconds(15));
+
+            // MinValue on both, so a tray app that has just been updated reports
+            // immediately instead of looking dead for a full interval.
+            if (DateTimeOffset.UtcNow >= nextHeartbeat)
+            {
+                RunHeartbeat(config);
+                nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+            }
+
+            if (DateTimeOffset.UtcNow >= nextFingerprint)
+            {
+                RunFingerprint(config);
+                nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+            }
+        }
+    }
+
+    /** Matches AgentRunner so both runtime modes report on the same cadence. */
+    private const int HeartbeatSeconds = 60;
+
+    private const int FingerprintSeconds = 24 * 60 * 60;
+
+    /// <summary>
+    /// Push a telemetry reading, reusing the daemon's collector.
+    /// </summary>
+    /// <remarks>
+    /// AgentRunner's methods are internal to that class, so the tray path keeps
+    /// its own thin copy rather than reaching into private members. Both catch
+    /// everything: a machine with a locked-down registry must still keep its
+    /// inbox poll and its tray menu alive.
+    /// </remarks>
+    private void RunHeartbeat(AgentConfig config)
+    {
+        try
+        {
+            var payload = HardwareCollector.Collect();
+            payload["device_id"] = config.DeviceId;
+
+            if (!Api.Heartbeat(config.ServerUrl, config.Token, payload))
+            {
+                // Deliberately silent. A transient failure is not worth a tray
+                // balloon every 60 seconds; the server marks the device offline
+                // on its own if it really has stopped reporting.
+                Debug.WriteLine("Heartbeat rejected or unreachable.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Heartbeat error: {ex.Message}");
+        }
+    }
+
+    private void RunFingerprint(AgentConfig config)
+    {
+        try
+        {
+            var payload = FingerprintCollector.Collect();
+            payload["device_id"] = config.DeviceId;
+
+            Api.Fingerprint(config.ServerUrl, config.Token, payload);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Fingerprint error: {ex.Message}");
         }
     }
 
