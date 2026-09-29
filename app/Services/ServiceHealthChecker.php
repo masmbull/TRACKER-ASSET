@@ -337,10 +337,21 @@ class ServiceHealthChecker
 
     private function probeHealthEndpoint(): array
     {
+        // Skippable, and skipped in the test suite. This probe makes a real
+        // loopback request, so "everything is healthy" was only ever true when a
+        // developer happened to have `artisan serve` running on the configured
+        // APP_URL. The suite reported a healthy fleet as broken whenever it did
+        // not, and passed whenever it did - a test that measures the developer's
+        // workstation rather than the code.
+        //
+        // The check is kept enabled everywhere else, and stays a real request
+        // rather than a self-call: an endpoint that answers internally but is
+        // unreachable from outside is still a broken health endpoint.
+        if (! config('services.probe_health_endpoint', true)) {
+            return $this->probe(static fn () => 'skipped in this environment', 'Health endpoint', 'What the load balancer and Docker poll');
+        }
+
         return $this->probe(function () {
-            // Called over the loopback rather than faked: a health endpoint that
-            // answers internally but is unreachable from outside is still a
-            // broken health endpoint.
             $url = rtrim((string) config('app.url'), '/').'/api/health';
 
             $context = stream_context_create([

@@ -92,6 +92,7 @@
                         $polling = $device->last_used_at?->gt(now()->subSeconds(90)) ?? false;
                         $online = $telemetry?->isOnline() ?? false;
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
+                        $deviceOperation = $activeOperations->get($device->id);
                     @endphp
                     <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
                         <td class="py-3 px-3">
@@ -110,10 +111,23 @@
                             </button>
                         </td>
                         <td class="py-3 px-3">
+                            {{-- Flat for the same reason as the actions column: a
+                                 conditional nested in another one, holding a Blade
+                                 component, does not compile to balanced PHP. --}}
+                            @php
+                                $isSettingUp = $deviceOperation !== null
+                                    && in_array($deviceOperation->command, ['install', 'update'], true);
+                            @endphp
+
                             @if(! $device->isUsable())
                                 <x-badge variant="error" :dot="true">revoked</x-badge>
                             @elseif($online || $polling)
                                 <x-badge variant="success" :dot="true">online</x-badge>
+                            @elseif($telemetry === null && $isSettingUp)
+                                {{-- A machine mid-install has no telemetry yet, and
+                                     "never scanned" reads as a fault with the machine
+                                     rather than an install still running on it. --}}
+                                <x-badge variant="info" :dot="true">{{ $deviceOperation->command }}ing</x-badge>
                             @elseif($telemetry === null)
                                 <x-badge variant="gray" :dot="true">never scanned</x-badge>
                             @else
@@ -122,6 +136,21 @@
                             <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400">
                                 {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans() : 'no report yet' }}
                             </span>
+
+                            {{-- Install and update progress. Without this a rollout is
+                                 a blank wait: there is no way to tell a machine working
+                                 through its first inventory from one that hung
+                                 halfway, and the first inventory is the slow step. --}}
+                            @if($isSettingUp)
+                                <div class="mt-2 w-full max-w-[12rem]">
+                                    <div class="mb-1 truncate text-theme-xs {{ $deviceOperation->isStalled() ? 'font-medium text-error-500' : 'text-gray-500 dark:text-gray-400' }}">
+                                        {{ $deviceOperation->progressLabel() }}
+                                    </div>
+                                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                        <div class="h-full rounded-full transition-all duration-500 {{ $deviceOperation->isStalled() ? 'bg-error-500' : 'bg-brand-500' }}" style="width: {{ max($deviceOperation->progress ?? 2, 2) }}%"></div>
+                                    </div>
+                                </div>
+                            @endif
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300">
                             @if($telemetry?->battery_percent !== null)
@@ -178,7 +207,49 @@
                                      once in this modal, once more on the server side.
                                      Only reachable here: a revoked device lives in its own
                                      card, where nothing can be queued any more. --}}
-                                @if($pendingUninstalls->has($device->id))
+                                {{-- Conditions here are deliberately flat, never nested.
+
+                                     Two Blade traps are being avoided here, and both
+                                     cost a long debugging session. A single-line php
+                                     block written with the short form compiles to an
+                                     unterminated open tag, which swallows the rest of
+                                     the template into PHP and leaves every following
+                                     conditional uncompiled. And a component rendered
+                                     inside a conditional nested in another conditional
+                                     produces an if/endif pair that does not balance.
+                                     Both failures point somewhere else entirely - an
+                                     undefined variable, or a parse error on a line
+                                     that has nothing to do with this edit.
+
+                                     Note: this comment deliberately spells no
+                                     directives out. Naming one inside a Blade comment
+                                     is enough for it to be compiled as real markup,
+                                     which is exactly the imbalance this comment is
+                                     warning about. --}}
+                                @php
+                                    $operation = $activeOperations->get($device->id);
+                                    $isUninstallRunning = $operation !== null
+                                        && $operation->command === 'uninstall'
+                                        && $operation->isRunning();
+                                    $isUninstallQueued = $operation !== null
+                                        && $operation->command === 'uninstall'
+                                        && ! $operation->isRunning();
+                                @endphp
+
+                                @if($isUninstallRunning)
+                                    {{-- Red, and labelled "stalled", when the agent has
+                                         stopped reporting mid-operation. A confident
+                                         45% for an hour is the exact failure this
+                                         progress bar exists to expose. --}}
+                                    <div class="min-w-[10rem]">
+                                        <div class="mb-1 text-xs {{ $operation->isStalled() ? 'font-medium text-error-500' : 'text-gray-500 dark:text-gray-400' }}">
+                                            {{ $operation->progressLabel() }}
+                                        </div>
+                                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                            <div class="h-full rounded-full transition-all duration-500 {{ $operation->isStalled() ? 'bg-error-500' : 'bg-brand-500' }}" style="width: {{ max($operation->progress ?? 5, 5) }}%"></div>
+                                        </div>
+                                    </div>
+                                @elseif($isUninstallQueued)
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
                                     <button type="button"

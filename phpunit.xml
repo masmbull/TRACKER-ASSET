@@ -27,6 +27,10 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
+        <!-- The health-endpoint probe performs a real HTTP call to APP_URL, so
+             leaving it on made the suite report a healthy fleet as broken
+             whenever no dev server happened to be running. -->
+        <env name="SERVICES_PROBE_HEALTH_ENDPOINT" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

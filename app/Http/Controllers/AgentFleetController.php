@@ -103,6 +103,26 @@ class AgentFleetController extends Controller
             ->pluck('agent_token_id')
             ->flip();
 
+        // Every open operation per device, keyed by token id: an install being
+        // reported, an update in flight, an uninstall that has started. The
+        // table used to show one static "queued" label, which looks the same
+        // whether the agent picked the work up a second ago, is 80% through it,
+        // or died holding it - and "is it actually working?" is the only
+        // question worth asking while a fleet is being changed underneath
+        // people.
+        //
+        // Latest wins per device: a machine re-running its installer adopts the
+        // same row rather than stacking a second one, and ordering by id makes
+        // that explicit instead of relying on insertion order.
+        $activeOperations = AgentCommand::query()
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->whereNotNull('agent_token_id')
+            ->orderByDesc('id')
+            ->get()
+            ->filter($isDeliverable)
+            ->groupBy('agent_token_id')
+            ->map(fn ($rows) => $rows->first());
+
         // Revoked devices are split off: their agent can never authenticate
         // again, so every action column entry for them is dead weight and they
         // only dilute the count of machines an operator actually manages. This
@@ -183,6 +203,7 @@ class AgentFleetController extends Controller
             'latestAudits' => $latestAudits,
             'stats' => $stats,
             'pendingUninstalls' => $pendingUninstalls,
+            'activeOperations' => $activeOperations,
             'findingsByToken' => $findingsByToken,
         ]);
     }

@@ -36,6 +36,18 @@ public partial class InstallerWindow : Window
     private readonly Version? _installedVersion;
     private readonly Version? _newVersion;
 
+    /// <summary>
+    /// Token obtained during this install, kept so a later failure can be reported.
+    /// </summary>
+    /// <remarks>
+    /// Empty until registration succeeds, which is exactly the window where it is
+    /// useless: before registration there is no identity to report against, and
+    /// after it there always is. The catch block checks it rather than assuming a
+    /// token, so a failure during device discovery is not reported against a
+    /// device that was never created.
+    /// </remarks>
+    private string _installTokenForReporting = string.Empty;
+
     /// <summary>Fresh install (agent not present on this machine).</summary>
     public InstallerWindow() : this(InstallerMode.Install, null, null)
     {
@@ -272,16 +284,45 @@ public partial class InstallerWindow : Window
             Report(62, "Registering the device with the server...");
             var token = RegisterDevice(serverUrl, ReadRegistryString("Token") ?? string.Empty);
 
+            // Kept so the catch block can report a failure that happened after
+            // registration. Without it a crash at the autostart step would leave
+            // the fleet page showing an install frozen at its last percentage
+            // rather than the actual error.
+            _installTokenForReporting = token;
+
+            // From here on there is a token, so the fleet page can watch this
+            // machine being built instead of watching nothing. Before this point
+            // the steps are a folder and a file copy - fast, and unreportable
+            // because no identity exists yet to report against.
+            Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 62,
+                "Registering the device with the server...");
+
             Report(76, "Configuring autostart...");
             RegisterAutostart(destExe, serverUrl, token);
+            Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 76,
+                "Configuring autostart...");
 
             Report(86, "Starting the background agent...");
             StartDetached(destExe, $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+            Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
+                "Starting the background agent...");
 
+            // The first deep inventory is the slow step - it walks the whole
+            // software registry and runs a Windows Update search that measured
+            // 30 s on this hardware - and it is the step most likely to fail, so
+            // it is the one an operator most needs to see moving.
             Report(94, "Running the first hardware scan...");
+            Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
+                "Running the first hardware scan...");
             StartDetached(destExe, $"--url \"{serverUrl}\" --token \"{token}\"");
 
             Report(100, "Installation complete");
+            Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
+                "Installation complete",
+                new Dictionary<string, string>
+                {
+                    ["message"] = "Agent installed and the first hardware scan was dispatched.",
+                });
             Thread.Sleep(250);
             return true;
         }
@@ -289,6 +330,17 @@ public partial class InstallerWindow : Window
         {
             _lastError = ex.Message;
             Debug.WriteLine($"Install error: {ex}");
+
+            // Reported with whatever token was obtained, if any. A failed install
+            // that leaves no trace on the server is the worst outcome: the machine
+            // is broken and the fleet page shows nothing about it.
+            if (!string.IsNullOrWhiteSpace(_installTokenForReporting))
+            {
+                Api.ReportInstallProgress(serverUrl, _installTokenForReporting, "install", "failed", 0,
+                    $"Installation failed: {ex.Message}",
+                    new Dictionary<string, string> { ["message"] = ex.Message });
+            }
+
             return false;
         }
     }
