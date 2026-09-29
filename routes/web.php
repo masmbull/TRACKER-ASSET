@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\IkeBastInspectionController;
 use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\MicrosoftDirectoryController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ServiceMonitorController;
@@ -139,6 +140,11 @@ Route::middleware('auth')->group(function () {
             Route::post('/users', [UserController::class, 'store'])->name('users.store');
             Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
             Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+
+            // Employee directory typeahead (PRD §39). Inside the same gate as
+            // user administration: it returns names, addresses, departments and
+            // job titles for the whole tenant.
+            Route::get('/users/directory', MicrosoftDirectoryController::class)->name('users.directory');
         });
 
         Route::resource('templates', TemplateController::class)->except(['edit', 'update']);

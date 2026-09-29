@@ -1704,17 +1704,15 @@ Verification status across all critical acceptance criteria:
       is actually recognised as newer by agents already on the fleet
 - [x] Backing-service health monitor (`/services`) that distinguishes a failed
       check from one it could not perform
-- [x] Automated test suite verified (247 passed, 992 assertions)
+- [x] Microsoft 365 employee directory search (PRD §39) — name, email, department,
+      job title, company and status, read live from Graph and never mirrored
+- [x] Automated test suite verified (261 passed, 1037 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 
 ## Not yet built
 
 Tracked here so the checklist above is not read as "everything in the PRD ships".
 
-- [ ] M365 directory lookup via Microsoft Graph (PRD §39). Entra **sign-in** is
-      built and tested (`EntraOAuthService`, `EntraAuthTest`); employee lookup by
-      department, job title, company and status is not. Local users remain the
-      directory.
 - [ ] SharePoint / OneDrive document storage (PRD §37, §38). Generated PDFs are
       written to local storage; `config/documents.php` records this deferral
       rather than hiding it.

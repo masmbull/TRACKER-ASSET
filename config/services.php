@@ -43,6 +43,13 @@ return [
         'client_secret' => env('ENTRA_CLIENT_SECRET'),
         'tenant_id' => env('ENTRA_TENANT_ID', 'common'),
         'redirect' => env('ENTRA_REDIRECT_URI'),
+
+        // Employee directory search (PRD §39). Separate from `enabled` on
+        // purpose: an installation can use Entra purely for sign-in and keep its
+        // user list local, and turning this on requires the User.Read.All
+        // application permission plus admin consent in the tenant. Offering a
+        // search box that 403s on every keystroke helps nobody.
+        'directory' => env('ENTRA_DIRECTORY', false),
     ],
 
     /*

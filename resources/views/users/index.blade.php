@@ -13,6 +13,79 @@
     <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Search</button>
 </form>
 
+{{-- Employee directory search (PRD §39). Hidden entirely when the feature is
+     off, rather than shown and failing: it needs a tenant permission that most
+     installations will not have granted, and a search box that 403s on every
+     keystroke reads as a broken page. --}}
+@if(config('services.entra.directory') && config('services.entra.enabled'))
+<div id="m365-directory" class="mb-4">
+    <label for="m365-q" class="block text-sm font-medium mb-1">Find in Microsoft 365</label>
+    <input id="m365-q" type="text" autocomplete="off" placeholder="Search name, email, department, job title, company..."
+           class="border rounded px-3 py-2 w-full max-w-xl">
+    <p id="m365-status" class="text-sm text-gray-600 dark:text-gray-300 mt-2"></p>
+    <ul id="m365-results" class="mt-2 divide-y border rounded max-w-xl"></ul>
+</div>
+
+<script>
+(function () {
+    const input = document.getElementById('m365-q');
+    const status = document.getElementById('m365-status');
+    const list = document.getElementById('m365-results');
+    const url = @json(route('users.directory'));
+    let timer = null;
+    let controller = null;
+
+    function render(results) {
+        list.innerHTML = '';
+        results.forEach(function (person) {
+            const row = document.createElement('li');
+            row.className = 'py-2 text-sm';
+            row.textContent = person.name + ' — ' + person.email;
+            const detail = document.createElement('div');
+            detail.className = 'text-xs text-gray-500';
+            // Only fields PRD §39 asks for, and only the ones present.
+            detail.textContent = [person.job_title, person.department, person.company]
+                .filter(Boolean).join(' · ');
+            row.appendChild(detail);
+            list.appendChild(row);
+        });
+    }
+
+    input.addEventListener('input', function () {
+        const q = input.value.trim();
+
+        // Debounced: one request per pause in typing, not one per keystroke.
+        clearTimeout(timer);
+        controller?.abort();
+
+        if (q.length < 2) {
+            status.textContent = '';
+            list.innerHTML = '';
+            return;
+        }
+
+        timer = setTimeout(function () {
+            controller = new AbortController();
+            fetch(url + '?q=' + encodeURIComponent(q), { signal: controller.signal, headers: { Accept: 'application/json' } })
+                .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+                .then(function (r) {
+                    if (!r.ok && r.body.error) {
+                        status.textContent = r.body.error;
+                        list.innerHTML = '';
+                        return;
+                    }
+                    status.textContent = r.body.results.length
+                        ? r.body.results.length + ' found'
+                        : 'No match in Microsoft 365.';
+                    render(r.body.results);
+                })
+                .catch(function (e) { if (e.name !== 'AbortError') { status.textContent = 'Search failed. Try again.'; } });
+        }, 300);
+    });
+})();
+</script>
+@endif
+
 @if($users->count() > 0)
 <table class="min-w-full bg-white shadow rounded text-sm">
     <thead>

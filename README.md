@@ -154,7 +154,7 @@ php artisan serve --port=8000
 ## 🧪 Testing
 
 ```bash
-php artisan test       # 247 tests · 992 assertions (in-memory SQLite)
+php artisan test       # 261 tests · 1037 assertions (in-memory SQLite)
 vendor/bin/pint        # code style (Laravel Pint)
 ```
 
@@ -168,6 +168,7 @@ vendor/bin/pint        # code style (Laravel Pint)
 | [`docs/database-schema.md`](docs/database-schema.md) | ERD & table reference |
 | [`docs/audit-workflow.md`](docs/audit-workflow.md) | Audit comparison rules |
 | [`docs/audit-api.md`](docs/audit-api.md) | Agent HTTP API |
+| [`docs/m365-directory.md`](docs/m365-directory.md) | Microsoft 365 employee directory |
 | [`docs/import-workflow.md`](docs/import-workflow.md) | Excel import pipeline |
 | [`docs/document-workflow.md`](docs/document-workflow.md) | FAT/BAST & numbering |
 | [`docs/transfer-workflow.md`](docs/transfer-workflow.md) | Ownership transfer flow |
