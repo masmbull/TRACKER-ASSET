@@ -357,6 +357,6 @@ class AgentScanButtonTest extends TestCase
     /** Auth header the daemon uses for the inbox/ack endpoints. */
     private function bearer(AgentApiToken $token): array
     {
-        return ['Authorization' => 'Bearer ' . $token->token_plain];
+        return ['Authorization' => 'Bearer '.$token->token_plain];
     }
 }

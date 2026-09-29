@@ -1698,8 +1698,29 @@ Verification status across all critical acceptance criteria:
 - [x] Excel data export functional
 - [x] Audit activity log recording mutations
 - [x] Retired & disposed asset archive (`/assets/retired`)
-- [x] Automated test suite verified (127 passed, 468 assertions)
+- [x] Real-time agent operation progress (queued → active → stalled → completed)
+      in the fleet UI, with stalled commands redelivered after 2 minutes
+- [x] Agent build identity comparison (`version` + `git hash`) so a published fix
+      is actually recognised as newer by agents already on the fleet
+- [x] Backing-service health monitor (`/services`) that distinguishes a failed
+      check from one it could not perform
+- [x] Automated test suite verified (247 passed, 992 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
+
+## Not yet built
+
+Tracked here so the checklist above is not read as "everything in the PRD ships".
+
+- [ ] M365 directory lookup via Microsoft Graph (PRD §39). Entra **sign-in** is
+      built and tested (`EntraOAuthService`, `EntraAuthTest`); employee lookup by
+      department, job title, company and status is not. Local users remain the
+      directory.
+- [ ] SharePoint / OneDrive document storage (PRD §37, §38). Generated PDFs are
+      written to local storage; `config/documents.php` records this deferral
+      rather than hiding it.
+- [ ] PostgreSQL in CI (PRD §47). `ci.yml` runs the suite on SQLite only, so the
+      schema-compatibility claim above is verified by hand, not continuously.
+- [ ] Docker image build & VPS deploy pipeline (PRD §47).
 
 ---
 

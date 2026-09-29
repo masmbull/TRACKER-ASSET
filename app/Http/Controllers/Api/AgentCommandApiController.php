@@ -25,14 +25,15 @@ class AgentCommandApiController extends Controller
     public const UNINSTALL_DONE_MARKER = 'Agent removed itself after receiving the uninstall command.';
 
     /**
-     * How long a command may sit in_progress with no progress report before it
-     * is treated as abandoned and handed back out.
+     * The page and the inbox must agree on what "stuck" means.
      *
-     * Matches the stall threshold on AgentCommand::isStalled so the page and the
-     * inbox agree on what "stuck" means - otherwise a command could be declared
-     * stalled for the operator and simultaneously never be retried.
+     * This used to be a second copy of the same number, kept in step by a
+     * comment. Nothing tested that they matched, and a drift would have been
+     * silent and lopsided: the page showing a command as stalled while the
+     * server still considered it running, or the reverse. The value now lives on
+     * the model, and the alias below exists only so the inbox query reads clearly.
      */
-    public const IN_PROGRESS_GRACE_MINUTES = 2;
+    public const IN_PROGRESS_GRACE_MINUTES = AgentCommand::STALL_GRACE_MINUTES;
 
     public function inbox(Request $request)
     {

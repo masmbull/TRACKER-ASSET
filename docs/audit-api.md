@@ -192,10 +192,63 @@ and provides 1-click fleet actions:
 |---|---|
 | `GET /api/agent/inbox` | returns up to 10 pending commands for this token (plus broadcasts) |
 | `POST /api/agent/commands/{id}/ack` | body `{"status":"done"\|"failed","result":{...}}` |
+| `POST /api/agent/commands/{id}/progress` | body `{"stage":"...","progress":62}` — long-running queued work |
+| `POST /api/agent/install-progress` | body `{"command":"install"\|"update","status":...,"stage":...,"progress":...}` |
 | `POST /api/agent/heartbeat` | refreshes the Live Fleet snapshot; no audit row written |
 
 Each daemon poll also refreshes `last_used_at`, which powers the online/offline
 indicator. Commands are never delivered twice: the daemon acks each one.
+
+### Progress reporting
+
+A queued command is invisible until something happens to it, so an install that
+takes four minutes looks identical to one that never started. Two endpoints
+close that gap, and they are separate because the work is.
+
+**`/api/agent/commands/{id}/progress`** is for a command the daemon pulled from
+its inbox. The first report flips the row to `in_progress` and stamps
+`started_at`; later reports only overwrite `stage` / `progress`. `progress` is
+`0–100`; `stage` is free text the agent owns, so the server never has to be
+taught a new vocabulary. Reporting against a command another token owns is
+`403`, and reporting against an already-settled command is a no-op that returns
+`200` — a late report from an agent that raced an ack must not resurrect a
+finished row or fail the daemon's poll.
+
+**`/api/agent/install-progress`** is for `install` and `update`, which are *not*
+queued commands: the operator started them by running the installer, so there is
+no inbox row to report against. It finds the device's open `install`/`update` row
+and adopts it. Adoption rather than insert is deliberate — re-running the
+installer must attach to the row already in flight, not leave two half-finished
+installs with no way to tell which is real.
+
+| Field | Meaning |
+|---|---|
+| `stage` | human-readable line the fleet page shows under the bar |
+| `progress` | `0–100`, drives the bar width |
+| `status` | `in_progress` \| `done` \| `failed` |
+
+Uninstall is the exception: the agent reports `Removing the agent...` **before**
+acking, because it cannot report after deleting its own executable. The ack is
+the confirmation, and it carries a fixed marker string the server matches before
+burning the token — see `UNINSTALL_DONE_MARKER`.
+
+### Stalled commands
+
+A command sitting in `in_progress` with no progress report for
+`IN_PROGRESS_GRACE_MINUTES` (2 minutes) is treated as abandoned and handed back
+out on the next poll. A daemon killed mid-install does not ack, so without this
+the command would be stuck forever and the device unreachable by any later
+action. The grace period is what keeps a healthy but slow command from being
+duplicated, and the fleet page shows the same condition in red as **stalled** so
+an operator sees it.
+
+Both sides read the same number. `AgentCommand::STALL_GRACE_MINUTES` is the only
+definition, and the inbox's `IN_PROGRESS_GRACE_MINUTES` is an alias for it rather
+than a second literal — it was two copies once, held together by a comment, and a
+drift between them would have failed silently. That is the detail that matters: if
+the page and the retry loop disagreed about what "stalled" means, the page would
+show a stalled command as healthy while the server had already handed it to a
+second agent.
 
 ### Timing
 
