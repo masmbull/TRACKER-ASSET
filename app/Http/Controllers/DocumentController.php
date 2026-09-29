@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Asset;
+use App\Models\Company;
 use App\Models\Document;
 use App\Models\DocumentTemplate;
 use App\Services\DocumentGenerationService;
@@ -18,19 +19,54 @@ class DocumentController extends Controller
     /**
      * Auto-generate form: everything is prefilled from the register (PRD §32).
      */
-    public function generate(Asset $asset)
+    public function generate(Request $request, Asset $asset)
     {
         $this->authorize('generateDocument', $asset);
 
         $asset->load(['category', 'status', 'company', 'location', 'currentUser']);
 
+        $types = (array) config('documents.types', []);
+
+        // The type is part of the URL because the form is not the same form for
+        // every type. It used to be ignored and the select always defaulted to
+        // FAT, so linking straight to a BAST silently produced a FAT form with
+        // the wrong sections and the wrong labels.
+        $selected = (string) $request->query('document_type', 'FAT');
+        if (! in_array($selected, $types, true)) {
+            $selected = 'FAT';
+        }
+
         return view('documents.generate', [
             'asset' => $asset,
             'transfers' => $asset->transfers()->with(['fromUser', 'toUser'])->orderByDesc('id')->get(),
-            'types' => (array) config('documents.types', []),
-            'checklist' => (array) config('documents.fat_checklist', []),
+            'types' => $types,
+            'selectedType' => $selected,
+            // Only this type's checklist. A TRANSFER has none, and rendering the
+            // FAT list under a "Checklist FAT" heading on it is a lie about the
+            // document being produced.
+            'checklist' => (array) config('documents.checklists.'.$selected, []),
+            'copy' => $this->copyFor($selected),
+            // Entity is a choice from master data, not free text. Typing "PT Mito"
+            // against "PT. Mito" makes the sender and receiver look like different
+            // organisations on a signed document.
+            'companies' => Company::orderBy('name')->get(['id', 'name']),
             'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
         ]);
+    }
+
+    /**
+     * Wording for a document type, falling back to the FAT copy.
+     *
+     * The fallback matters: a type nobody has written specific wording for should
+     * say something reasonable rather than render an empty label next to a date
+     * box.
+     */
+    private function copyFor(string $type): array
+    {
+        $default = (array) config('documents.copy.FAT', []);
+        $specific = (array) config('documents.copy.'.$type, []);
+
+        return array_merge($default, $specific);
     }
 
     /**
@@ -55,6 +91,7 @@ class DocumentController extends Controller
             'sender_email' => 'nullable|email|max:150',
             'sender_phone' => 'nullable|string|max:100',
             'receiver_entity' => 'nullable|string|max:150',
+            'receiver_location' => 'nullable|string|max:150',
             'receiver_division' => 'nullable|string|max:150',
             'receiver_email' => 'nullable|email|max:150',
             'asset_type' => 'nullable|string|max:150',
