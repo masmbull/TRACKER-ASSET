@@ -26,9 +26,15 @@ class ServiceMonitorController extends Controller
     /**
      * JSON for a scripted check or an uptime monitor.
      *
-     * Returns 503 when anything is down, because a load balancer reads the
-     * status code and a body of JSON that says "down" while answering 200 would
-     * report a healthy instance.
+     * Answers 503 when anything is down, because a load balancer reads the
+     * status code and a body saying "down" while returning 200 would report a
+     * healthy instance.
+     *
+     * A skipped check does not produce a 503. It means the monitor could not
+     * perform the check, not that it found a problem, and failing the instance
+     * for it would turn an environment quirk into a fake outage. The `skipped`
+     * count travels in the body so a consumer can still see that its view of the
+     * system is partial.
      */
     public function json(): JsonResponse
     {

@@ -16,11 +16,17 @@
      list, and repeating the count in three large cards says nothing the list
      does not already say. --}}
 <div class="mb-4 flex flex-wrap items-center gap-3 text-theme-sm">
-    @if($down === 0)
-        <x-badge variant="success" :dot="true">All {{ $total }} services healthy</x-badge>
-    @else
+    @if($down > 0)
         <x-badge variant="error" :dot="true">{{ $down }} of {{ $total }} down</x-badge>
         <span class="text-gray-600 dark:text-gray-300">{{ $healthy }} healthy</span>
+    @elseif($skipped > 0)
+        {{-- "All healthy" would be a lie when a check was never performed.
+             Say what is actually true: nothing is down, and this much was
+             not looked at. --}}
+        <x-badge variant="warning" :dot="true">No failures · {{ $skipped }} not checked</x-badge>
+        <span class="text-gray-600 dark:text-gray-300">{{ $healthy }} healthy</span>
+    @else
+        <x-badge variant="success" :dot="true">All {{ $total }} services healthy</x-badge>
     @endif
     <span class="text-theme-xs text-gray-500 dark:text-gray-400">checked {{ now()->format('H:i:s') }}</span>
 </div>
@@ -34,10 +40,16 @@
                         <span @class([
                             'h-2 w-2 flex-shrink-0 rounded-full',
                             'bg-success-500' => $service['status'] === 'ok',
-                            'bg-error-500' => $service['status'] !== 'ok',
+                            // Gray, not red. A check that could not be performed
+                            // is not a failure, and painting it the same as a real
+                            // outage is how a monitor teaches people to ignore it.
+                            'bg-gray-400' => $service['status'] === 'skipped',
+                            'bg-error-500' => ! in_array($service['status'], ['ok', 'skipped'], true),
                         ])></span>
                         <p class="text-theme-sm font-medium text-gray-800 dark:text-white">{{ $service['name'] }}</p>
-                        @if($service['status'] !== 'ok')
+                        @if($service['status'] === 'skipped')
+                            <x-badge variant="gray">not checked</x-badge>
+                        @elseif($service['status'] !== 'ok')
                             <x-badge variant="error">down</x-badge>
                         @elseif($service['ms'] >= 500)
                             {{-- Slow is not down, but an operator should see it before
