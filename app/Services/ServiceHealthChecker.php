@@ -53,12 +53,105 @@ class ServiceHealthChecker
         ];
 
         $healthy = collect($services)->where('status', 'ok')->count();
+        $skipped = collect($services)->where('status', 'skipped')->count();
 
         return [
             'services' => $services,
             'total' => count($services),
             'healthy' => $healthy,
-            'down' => count($services) - $healthy,
+            // A skipped check is not a healthy check, and it is certainly not a
+            // failed one. Counting it as down is what turns "I could not look"
+            // into a red alarm, and a monitor that cries wolf is one people
+            // learn to ignore.
+            'skipped' => $skipped,
+            'down' => count($services) - $healthy - $skipped,
+        ];
+    }
+
+    /**
+     * True when this process cannot serve a loopback request while it is busy.
+     *
+     * `php artisan serve` is PHP's built-in server, and with a single worker it
+     * handles one request at a time. A request to /services therefore occupies
+     * the only worker, and the loopback call to /api/health made underneath it
+     * queues behind the very request making it - so the call can only ever time
+     * out, and the page reported the health endpoint as down while it was
+     * demonstrably up. That is the worst kind of wrong on a health page: it
+     * trains people to ignore it.
+     *
+     * Detected rather than assumed, and it does not weaken the production check.
+     * Behind php-fpm, nginx or RoadRunner there is a pool of workers, and the
+     * self-call is exactly the right test - an endpoint that answers internally
+     * but is unreachable from outside is still broken.
+     */
+    private function cannotProbeOverLoopback(): bool
+    {
+        return self::loopbackSelfCallImpossible(
+            PHP_SAPI,
+            (int) (getenv('PHP_CLI_SERVER_WORKERS') ?: 1),
+        );
+    }
+
+    /**
+     * Pure form of the check above, split out so it can be tested.
+     *
+     * `PHP_SAPI` is a compile-time constant and cannot be faked from a test, and
+     * the suite runs on the CLI rather than on the built-in server, so a test of
+     * the private method would only ever exercise the one branch that does not
+     * matter. Taking the SAPI and the worker count as arguments makes the
+     * interesting cases - single-worker dev server, worker pool, php-fpm -
+     * reachable without a server.
+     *
+     * @param  string  $sapi  The SAPI serving this request.
+     * @param  int  $workers  Concurrent request handlers available to serve a loopback call.
+     */
+    public static function loopbackSelfCallImpossible(string $sapi, int $workers): bool
+    {
+        return $sapi === 'cli-server' && $workers < 2;
+    }
+
+    /**
+     * What to tell whoever is looking at the skipped row.
+     *
+     * The obvious advice - set PHP_CLI_SERVER_WORKERS - is wrong on Windows, and
+     * sending people after it is worse than saying nothing. PHP's built-in server
+     * forks its workers with a POSIX-only call, so on Windows it prints
+     * "forking is not supported on this platform" and serves every request from
+     * a single process no matter what the variable says. There is no setting that
+     * fixes it; the dev server has to be replaced or moved.
+     *
+     * @param  string  $separator  DIRECTORY_SEPARATOR, passed in so both branches are testable.
+     */
+    public static function singleWorkerHint(string $separator = DIRECTORY_SEPARATOR): string
+    {
+        if ($separator === '\\') {
+            return 'not checked: PHP\'s built-in server cannot fork workers on Windows, '
+                .'so it cannot call itself. Serve the app from a real web server, '
+                .'or run the dev server under WSL or Docker.';
+        }
+
+        return 'not checked: `artisan serve` handles one request at a time, so it cannot call itself. '
+            .'Start it with `PHP_CLI_SERVER_WORKERS=4 php artisan serve --no-reload`.';
+    }
+
+    /**
+     * A check that could not be performed, reported as neither ok nor down.
+     *
+     * Third state, and the reason it exists: a monitor that reports "I could not
+     * look" as "broken" is worse than one that reports nothing, because the first
+     * trains its readers to ignore the red. `skipped` keeps the row visible -
+     * silently dropping a check would look like success - while keeping it out of
+     * the failure count.
+     */
+    private function probeSkipped(string $detail, string $name, string $purpose): array
+    {
+        return [
+            'name' => $name,
+            'purpose' => $purpose,
+            'status' => 'skipped',
+            'detail' => $detail,
+            'ms' => 0,
+            'checked_at' => now()->toDateTimeString(),
         ];
     }
 
@@ -348,7 +441,15 @@ class ServiceHealthChecker
         // rather than a self-call: an endpoint that answers internally but is
         // unreachable from outside is still a broken health endpoint.
         if (! config('services.probe_health_endpoint', true)) {
-            return $this->probe(static fn () => 'skipped in this environment', 'Health endpoint', 'What the load balancer and Docker poll');
+            return $this->probeSkipped('skipped in this environment', 'Health endpoint', 'What the load balancer and Docker poll');
+        }
+
+        if ($this->cannotProbeOverLoopback()) {
+            return $this->probeSkipped(
+                self::singleWorkerHint(),
+                'Health endpoint',
+                'What the load balancer and Docker poll'
+            );
         }
 
         return $this->probe(function () {

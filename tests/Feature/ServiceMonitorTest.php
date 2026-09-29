@@ -42,6 +42,94 @@ class ServiceMonitorTest extends TestCase
             ->assertForbidden();
     }
 
+    /**
+     * Which SAPIs can deadlock on a self-call.
+     *
+     * `php artisan serve` with one worker holds its only worker for the /services
+     * request, so the loopback call to /api/health queues behind the request
+     * making it and can only ever time out. Anywhere there is a pool of workers -
+     * php-fpm, nginx, RoadRunner, or the dev server told to fork - the self-call
+     * is fine and remains the right test, because an endpoint that answers
+     * internally but is unreachable from outside is still broken.
+     */
+    public function test_only_a_single_worker_dev_server_cannot_probe_itself(): void
+    {
+        // The bug: reported the health endpoint as down while it was up.
+        $this->assertTrue(ServiceHealthChecker::loopbackSelfCallImpossible('cli-server', 1));
+        $this->assertTrue(ServiceHealthChecker::loopbackSelfCallImpossible('cli-server', 0));
+
+        // The fixes: a worker pool, and every production SAPI.
+        $this->assertFalse(ServiceHealthChecker::loopbackSelfCallImpossible('cli-server', 2));
+        $this->assertFalse(ServiceHealthChecker::loopbackSelfCallImpossible('cli-server', 4));
+        $this->assertFalse(ServiceHealthChecker::loopbackSelfCallImpossible('fpm-fcgi', 1));
+        $this->assertFalse(ServiceHealthChecker::loopbackSelfCallImpossible('litespeed', 1));
+    }
+
+    /**
+     * A check that could not be performed must not be counted as a failure.
+     *
+     * Counting it as "down" produced a red alarm on a healthy system, which is
+     * the failure mode that teaches operators to ignore the page. `skipped` keeps
+     * the row visible and keeps it out of the failure count.
+     *
+     * The skip is reached here through the config gate rather than the SAPI
+     * check, because the two produce the same state by the same code path and
+     * only the config gate is reachable from the CLI-based suite.
+     */
+    public function test_an_unperformable_check_is_skipped_not_counted_as_down(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $report = $this->actingAs($admin)->getJson(route('services.health'))->json();
+
+        $health = collect($report['services'])->firstWhere('name', 'Health endpoint');
+
+        $this->assertNotNull($health, 'the health endpoint row should still be listed');
+        $this->assertSame('skipped', $health['status'], 'phpunit disables the loopback probe, so it cannot run');
+        $this->assertSame(1, $report['skipped']);
+        $this->assertSame(
+            $report['total'] - $report['healthy'] - $report['skipped'],
+            $report['down'],
+            'down must be total - healthy - skipped, so an unchecked row is never counted as a failure'
+        );
+    }
+
+    /**
+     * The page has to say "not checked" rather than "down" for the same reason.
+     * A red badge would read as an outage; silence would read as success.
+     */
+    public function test_the_page_labels_an_unperformable_check_as_not_checked(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('not checked')
+            ->assertDontSee('Health endpoint down')
+            ->assertDontSee('>down<', false);
+    }
+
+    /**
+     * The hint must not send Windows developers after a fix that cannot work.
+     *
+     * PHP's built-in server forks workers through a POSIX-only call; on Windows it
+     * prints "forking is not supported on this platform" and stays single-process
+     * whatever PHP_CLI_SERVER_WORKERS says. Telling a Windows user to set that
+     * variable is advice that provably does nothing, and the skipped row is the
+     * one place they are told what to do next.
+     */
+    public function test_the_hint_is_true_for_the_platform_it_is_given(): void
+    {
+        $windows = ServiceHealthChecker::singleWorkerHint('\\');
+        $posix = ServiceHealthChecker::singleWorkerHint('/');
+
+        $this->assertStringContainsString('cannot fork workers on Windows', $windows);
+        $this->assertStringNotContainsString('PHP_CLI_SERVER_WORKERS', $windows);
+
+        $this->assertStringContainsString('--no-reload', $posix);
+        $this->assertStringContainsString('PHP_CLI_SERVER_WORKERS', $posix);
+    }
+
     public function test_guests_are_sent_to_login(): void
     {
         $this->get(route('services.index'))->assertRedirect('/login');
