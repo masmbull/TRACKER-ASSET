@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Api\AgentCommandApiController;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use App\Models\User;
@@ -281,6 +282,25 @@ class CommandProgressTest extends TestCase
         ]);
 
         $this->assertFalse($command->fresh()->isStalled());
+    }
+
+    /**
+     * The page and the inbox used to hold separate copies of the same number,
+     * kept in step only by a comment. Nothing would have failed if they drifted.
+     *
+     * The failure is lopsided and quiet: the operator is shown a red "stalled"
+     * while the server still thinks the command is healthy and never retries it,
+     * or the reverse, where a dead install is never retried and nothing is red.
+     * One definition removes the possibility, and this test documents why it
+     * matters.
+     */
+    public function test_the_page_and_the_inbox_agree_on_when_a_command_is_stalled(): void
+    {
+        $this->assertSame(
+            AgentCommand::STALL_GRACE_MINUTES,
+            AgentCommandApiController::IN_PROGRESS_GRACE_MINUTES,
+            'the inbox redelivery window must be the same number the page renders stalled from'
+        );
     }
 
     /**

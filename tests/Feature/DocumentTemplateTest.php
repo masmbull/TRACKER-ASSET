@@ -128,7 +128,7 @@ class DocumentTemplateTest extends TestCase
 
         // Each field's label and raw key must be visible — that pairing is the
         // whole point of the page; the index page only ever showed a number.
-        $response->assertSee($fieldCount . ' fields ·');
+        $response->assertSee($fieldCount.' fields ·');
         foreach (array_slice($template->template_content, 0, 10, true) as $key => $definition) {
             $response->assertSee($key);
             $response->assertSee($definition['label']);
