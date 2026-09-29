@@ -58,7 +58,7 @@ class DocumentTemplateTest extends TestCase
         $this->assertArrayHasKey('statement', $fat->template_content);
         $this->assertArrayHasKey('checklist_0', $fat->template_content);
         $this->assertGreaterThan(30, count($fat->template_content));
-        $this->assertCount(count((array) config('documents.fat_checklist')), array_filter(
+        $this->assertCount(count((array) config('documents.checklists.FAT')), array_filter(
             $fat->template_content,
             static fn (array $field): bool => $field['type'] === 'pass_fail_na'
         ));

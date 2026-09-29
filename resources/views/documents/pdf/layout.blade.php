@@ -12,6 +12,9 @@
     th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
     .label { width: 38%; color: #475569; }
+    /* Inline field name inside a value cell, e.g. "Entity: PT Mito". */
+    .field { color: #475569; }
+    .field-value { display: block; }
     .lead { margin-bottom: 12px; }
     .signatures { width: 100%; margin-top: 26px; border: none; }
     .signatures td { border: none; text-align: center; padding: 8px; }

@@ -111,6 +111,7 @@ class DocumentGenerationService
             'company' => $asset->company?->name,
             'location' => $asset->location?->name,
             'current_user' => $asset->currentUser?->name,
+            'parties' => $this->partiesFor($asset, $input, $transfer),
             'transfer' => $transfer ? [
                 'number' => $transfer->transfer_number,
                 'date' => $transfer->transfer_date?->format('Y-m-d'),
@@ -137,6 +138,50 @@ class DocumentGenerationService
             'checklist' => $this->checklistFor($type, $input),
             'notes' => $input['notes'] ?? null,
             'statement' => $input['statement'] ?? null,
+        ];
+    }
+
+    /**
+     * The two people and organisations a document is handed between.
+     *
+     * These fields were validated and then dropped: `buildPayload` never read
+     * them and no PDF template rendered them, so the whole "Data Penyerah" and
+     * "Data Penerima" section of the form went nowhere. A signed document that
+     * omits who handed it over and who received it is not a handover record, and
+     * whoever filled the form had no way of telling.
+     *
+     * Falls back to the register rather than to blanks, per the one-asset rule:
+     * the sender is normally the asset's own company and the receiver its current
+     * holder. An explicit choice from the form always wins.
+     */
+    private function partiesFor(Asset $asset, array $input, ?AssetTransfer $transfer): array
+    {
+        return [
+            'sender' => [
+                // The form has no separate "name" field for the parties: the
+                // people are named in the signature block, and a second name box
+                // would be a second thing to keep in step with it.
+                'name' => $input['signatory_menyerahkan'] ?? $asset->currentUser?->name,
+                'employee_id' => $input['sender_employee_id'] ?? null,
+                'entity' => $input['sender_entity'] ?? $asset->company?->name,
+                'division' => $input['sender_division'] ?? $asset->currentUser?->department,
+                'email' => $input['sender_email'] ?? $asset->currentUser?->email,
+                'phone' => $input['sender_phone'] ?? null,
+            ],
+            'receiver' => [
+                'name' => $input['signatory_menerima'] ?? $transfer?->toUser?->name,
+                'employee_id' => $input['receiver_employee_id'] ?? null,
+                // The register knows a location but not a legal entity, so only a
+                // transfer can supply one; otherwise the asset's own company is a
+                // better guess than a blank on a signed document. Location is a
+                // separate field now that "Company / Jakarta" is no longer mashed
+                // into one string.
+                'entity' => $input['receiver_entity'] ?? $transfer?->toLocation?->name ?? $asset->company?->name,
+                'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
+                'division' => $input['receiver_division'] ?? $transfer?->to_department,
+                'email' => $input['receiver_email'] ?? null,
+                'phone' => $input['receiver_phone'] ?? null,
+            ],
         ];
     }
 
@@ -171,11 +216,15 @@ class DocumentGenerationService
     }
 
     /**
-     * FAT checklist answers keyed by item index; unknown answers become N/A.
+     * Acceptance checklist answers, keyed by item index; unknown answers become N/A.
+     *
+     * Per type rather than always-FAT: a TRANSFER has no acceptance checklist, and
+     * storing the FAT items against one would print them onto a document that
+     * never had them.
      */
     private function checklistFor(string $type, array $input): array
     {
-        $defaults = $type === 'FAT' ? (array) config('documents.fat_checklist', []) : [];
+        $defaults = (array) config('documents.checklists.'.$type, []);
         $answers = (array) ($input['checklist'] ?? []);
 
         $result = [];

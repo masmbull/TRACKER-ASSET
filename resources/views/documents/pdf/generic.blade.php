@@ -14,6 +14,8 @@
     <tr><td class="label">Pengguna Saat Ini</td><td>{{ $document['current_user'] ?? '-' }}</td></tr>
 </table>
 
+@include('documents.pdf._parties')
+
 @if($document['transfer'])
 <table>
     <tr><th colspan="2">Detail Transfer</th></tr>

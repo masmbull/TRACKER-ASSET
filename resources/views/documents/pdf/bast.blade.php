@@ -18,6 +18,8 @@
     <tr><td class="label">Spesifikasi</td><td>{{ collect([$document['asset']['processor'] ?? null, $document['asset']['ram'] ?? null, $document['asset']['storage'] ?? null, $document['asset']['os_version'] ?? null])->filter()->implode(' / ') ?: '-' }}</td></tr>
 </table>
 
+@include('documents.pdf._parties')
+
 <table>
     <tr><th colspan="2">Serah Terima</th></tr>
     <tr><td class="label">Dari</td><td>{{ $document['transfer']['from_user'] ?? '-' }} ({{ $document['transfer']['from_department'] ?? '-' }} / {{ $document['transfer']['from_location'] ?? '-' }})</td></tr>

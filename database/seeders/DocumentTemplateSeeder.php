@@ -119,7 +119,7 @@ class DocumentTemplateSeeder extends Seeder
             'signatory_menyerahkan_date' => $f('PENYERAH — Tanggal', 'date', $g),
         ];
 
-        foreach ((array) config('documents.fat_checklist', []) as $index => $item) {
+        foreach ((array) config('documents.checklists.FAT', []) as $index => $item) {
             $fields['checklist_'.$index] = $f($item, 'pass_fail_na', 'Checklist FAT');
         }
 

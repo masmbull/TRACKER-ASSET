@@ -36,6 +36,158 @@ class DocumentGenerationTest extends TestCase
         $this->asset = Asset::factory()->create();
     }
 
+    /**
+     * The document type is in the URL because the form is not the same form for
+     * every type. It used to be ignored, so linking straight to a BAST produced a
+     * FAT form with FAT labels and the FAT checklist.
+     */
+    public function test_the_type_in_the_url_selects_that_type(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']))
+            ->assertOk()
+            ->assertSee('<option value="BAST" selected>', false);
+    }
+
+    /**
+     * Only the FAT has an acceptance checklist. Rendering the FAT list under a
+     * "Checklist FAT" heading on a TRANSFER claims the document does not back up,
+     * and the answers were stored too.
+     */
+    public function test_only_a_type_with_a_checklist_gets_one(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']))
+            ->assertOk()
+            ->assertSee('Checklist FAT');
+
+        $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'TRANSFER']))
+            ->assertOk()
+            ->assertDontSee('Checklist');
+    }
+
+    /**
+     * A return is not a handover and an assignment is not a transfer, so the
+     * labels must not say "Serah Terima" on them. These strings are printed on a
+     * document people sign.
+     */
+    public function test_labels_and_statement_follow_the_type(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'RETURN']))
+            ->assertOk()
+            ->assertSee('Tanggal Pengembalian')
+            ->assertSee('Dikembalikan dalam kondisi baik seperti saat diterima.');
+
+        $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']))
+            ->assertOk()
+            ->assertSee('Tanggal Serah Terima');
+    }
+
+    /**
+     * Entity is a choice from master data, not free text. Typed, "PT Mito" and
+     * "PT. Mito" make one organisation look like two on a signed document.
+     */
+    public function test_the_entity_fields_offer_companies_instead_of_free_text(): void
+    {
+        Company::create(['name' => 'Anak Perusahaan', 'code' => 'AP', 'address' => '']);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->get(route('documents.generate', ['asset' => $this->asset]))
+            ->assertOk()
+            ->assertSee('<select name="sender_entity"', false)
+            ->assertSee('<select name="receiver_entity"', false)
+            ->assertSee('Anak Perusahaan')
+            // The branch is its own field now rather than "Company / Jakarta"
+            // mashed into one string that matches nothing.
+            ->assertSee('name="receiver_location"', false);
+    }
+
+    /**
+     * The whole sender and receiver block used to be validated and then dropped:
+     * `buildPayload` never read it and no PDF template rendered it. Whoever filled
+     * in the form had no way of knowing none of it was kept.
+     */
+    public function test_the_handover_parties_reach_the_document(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
+            'document_type' => 'FAT',
+            'sender_entity' => 'Test Co',
+            'sender_division' => 'IT',
+            'sender_email' => 'andi@example.com',
+            'signatory_menyerahkan' => 'Andi',
+            'receiver_entity' => 'Anak Perusahaan',
+            'signatory_menerima' => 'Budi',
+            'receiver_location' => 'Jakarta',
+        ])->assertRedirect();
+
+        $parties = Document::firstOrFail()->payload['parties'];
+
+        $this->assertSame('Test Co', $parties['sender']['entity']);
+        $this->assertSame('Andi', $parties['sender']['name']);
+        $this->assertSame('IT', $parties['sender']['division']);
+        $this->assertSame('Anak Perusahaan', $parties['receiver']['entity']);
+        $this->assertSame('Budi', $parties['receiver']['name']);
+        $this->assertSame('Jakarta', $parties['receiver']['location']);
+    }
+
+    /**
+     * Blank parties still produce a usable document: they fall back to the
+     * register rather than printing an empty box, per the one-asset rule.
+     */
+    public function test_parties_fall_back_to_the_register_rather_than_blanks(): void
+    {
+        $this->asset->forceFill([
+            'company_id' => Company::where('name', 'Test Co')->value('id'),
+            'location_id' => Location::where('name', 'Jakarta')->value('id'),
+        ])->save();
+
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
+            'document_type' => 'FAT',
+        ])->assertRedirect();
+
+        $parties = Document::firstOrFail()->payload['parties'];
+
+        $this->assertSame('Test Co', $parties['sender']['entity']);
+        $this->assertSame('Jakarta', $parties['receiver']['location']);
+    }
+
+    /**
+     * No document view rendered validation errors, so a rejected submission
+     * bounced back to a form that looked identical to a successful one and there
+     * was no way to see why nothing had happened.
+     */
+    public function test_a_rejected_submission_says_why(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)
+            ->from(route('documents.generate', $this->asset))
+            ->post(route('documents.generate.store', $this->asset), [
+                'document_type' => 'NOT_A_TYPE',
+            ])
+            ->assertRedirect(route('documents.generate', $this->asset))
+            ->assertSessionHasErrors('document_type');
+
+        $this->actingAs($support)
+            ->get(route('documents.generate', $this->asset))
+            ->assertOk()
+            ->assertSee('document_type');
+    }
+
     public function test_generate_fat_creates_numbered_document_with_pdf(): void
     {
         $support = User::factory()->create(['role' => 'support']);

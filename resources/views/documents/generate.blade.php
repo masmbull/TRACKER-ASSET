@@ -11,6 +11,29 @@
     </x-page-header>
 
     <x-card>
+        {{-- Validation errors were never rendered on any document view, so a
+             rejected submission bounced back to a form that looked exactly like a
+             successful one. Fill in the form, press Generate, and nothing happens
+             with no explanation. --}}
+        @if($errors->any())
+            <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10" role="alert">
+                <p class="text-theme-sm font-medium text-red-700 dark:text-red-300">
+                    Dokumen belum dibuat. Perbaiki yang berikut:
+                </p>
+                <ul class="mt-2 list-disc space-y-1 ps-5 text-theme-sm text-red-700 dark:text-red-300">
+                    @foreach($errors->all() as $message)
+                        <li>{{ $message }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @if(session('success'))
+            <div class="mb-6 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 dark:border-green-500/30 dark:bg-green-500/10" role="status">
+                <p class="text-theme-sm font-medium text-green-700 dark:text-green-300">{{ session('success') }}</p>
+            </div>
+        @endif
+
         <div class="mb-6 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10">
             <p class="text-theme-sm font-medium text-brand-700 dark:text-brand-300">Data terisi otomatis dari registrasi aset. Tidak perlu copy/paste.</p>
         </div>
@@ -23,7 +46,7 @@
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Type *</label>
                     <select name="document_type" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" id="document-type">
                         @foreach($types as $type)
-                            <option value="{{ $type }}" {{ old('document_type', 'FAT') === $type ? 'selected' : '' }}>{{ $type }}</option>
+                            <option value="{{ $type }}" {{ old('document_type', $selectedType) === $type ? 'selected' : '' }}>{{ $type }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -36,11 +59,15 @@
 
             <div>
                 <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Template (opsional)</label>
+                {{-- Only templates for the selected type. Listing a BAST template
+                     under a FAT document invited picking the wrong one, and a
+                     template whose fields do not match the document renders gaps
+                     nobody notices until someone signs. --}}
                 <select name="template_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     <option value="">None</option>
-                    @foreach($templates as $template)
+                    @foreach($templates->where('document_type', $selectedType) as $template)
                         <option value="{{ $template->id }}" {{ (string) old('template_id') === (string) $template->id ? 'selected' : '' }}>
-                            {{ $template->name }} ({{ $template->document_type }})
+                            {{ $template->name }}
                         </option>
                     @endforeach
                 </select>
@@ -76,8 +103,26 @@
                         <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id', Auth::user()?->employee_id ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas</label>
-                        <input type="text" name="sender_entity" value="{{ old('sender_entity', $asset->company?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas Penyerah *</label>
+                        {{-- A choice, not free text. Two spellings of one company
+                             ("PT Mito" / "PT. Mito") make one organisation look
+                             like two on a document people sign, and the sender is
+                             normally the asset's own company. --}}
+                        <select name="sender_entity" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                            <option value="">— pilih entitas —</option>
+                            @foreach($companies as $company)
+                                <option value="{{ $company->name }}" {{ old('sender_entity', $asset->company?->name) === $company->name ? 'selected' : '' }}>
+                                    {{ $company->name }}
+                                </option>
+                            @endforeach
+                            {{-- A company entered before this feature existed, or
+                                 one that is no longer in master data, must not
+                                 silently disappear from its own document. --}}
+                            @php($currentSender = old('sender_entity', $asset->company?->name))
+                            @if($currentSender && ! $companies->contains('name', $currentSender))
+                                <option value="{{ $currentSender }}" selected>{{ $currentSender }} (tidak ada di master data)</option>
+                            @endif
+                        </select>
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Divisi / Jabatan</label>
@@ -102,8 +147,26 @@
                         <input type="text" name="signatory_menerima" value="{{ old('signatory_menerima', $asset->currentUser?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas / Cabang</label>
-                        <input type="text" name="receiver_entity" value="{{ old('receiver_entity', $asset->company?->name . ' / ' . ($asset->location?->name ?? '')) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas Penerima *</label>
+                        {{-- Was free text defaulting to "Company / Location" mashed
+                             together with a slash. Two master-data concepts in one
+                             string matches nothing, so it could not be a choice and
+                             could not be checked. The branch now has its own field
+                             below; this one is the legal entity. --}}
+                        <select name="receiver_entity" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                            <option value="">— pilih entitas —</option>
+                            @foreach($companies as $company)
+                                <option value="{{ $company->name }}" {{ old('receiver_entity') === $company->name ? 'selected' : '' }}>{{ $company->name }}</option>
+                            @endforeach
+                            @php($currentReceiver = old('receiver_entity'))
+                            @if($currentReceiver && ! $companies->contains('name', $currentReceiver))
+                                <option value="{{ $currentReceiver }}" selected>{{ $currentReceiver }} (tidak ada di master data)</option>
+                            @endif
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Cabang / Lokasi</label>
+                        <input type="text" name="receiver_location" value="{{ old('receiver_location', $asset->location?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Divisi / Jabatan</label>
@@ -162,12 +225,12 @@
                 <h3 class="mb-4 text-theme-base font-semibold text-gray-800 dark:text-white">D. Waktu Penyerahan</h3>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanggal Penyerahan</label>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">{{ $copy['handover_date'] }}</label>
                         <input type="date" name="handover_date" value="{{ old('handover_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanggal Diterima</label>
-                        <input type="date" name="received_date" value="{{ old('received_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">{{ $copy['received_date'] }}</label>
+                        <input type="date" name="received_date" value="{{ old('received_date') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Keperluan</label>
@@ -178,7 +241,7 @@
 
             <div class="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
                 <h3 class="mb-4 text-theme-base font-semibold text-gray-800 dark:text-white">E. Pernyataan</h3>
-                <textarea name="statement" rows="4" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ old('statement', 'Digunakan untuk keperluan pekerjaan dan jika akan dikembalikan harus dalam kondisi baik seperti diterima.') }}</textarea>
+                <textarea name="statement" rows="4" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ old('statement', $copy['statement']) }}</textarea>
             </div>
 
             <div class="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
@@ -197,7 +260,10 @@
 
             @if(!empty($checklist))
                 <div class="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
-                    <h3 class="mb-4 text-theme-base font-semibold text-gray-800 dark:text-white">Checklist FAT</h3>
+                    {{-- Says what the type actually is, not always "FAT". A
+                     TRANSFER has no acceptance checklist and the section is not
+                     rendered at all; see documents.checklists. --}}
+                <h3 class="mb-4 text-theme-base font-semibold text-gray-800 dark:text-white">Checklist {{ $selectedType }}</h3>
                     <div class="space-y-3">
                         @foreach($checklist as $index => $item)
                             <div class="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 md:flex-row md:items-center md:justify-between">

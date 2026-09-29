@@ -1706,7 +1706,9 @@ Verification status across all critical acceptance criteria:
       check from one it could not perform
 - [x] Microsoft 365 employee directory search (PRD §39) — name, email, department,
       job title, company and status, read live from Graph and never mirrored
-- [x] Automated test suite verified (261 passed, 1037 assertions)
+- [x] Document handover parties (sender/receiver entity, name, division, contact)
+      carried from the form into the generated PDF
+- [x] Automated test suite verified (268 passed, 1069 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 
 ## Not yet built
