@@ -45,4 +45,19 @@ return [
         'redirect' => env('ENTRA_REDIRECT_URI'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin service monitor
+    |--------------------------------------------------------------------------
+    |
+    | The health-endpoint probe makes a real HTTP request to APP_URL, which is
+    | the right behaviour in production: an endpoint that answers internally but
+    | is unreachable from outside is still broken. In the test suite it is the
+    | wrong behaviour, because it makes "everything healthy" depend on whether
+    | the developer happens to have a dev server running. Disabled there so the
+    | suite measures this code rather than the workstation.
+    |
+    */
+    'probe_health_endpoint' => env('SERVICES_PROBE_HEALTH_ENDPOINT', true),
+
 ];

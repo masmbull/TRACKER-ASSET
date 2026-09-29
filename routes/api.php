@@ -36,4 +36,9 @@ Route::middleware(AuthenticateAuditAgent::class)->group(function () {
 
     Route::get('/agent/inbox', [AgentCommandApiController::class, 'inbox']);
     Route::post('/agent/commands/{command}/ack', [AgentCommandApiController::class, 'ack']);
+
+    // Progress for long-running work. The agent owns the stage vocabulary, so
+    // these take a free-text sentence rather than a server-side enum.
+    Route::post('/agent/commands/{command}/progress', [AgentCommandApiController::class, 'progress']);
+    Route::post('/agent/install-progress', [AgentCommandApiController::class, 'installProgress']);
 });

@@ -262,4 +262,99 @@ public static class Api
         }
         catch { }
     }
+
+    /// <summary>
+    /// Report where a queued command has got to, so the fleet page shows a
+    /// progress bar instead of a static "queued" badge.
+    /// </summary>
+    /// <remarks>
+    /// Best-effort by design. A failed progress report must never change whether
+    /// the command itself counts as delivered - the agent acks it afterwards, and
+    /// throwing here would skip real work on someone's laptop over a lost
+    /// progress ping. The stage text is owned by the agent: the server stores
+    /// whatever it is given, so renaming a step here needs no server change.
+    /// </remarks>
+    public static void ReportProgress(
+        string url,
+        string token,
+        long commandId,
+        int percent,
+        string? stage = null)
+    {
+        try
+        {
+            var body = new Dictionary<string, object?>
+            {
+                ["progress"] = Math.Clamp(percent, 0, 100),
+                ["stage"] = stage,
+            };
+
+            using var req = new HttpRequestMessage(
+                HttpMethod.Post, $"{url}/api/agent/commands/{commandId}/progress")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var resp = Http.Send(req);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"[!] Progress rejected: HTTP {(int)resp.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Progress report failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Report install or update progress, which no queued command drives.
+    /// </summary>
+    /// <remarks>
+    /// The installer runs before any daemon exists, so it reports under the token
+    /// it has just registered. A terminal report is sent with status done or
+    /// failed, which is what settles the row on the server.
+    /// </remarks>
+    public static void ReportInstallProgress(
+        string url,
+        string token,
+        string command,
+        string status,
+        int percent,
+        string? stage = null,
+        Dictionary<string, string>? result = null)
+    {
+        try
+        {
+            var body = new Dictionary<string, object?>
+            {
+                ["command"] = command,
+                ["status"] = status,
+                ["progress"] = Math.Clamp(percent, 0, 100),
+                ["stage"] = stage,
+                ["result"] = result,
+            };
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/agent/install-progress")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var resp = Http.Send(req);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"[!] Install progress rejected: HTTP {(int)resp.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Install progress report failed: {ex.Message}");
+        }
+    }
 }

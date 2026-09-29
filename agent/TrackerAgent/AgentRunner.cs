@@ -448,6 +448,14 @@ public static class AgentRunner
                             // page would keep offering "Uninstall" on a machine
                             // that no longer has an agent.
                             Console.WriteLine($"[*] Command #{id} uninstall received. Acknowledging...");
+                            // Report that removal has actually begun, before the ack
+                            // settles the row. Once acked the command is history and
+                            // further progress is ignored, so this is the only point
+                            // at which the page can stop saying "queued" and start
+                            // saying "removing". The steps after it are not
+                            // reportable at all: the agent is deleting itself.
+                            Api.ReportProgress(url, token, id, 5, "Removing the agent...");
+
                             Api.Ack(url, token, id, "done", new Dictionary<string, string>
                             {
                                 ["message"] = "Agent removed itself after receiving the uninstall command.",
