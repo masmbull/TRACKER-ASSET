@@ -31,9 +31,13 @@ return [
         /*
         | The mark placed in the middle of the code.
         |
-        | Referenced as a URL rather than inlined as base64. A sheet of 200 labels
-        | would otherwise carry 200 copies of the file inside it - around 5 MB of
-        | repeated image data for a page of print-ready squares.
+        | Inlined into each label as a data URI rather than referenced by URL. An
+        | SVG shown through an <img> tag is rendered in secure static mode, where
+        | a browser will not fetch an external reference - so a URL here means
+        | the logo silently disappears from the label sheet, which is the one
+        | place it matters. The cost is bounded by sheet_size below.
+        |
+        | Site-relative, resolved under public/ by the service.
         */
         'logo' => env('ASSET_QR_LOGO', '/images/mito-icon.png'),
 

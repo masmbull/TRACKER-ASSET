@@ -184,6 +184,87 @@ class AssetQrCodeTest extends TestCase
         );
     }
 
+    /**
+     * The reason the mark is inlined rather than referenced.
+     *
+     * An SVG loaded through an <img> element renders in secure static mode: the
+     * browser will not fetch an external reference, so a logo referenced by URL
+     * renders when the label is opened directly and is silently blank in the one
+     * place it matters - the <img> on the label sheet. A test cannot open a
+     * browser, but it can assert the property the restriction turns on: nothing
+     * in the document points outside itself.
+     */
+    public function test_the_mark_survives_being_loaded_through_an_img_tag(): void
+    {
+        $svg = $this->labelFor(Asset::factory()->create());
+
+        $this->assertStringContainsString(
+            'data:image/png;base64,',
+            $svg,
+            'The mark has to be inlined; a URL reference is dropped when the SVG is used as an image.'
+        );
+
+        // No external reference of any kind: the only href allowed is the inline one.
+        $document = simplexml_load_string($svg);
+        $images = $document->xpath('//*[local-name()="image"]');
+
+        $this->assertNotEmpty($images, 'The mark should be embedded in the code.');
+
+        foreach ($images as $image) {
+            $this->assertStringStartsWith('data:', (string) $image['href'], 'No external reference may remain.');
+        }
+
+        $this->assertStringNotContainsString('/images/mito-icon.png', $svg);
+    }
+
+    /** The mark must be real image data, not a truncated or empty encoding. */
+    public function test_the_inlined_mark_is_a_decodable_png(): void
+    {
+        $svg = $this->labelFor(Asset::factory()->create());
+
+        $this->assertSame(
+            file_get_contents(public_path('images/mito-icon.png')),
+            $this->decodedMark($svg),
+            'The inlined bytes should be the logo file itself.'
+        );
+    }
+
+    private function decodedMark(string $svg): ?string
+    {
+        $document = simplexml_load_string($svg);
+        $image = $document->xpath('//*[local-name()="image"]')[0] ?? null;
+        $href = $image === null ? '' : (string) $image['href'];
+
+        if (! str_starts_with($href, 'data:')) {
+            return null;
+        }
+
+        return base64_decode(substr($href, strpos($href, ',') + 1), true) ?: null;
+    }
+
+    /**
+     * A missing mark should cost the logo, not the code. The plate is what buys
+     * the error correction, so dropping it too would leave a scannability hole.
+     */
+    public function test_a_missing_mark_leaves_the_plate_rather_than_a_hole(): void
+    {
+        config(['assets.qr.logo' => '/images/not-a-real-file.png']);
+
+        $document = simplexml_load_string($this->labelFor(Asset::factory()->create()));
+
+        $this->assertEmpty(
+            $document->xpath('//*[local-name()="image"]'),
+            'A missing file should not emit a broken reference.'
+        );
+
+        $boxes = $document->xpath('//*[local-name()="rect"]');
+        $this->assertGreaterThan(
+            0,
+            (int) $boxes[2]['width'],
+            'The plate stays, so the code is still the size it was declared to be.'
+        );
+    }
+
     public function test_qr_sheet_lists_labels_for_existing_assets(): void
     {
         Asset::factory()->count(3)->create();
