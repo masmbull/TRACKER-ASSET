@@ -283,6 +283,38 @@
                         <x-alert type="warning">{{ session('warning') }}</x-alert>
                     @endif
 
+                    {{--
+                        Validation errors.
+
+                        The flash messages above are all this layout used to show, so a
+                        rejected form came back looking exactly like a form that had
+                        been saved: the page reloaded, the fields showed their stored
+                        values, and nothing said why. The asset edit form had no
+                        @error anywhere and no old() either, so every field the user
+                        had just filled in was silently replaced by what was already
+                        in the database.
+
+                        Rendered here rather than per form so a view cannot forget:
+                        a form that shows errors nowhere is indistinguishable from a
+                        form that worked. Deliberately not the <x-alert> component,
+                        which dismisses itself after five seconds - fine for "saved",
+                        useless for "here is what to fix".
+                    --}}
+                    @if($errors->any())
+                        <div class="mb-4 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-theme-sm text-error-700 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400"
+                             role="alert"
+                             aria-labelledby="validation-errors-heading">
+                            <p id="validation-errors-heading" class="font-semibold">
+                                {{ trans_choice('There is :count problem with this form.|There are :count problems with this form.', $errors->count(), ['count' => $errors->count()]) }}
+                            </p>
+                            <ul class="mt-2 list-inside list-disc space-y-1">
+                                @foreach($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
                     @yield('content')
                 </div>
             </main>

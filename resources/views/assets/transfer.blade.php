@@ -51,7 +51,11 @@
                     <select name="from_location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select location</option>
                         @foreach($locations as $location)
-                            <option value="{{ $location->id }}" {{ $asset->location_id == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
+                            {{-- Defaults to where the asset actually is. Its two
+                                 siblings on this form already read old(); without
+                                 it a rejected transfer silently sent the asset
+                                 from somewhere the user never picked. --}}
+                            <option value="{{ $location->id }}" {{ old('from_location_id', $asset->location_id) == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                         @endforeach
                     </select>
                 </div>

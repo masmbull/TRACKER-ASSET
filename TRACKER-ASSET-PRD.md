@@ -1710,7 +1710,9 @@ Verification status across all critical acceptance criteria:
       carried from the form into the generated PDF
 - [x] One entity per master data row: names are stripped of invisible characters
       on every write, and pairs that had already split are merged and repointed
-- [x] Automated test suite verified (285 passed, 1113 assertions)
+- [x] A rejected form keeps what was typed and says what is wrong, on every page
+- [x] One fingerprint per agent token, enforced by a unique index
+- [x] Automated test suite verified (287 passed, 1127 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 
 ## Not yet built
