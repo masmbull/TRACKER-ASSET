@@ -1720,7 +1720,9 @@ Verification status across all critical acceptance criteria:
       were renumbered, and the suite had been passing only because SQLite does
       not enforce foreign keys and reuses rowid 1 after a rolled-back test
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (294 passed, 1161 assertions on both engines)
+- [x] Automated test suite verified (295 passed, 1162 assertions on both engines)
+- [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
+      found the QR code silently broken for every role (PRD §41)
 
 ## Not yet built
 
