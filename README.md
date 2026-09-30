@@ -158,6 +158,12 @@ php artisan test       # 290 tests · 1142 assertions (in-memory SQLite)
 vendor/bin/pint        # code style (Laravel Pint)
 ```
 
+CI runs the suite on **both** SQLite and PostgreSQL. Running only SQLite hides
+two classes of bug that the production engine catches immediately: foreign keys
+are not enforced there by default, and its rowid is reused after a rolled-back
+test where a PostgreSQL sequence never rewinds. To run the second engine locally:
+see [`docs/local-development.md`](docs/local-development.md).
+
 ## 📚 Documentation
 
 | Doc | Covers |

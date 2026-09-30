@@ -13,7 +13,11 @@ return new class extends Migration
             ->select('agent_token_id', DB::raw('COUNT(*) as total'))
             ->whereNotNull('agent_token_id')
             ->groupBy('agent_token_id')
-            ->having('total', '>', 1)
+            // COUNT(*) rather than the "total" alias: PostgreSQL resolves HAVING
+            // against the table, so an aggregate alias is simply not a column it
+            // can see there. SQLite and MySQL both tolerate it, which is exactly
+            // why this only surfaced on the second engine.
+            ->havingRaw('COUNT(*) > 1')
             ->pluck('total', 'agent_token_id');
 
         foreach ($duplicates as $tokenId => $total) {

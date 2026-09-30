@@ -72,15 +72,16 @@ class AssetTest extends TestCase
 
         $response = $this->actingAs($user)->post('/assets', [
             'asset_id' => 'LAPTOP-001',
-            'company_id' => 1,
-            'category_id' => 1,
+            // Resolved rather than hardcoded to 1: see the note in AssetFactory.
+            'company_id' => Company::firstOrFail()->id,
+            'category_id' => AssetCategory::firstOrFail()->id,
             'brand' => 'Dell',
             'model' => 'Latitude 5520',
             'serial_number' => 'SN001',
             'hostname' => 'PC-001',
-            'location_id' => 1,
+            'location_id' => Location::firstOrFail()->id,
             'purchase_year' => 2024,
-            'asset_status_id' => 1,
+            'asset_status_id' => AssetStatus::firstOrFail()->id,
         ]);
 
         $response->assertRedirect('/assets');

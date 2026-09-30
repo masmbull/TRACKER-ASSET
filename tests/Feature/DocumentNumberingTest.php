@@ -33,7 +33,8 @@ class DocumentNumberingTest extends TestCase
             'title' => $type.' test',
             'file_path' => 'documents/test.pdf',
             'file_type' => 'pdf',
-            'generated_by' => 1,
+            // Resolved rather than hardcoded to 1: see the note in AssetFactory.
+            'generated_by' => User::firstOrFail()->id,
         ]);
     }
 

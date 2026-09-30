@@ -315,3 +315,37 @@ User
  ├── Documents (many-to-one as generator)
  └── Activity Logs (many-to-one as actor)
 ```
+
+## Migration Order
+
+Migrations are named so that a table is always created before anything that
+references it. This is not cosmetic: a foreign key to a table that does not exist
+yet is accepted by SQLite and rejected by PostgreSQL, so the schema could not be
+built on the production engine at all until the ordering was corrected.
+
+Fourteen initial migrations were renamed on 2026-09-30. Only the filenames
+changed; the schema is identical. Databases created before that date need their
+`migrations` rows re-filed by name or `php artisan migrate` will try to re-run
+them. See `docs/local-development.md`.
+
+| Old | New |
+|---|---|
+| `0001_01_01_000001_create_companies_table` | `0001_01_01_000002_create_companies_table` |
+| `0001_01_01_000002_create_jobs_table` | `0001_01_01_000003_create_jobs_table` |
+| `0001_01_01_000002_create_locations_table` | `0001_01_01_000004_create_locations_table` |
+| `0001_01_01_000003_create_asset_categories_table` | `0001_01_01_000005_create_asset_categories_table` |
+| `0001_01_01_000004_create_asset_statuses_table` | `0001_01_01_000006_create_asset_statuses_table` |
+| `0001_01_01_000005_create_assets_table` | `0001_01_01_000007_create_assets_table` |
+| `0001_01_01_000009_create_asset_transfers_table` | `0001_01_01_000008_create_asset_transfers_table` |
+| `0001_01_01_000006_create_asset_assignments_table` | `0001_01_01_000009_create_asset_assignments_table` |
+| `0001_01_01_000007_create_asset_audits_table` | `0001_01_01_000010_create_asset_audits_table` |
+| `0001_01_01_000008_create_asset_repairs_table` | `0001_01_01_000011_create_asset_repairs_table` |
+| `0001_01_01_000011_create_document_templates_table` | `0001_01_01_000012_create_document_templates_table` |
+| `0001_01_01_000010_create_documents_table` | `0001_01_01_000013_create_documents_table` |
+| `0001_01_01_000012_create_attachments_table` | `0001_01_01_000014_create_attachments_table` |
+| `0001_01_01_000013_create_activity_logs_table` | `0001_01_01_000015_create_activity_logs_table` |
+
+Two rows moved rather than shifted: `asset_transfers` now precedes
+`asset_assignments` because the latter's `transfer_id` points at it, and
+`document_templates` now precedes `documents` because the latter's `template_id`
+points at it.

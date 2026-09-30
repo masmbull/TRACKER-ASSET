@@ -28,14 +28,18 @@ class TransferTest extends TestCase
 
     private Asset $asset;
 
+    private Location $jakarta;
+
+    private Location $bandung;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         Company::create(['name' => 'Test Co', 'code' => 'TC', 'address' => '']);
         AssetCategory::create(['name' => 'Laptop']);
-        Location::create(['name' => 'Jakarta', 'status' => 'active']);
-        Location::create(['name' => 'Bandung', 'status' => 'active']);
+        $this->jakarta = Location::create(['name' => 'Jakarta', 'status' => 'active']);
+        $this->bandung = Location::create(['name' => 'Bandung', 'status' => 'active']);
         AssetStatus::create(['name' => 'Assigned']);
 
         $this->support = User::factory()->create(['role' => 'support', 'department' => 'IT']);
@@ -44,24 +48,32 @@ class TransferTest extends TestCase
 
         $this->asset = Asset::factory()->create([
             'current_user_id' => $this->owner->id,
-            'location_id' => 1,
+            'location_id' => $this->jakarta->id,
         ]);
 
         AssetAssignment::create([
             'asset_id' => $this->asset->id,
             'user_id' => $this->owner->id,
             'assigned_date' => '2024-01-01',
-            'from_location_id' => 1,
-            'to_location_id' => 1,
+            'from_location_id' => $this->jakarta->id,
+            'to_location_id' => $this->jakarta->id,
             'created_by' => $this->support->id,
         ]);
     }
 
-    private function transferPayload(int $toUser, int $fromLocation = 1, int $toLocation = 2): array
+    /**
+     * Defaults to Jakarta -> Bandung by name.
+     *
+     * These used to be the literal ids 1 and 2, which only held because the
+     * locations happened to be the first two rows created. A PostgreSQL sequence
+     * carries on past a rolled-back test, so from the second test onwards 1 and 2
+     * named nothing at all. See the note in AssetFactory.
+     */
+    private function transferPayload(int $toUser, ?int $fromLocation = null, ?int $toLocation = null): array
     {
         return [
-            'from_location_id' => $fromLocation,
-            'to_location_id' => $toLocation,
+            'from_location_id' => $fromLocation ?? $this->jakarta->id,
+            'to_location_id' => $toLocation ?? $this->bandung->id,
             'to_user_id' => $toUser,
             'transfer_date' => '2026-09-22',
             'condition' => 'Good',
@@ -79,7 +91,7 @@ class TransferTest extends TestCase
 
         $asset = $this->asset->fresh();
         $this->assertSame($this->target->id, $asset->current_user_id);
-        $this->assertSame(2, $asset->location_id);
+        $this->assertSame($this->bandung->id, $asset->location_id);
 
         // Old assignment is closed, not deleted.
         $old = AssetAssignment::where('asset_id', $asset->id)
@@ -112,8 +124,9 @@ class TransferTest extends TestCase
             ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->target->id))
             ->assertRedirect();
 
+        // Back the other way, so the second transfer exercises the reverse route.
         $this->actingAs($this->support)
-            ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->owner->id, 2, 1))
+            ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->owner->id, $this->bandung->id, $this->jakarta->id))
             ->assertRedirect();
 
         $numbers = AssetTransfer::orderBy('id')->pluck('transfer_number');
