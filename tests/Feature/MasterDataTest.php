@@ -78,12 +78,16 @@ class MasterDataTest extends TestCase
     public function test_duplicate_name_is_rejected(): void
     {
         $support = User::factory()->create(['role' => 'support']);
-        Location::create(['name' => 'Jakarta', 'status' => 'active']);
 
+        // "Jakarta" already exists from setUp. A second insert of it is no longer
+        // possible either, since locations.name carries a unique index - the
+        // database now refuses what the form has always promised to refuse.
         $this->actingAs($support)->post(route('master.store', 'locations'), [
             'name' => 'Jakarta',
             'status' => 'active',
         ])->assertSessionHasErrors('name');
+
+        $this->assertSame(1, Location::where('name', 'Jakarta')->count());
     }
 
     public function test_viewer_cannot_access_master_data(): void

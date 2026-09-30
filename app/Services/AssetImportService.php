@@ -10,7 +10,9 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Support\NameNormalizer;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -293,9 +295,9 @@ class AssetImportService
             return null;
         }
 
-        $clean = trim((string) preg_replace('/\s+/u', ' ', (string) $value));
+        $clean = NameNormalizer::normalize($value);
 
-        if ($clean === '' || in_array(mb_strtolower($clean), self::EMPTY_VALUES, true)) {
+        if ($clean === null || in_array(mb_strtolower($clean), self::EMPTY_VALUES, true)) {
             return null;
         }
 
@@ -454,7 +456,11 @@ class AssetImportService
         $asset = Asset::create([
             'asset_id' => $values['asset_id'] ?? $this->generateAssetId($values['hostname'] ?? $values['serial_number']),
             'company_id' => $this->resolveCompany($values['company_name'] ?? null)->id,
-            'category_id' => AssetCategory::firstOrCreate(['name' => $values['category_name'] ?? 'Other'])->id,
+            'category_id' => $this->resolveLookup(
+                AssetCategory::class,
+                $values['category_name'] ?? null,
+                'Other'
+            )->id,
             'brand' => $values['brand'] ?? 'N/A',
             'model' => $values['model'] ?? 'N/A',
             'serial_number' => $values['serial_number'] ?? 'N/A',
@@ -468,7 +474,11 @@ class AssetImportService
             'vendor' => $values['vendor'] ?? null,
             'purchase_price' => $values['purchase_price'] ?? null,
             'useful_life_years' => $values['useful_life_years'] ?? null,
-            'asset_status_id' => AssetStatus::firstOrCreate(['name' => $values['status_name'] ?? 'Available'])->id,
+            'asset_status_id' => $this->resolveLookup(
+                AssetStatus::class,
+                $values['status_name'] ?? null,
+                'Available'
+            )->id,
             'warranty_until' => $values['warranty_until'] ?? null,
             'deploy_date' => $values['deploy_date'] ?? null,
             'software_license' => $values['software_license'] ?? null,
@@ -574,11 +584,22 @@ class AssetImportService
         return $created;
     }
 
+    /**
+     * Find a company by name, creating it when the sheet names a new one.
+     *
+     * The lookup goes through whereNameIs() rather than an equality match on
+     * the raw cell. A sheet exported from Excel prefixes its first cell with a
+     * BOM, so the value arriving here can differ from the stored name by a
+     * character nobody can see; an exact match misses it and the import files
+     * the same organisation a second time.
+     */
     private function resolveCompany(?string $name): Company
     {
-        $name = $name ?: (string) ($this->config['default_company'] ?? 'PT. Mahakarya Sukses Indonesia');
+        $name = NameNormalizer::normalize($name)
+            ?? NameNormalizer::normalize($this->config['default_company'] ?? null)
+            ?? 'Unknown';
 
-        $company = Company::where('name', $name)->first();
+        $company = Company::query()->whereNameIs($name)->first();
 
         if ($company) {
             return $company;
@@ -586,20 +607,64 @@ class AssetImportService
 
         return Company::create([
             'name' => $name,
-            'code' => 'CMP'.str_pad((string) (Company::count() + 1), 3, '0', STR_PAD_LEFT),
+            'code' => $this->nextCompanyCode(),
             'address' => '',
             'status' => 'active',
         ]);
     }
 
+    /**
+     * The next unused CMPnnn code.
+     *
+     * Deriving this from Company::count() + 1 collides as soon as any company
+     * is deleted: the count drops but the codes do not, so the next import asks
+     * for a code that is already taken and dies on the unique index. The highest
+     * number actually in use is the only figure that stays ahead of deletions.
+     */
+    private function nextCompanyCode(): string
+    {
+        $highest = 0;
+
+        foreach (Company::pluck('code') as $code) {
+            if (preg_match('/^CMP0*(\d+)$/i', (string) $code, $matches) === 1) {
+                $highest = max($highest, (int) $matches[1]);
+            }
+        }
+
+        return 'CMP'.str_pad((string) ($highest + 1), 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Find or create a lookup row by name.
+     *
+     * The four lookup tables are keyed by name (PRD §17-§20), so this is the
+     * single point where an imported label becomes a master data row. Matching
+     * case-insensitively as well as exactly mirrors how a MySQL unique index
+     * compares, which keeps the lookup from turning a name that differs only in
+     * capitalisation into an integrity error instead of a reuse.
+     *
+     * @param  class-string<Model>  $model
+     * @param  array<string, mixed>  $attributes
+     */
+    private function resolveLookup(string $model, ?string $name, string $default, array $attributes = []): Model
+    {
+        $name = NameNormalizer::normalize($name) ?? $default;
+
+        return $model::query()->whereNameIs($name)->first()
+            ?? $model::query()->create(['name' => $name, ...$attributes]);
+    }
+
     private function resolveLocation(?string $name): Location
     {
-        $name = $name ?: 'HO';
+        /** @var Location $location */
+        $location = $this->resolveLookup(Location::class, $name, 'HO', [
+            'branch' => 'Main',
+            'type' => 'office',
+            'address' => '',
+            'status' => 'active',
+        ]);
 
-        return Location::firstOrCreate(
-            ['name' => $name],
-            ['branch' => 'Main', 'type' => 'office', 'address' => '', 'status' => 'active']
-        );
+        return $location;
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
+use App\Support\NameNormalizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,7 @@ class MasterDataController extends Controller
     public function store(Request $request, string $type)
     {
         $config = $this->config($type);
+        $this->normalizeName($request);
 
         $record = $config['model']::create($request->validate($this->rules($config)));
 
@@ -155,6 +157,7 @@ class MasterDataController extends Controller
     {
         $config = $this->config($type);
         $record = $config['model']::findOrFail($id);
+        $this->normalizeName($request);
 
         $record->update($request->validate($this->rules($config, $record->id)));
 
@@ -163,6 +166,24 @@ class MasterDataController extends Controller
         return redirect()
             ->route('master.index', $type)
             ->with('success', "{$config['singular']} updated.");
+    }
+
+    /**
+     * Normalise the submitted name before validation runs.
+     *
+     * The models clean `name` on the way in, but the unique rule reads the raw
+     * request. Without this step a name pasted out of Excel — a byte order mark
+     * in front, say — passes the uniqueness check against the stored row, is
+     * then normalised on its way to the database and collides with the very row
+     * the form was supposed to reject. That turns a clear field error into an
+     * unhandled integrity violation, so the form would look broken rather than
+     * telling the user what is wrong.
+     */
+    private function normalizeName(Request $request): void
+    {
+        if ($request->has('name')) {
+            $request->merge(['name' => NameNormalizer::normalize($request->input('name')) ?? '']);
+        }
     }
 
     public function destroy(string $type, int $id)

@@ -64,6 +64,69 @@ by name/email. Unknown people get a placeholder account (`{slug}@imported.local`
 accounts can never log in (PRD §13, §39). Disable this behaviour via
 `create_missing_users` in `config/asset-import.php`.
 
+## Lookup Names
+
+A sheet exported from Excel prefixes its cells with a UTF-8 byte order mark, and a
+name copied out of a browser or Word arrives carrying zero-width and
+non-breaking spaces. Neither is visible on screen, but both make two spellings of
+the same organisation compare as different strings.
+
+Every name the importer writes goes through `App\Support\NameNormalizer` first,
+and the four lookup models normalise again on the way in, so a cell that says
+`﻿PT. Mahakarya Sukses Indonesia` resolves to the company that already exists
+rather than filing a second one. Lookups use `whereNameIs()`, which matches the
+normalised form and folds case the way a MySQL unique index compares.
+
+This is not cosmetic. The register was carrying a real duplicate: two companies
+whose names were byte-identical apart from a BOM, rendering identically in every
+dropdown and signing identically on a generated document, with five assets
+attached to the copy nobody could see.
+
+Generated company codes use the highest `CMPnnn` number in use, not
+`count() + 1`. The count drops when a company is deleted while the codes do not,
+so `count() + 1` eventually asks for a code that is taken and fails the import
+with an integrity error on a row that looks perfectly ordinary.
+
+## Repairing Data That Already Split
+
+`MasterDataNormalizer` (run by `2026_09_30_000017`) folds rows whose names are
+identical once invisible characters are removed, repointing every foreign key at
+the surviving row first. Referencing columns are discovered from the schema, so a
+table that starts pointing at a lookup table later is covered without editing the
+repair.
+
+What it will not do is merge names that merely resemble each other. `PT. Mito`
+and `PT Mito` are different strings after normalisation and both are left alone;
+deciding they are one organisation is a judgement about the business, and
+guessing it would destroy a distinction somebody may have made on purpose. The
+same goes for capitalisation: `PABRIK BITUNG` and `Pabrik Bitung` stay two rows
+until somebody says otherwise, and the migration names them in its output.
+
+The repair is safe to re-run — it reports what it did and does nothing the second
+time. It is also **not reversible**: the merged row's id and code are gone, and
+the migration's `down()` says so rather than pretending otherwise. Generated
+documents are deliberately left untouched, since a stored payload and its PDF are
+a record of what was signed on a particular day.
+
+## Lookup Name Uniqueness
+
+`MasterDataController` has always validated `unique:locations,name` and
+`unique:companies,name`, but the database did not enforce either: only
+`asset_categories` and `asset_statuses` carried the index. That gap is why a
+duplicate company could exist at all. Migration `2026_09_30_000017` closes it.
+
+The index on `locations` is **skipped** while that table holds names differing
+only by capitalisation, because MySQL's default collation folds case and would
+reject an index that SQLite accepts — and the two databases disagreeing about
+the same data is worse than one missing index. The migration prints the offending
+names and logs a warning. Nothing else is lost: the model normalises on write,
+the form's unique rule still applies, and on MySQL that rule already behaves
+case-insensitively.
+
+Note that `unique` comparisons are case-insensitive on MySQL and case-sensitive on
+SQLite. That asymmetry is inherent to running one locally and the other in
+production, and it is the reason the repair does not fold case variants for you.
+
 ## CLI
 
 ```bash

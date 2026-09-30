@@ -222,6 +222,74 @@ class AssetImportTest extends TestCase
         $this->assertSame('Lenovo', Asset::where('asset_id', 'LAP-100')->value('brand'));
     }
 
+    /**
+     * The register already held this company, so the sheet's byte order mark must
+     * not file it a second time.
+     *
+     * A sheet exported from Excel prefixes its cells with a UTF-8 BOM, and the
+     * importer used to look companies up with a raw equality match. The BOM made
+     * the lookup miss, a new company was created, and the register ended up with
+     * two rows that render identically - one of them holding real assets.
+     */
+    public function test_a_bom_prefixed_company_name_reuses_the_existing_company(): void
+    {
+        $rows = [
+            $this->fullRow([
+                'ASSET ID' => 'LAP-BOM',
+                'Serial Number' => 'SN-BOM',
+                'Hostname' => 'HOST-BOM',
+                'Company Name' => "\u{FEFF}PT. Mahakarya Sukses Indonesia",
+            ]),
+        ];
+
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('assets.import.analyze'), ['file' => $this->workbook($rows)])->assertOk();
+        $this->actingAs($support)->post(route('assets.import.confirm'))->assertRedirect(route('assets.import'));
+
+        $this->assertSame(1, Company::count());
+        $this->assertSame(1, Company::where('name', 'PT. Mahakarya Sukses Indonesia')->count());
+
+        $asset = Asset::where('asset_id', 'LAP-BOM')->firstOrFail();
+        $this->assertSame('PT. Mahakarya Sukses Indonesia', $asset->company->name);
+    }
+
+    /**
+     * Count()+1 stops being a free code the moment a company is deleted.
+     *
+     * Deleting one drops the count while the codes stay put, so the next import
+     * asks for a code that is already taken and dies on the unique index. That
+     * is a 500 in the middle of a spreadsheet import, with no clue in the report
+     * about which row caused it.
+     */
+    public function test_a_deleted_company_does_not_make_the_next_import_collide(): void
+    {
+        Company::create(['name' => 'Alpha', 'code' => 'CMP004', 'address' => '']);
+        Company::create(['name' => 'Beta', 'code' => 'CMP005', 'address' => '']);
+        Company::create(['name' => 'Gamma', 'code' => 'CMP006', 'address' => '']);
+
+        // Leaves three companies holding codes 004, 005 and 006. count() + 1
+        // would now answer CMP004, which is taken.
+        Company::where('code', 'CMP005')->delete();
+
+        $rows = [
+            $this->fullRow([
+                'ASSET ID' => 'LAP-NEWCO',
+                'Serial Number' => 'SN-NEWCO',
+                'Hostname' => 'HOST-NEWCO',
+                'Company Name' => 'Delta',
+            ]),
+        ];
+
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('assets.import.analyze'), ['file' => $this->workbook($rows)])->assertOk();
+        $this->actingAs($support)->post(route('assets.import.confirm'))->assertRedirect(route('assets.import'));
+
+        $this->assertDatabaseCount('assets', 1);
+        $this->assertSame('CMP007', Company::where('name', 'Delta')->value('code'));
+    }
+
     public function test_viewer_cannot_access_import(): void
     {
         $viewer = User::factory()->create(['role' => 'viewer']);
