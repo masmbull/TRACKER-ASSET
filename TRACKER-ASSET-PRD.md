@@ -1725,8 +1725,13 @@ Verification status across all critical acceptance criteria:
       `/assets/qr`. The scan target is built from `ASSET_QR_BASE_URL` rather than the
       generating request, because a relative URL encodes localhost and is dead to a
       phone
+- [x] The MITO mark is inlined into each label rather than referenced by URL: an
+      SVG shown through an `<img>` tag will not load an external reference, so a
+      linked logo would have been blank on the label sheet — the one place the
+      branding matters. Asserted, with the mark checked to decode back to the
+      original file
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (306 passed, 1188 assertions on both engines)
+- [x] Automated test suite verified (309 passed, 1195 assertions on both engines)
 - [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
       found the QR code silently broken for every role (PRD §41)
 

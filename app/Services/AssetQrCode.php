@@ -28,6 +28,15 @@ class AssetQrCode
 
     private const FONT = 'Helvetica, Arial, sans-serif';
 
+    /**
+     * Encoded marks, keyed by the configured path.
+     *
+     * A label sheet renders one SVG per asset, and they all want the same mark.
+     *
+     * @var array<string, string>
+     */
+    private static array $logoCache = [];
+
     public function __construct(private readonly array $config) {}
 
     public static function fromConfig(): self
@@ -118,9 +127,49 @@ class AssetQrCode
     }
 
     /**
-     * The MITO mark, on a white plate so it cannot be read as a module.
+     * The mark, on a white plate so it cannot be read as a module.
+     *
+     * Inlined as a data URI rather than referenced by URL. An SVG loaded through
+     * an <img> element renders in secure static mode, where a browser refuses to
+     * fetch an external resource: a label opened directly is a top-level
+     * document and would show the mark, but every <img> on the label sheet would
+     * silently come back with a blank centre. A data URI is not a network fetch,
+     * so it survives that restriction, and the cost is bounded by sheet_size.
      */
     private function logoOverlay(int $size): string
+    {
+        $plate = (int) round($size * (float) ($this->config['logo_ratio'] ?? 0.20));
+        $pad = max(2, (int) round($plate * 0.12));
+        $inner = max(1, $plate - ($pad * 2));
+        $offset = (int) round(($size - $plate) / 2);
+        $radius = (int) round($plate * 0.12);
+        $href = $this->logoHref();
+
+        // The plate is emitted even when the mark cannot be read, so a missing
+        // logo degrades to a plain code rather than to a hole in the middle.
+        $plateMarkup = '<rect x="'.$this->px($offset).'" y="'.$this->px($offset).'"'
+            .' width="'.$this->px($plate).'" height="'.$this->px($plate).'"'
+            .' rx="'.$this->px($radius).'" fill="#ffffff"/>';
+
+        if ($href === '') {
+            return $plateMarkup;
+        }
+
+        return $plateMarkup
+            .'<image href="'.$href.'"'
+            .' x="'.$this->px($offset + $pad).'" y="'.$this->px($offset + $pad).'"'
+            .' width="'.$this->px($inner).'" height="'.$this->px($inner).'"'
+            .' preserveAspectRatio="xMidYMid meet"/>';
+    }
+
+    /**
+     * The mark as an inline data URI, or '' when it cannot be read.
+     *
+     * Encoded once per process: a 60-label sheet asks for the same mark sixty
+     * times, and re-reading and re-encoding the file for each one is the kind of
+     * cost that turns a print page into a wait.
+     */
+    private function logoHref(): string
     {
         $logo = (string) ($this->config['logo'] ?? '');
 
@@ -128,22 +177,72 @@ class AssetQrCode
             return '';
         }
 
-        // The plate leaves a ring of clear space around the mark, so the mark's
-        // own edges do not read as modules either.
-        $plate = (int) round($size * (float) ($this->config['logo_ratio'] ?? 0.20));
-        $pad = max(2, (int) round($plate * 0.12));
-        $inner = max(1, $plate - ($pad * 2));
-        $offset = (int) round(($size - $plate) / 2);
-        $radius = (int) round($plate * 0.12);
-        $href = $this->escape($logo);
+        if (array_key_exists($logo, self::$logoCache)) {
+            return self::$logoCache[$logo];
+        }
 
-        return '<rect x="'.$this->px($offset).'" y="'.$this->px($offset).'"'
-            .' width="'.$this->px($plate).'" height="'.$this->px($plate).'"'
-            .' rx="'.$this->px($radius).'" fill="#ffffff"/>'
-            .'<image href="'.$href.'"'
-            .' x="'.$this->px($offset + $pad).'" y="'.$this->px($offset + $pad).'"'
-            .' width="'.$this->px($inner).'" height="'.$this->px($inner).'"'
-            .' preserveAspectRatio="xMidYMid meet"/>';
+        return self::$logoCache[$logo] = $this->inline($logo);
+    }
+
+    private function inline(string $logo): string
+    {
+        $path = $this->logoPath($logo);
+
+        if ($path === null || ! is_file($path) || ! is_readable($path)) {
+            return '';
+        }
+
+        $bytes = file_get_contents($path);
+
+        if ($bytes === false || $bytes === '') {
+            return '';
+        }
+
+        $mime = $this->mimeType($path);
+
+        return $mime === null
+            ? ''
+            : 'data:'.$mime.';base64,'.base64_encode($bytes);
+    }
+
+    /**
+     * Where the configured value actually lives on disk.
+     *
+     * The setting is a site-relative path, which is what belongs in configuration:
+     * a developer should not have to know where the project is checked out. A
+     * value that is already absolute, or a remote URL, is left to the caller.
+     */
+    private function logoPath(string $logo): ?string
+    {
+        if (preg_match('#^(https?:)?//#i', $logo) === 1) {
+            return null;
+        }
+
+        if (str_starts_with($logo, '/')) {
+            $candidate = public_path(ltrim($logo, '/'));
+        } else {
+            $candidate = base_path($logo);
+        }
+
+        return is_file($candidate) ? $candidate : null;
+    }
+
+    private function mimeType(string $path): ?string
+    {
+        if (function_exists('mime_content_type')) {
+            $mime = @mime_content_type($path);
+
+            if (is_string($mime) && $mime !== '') {
+                return $mime;
+            }
+        }
+
+        return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'png' => 'image/png',
+            'svg' => 'image/svg+xml',
+            'jpg', 'jpeg' => 'image/jpeg',
+            default => null,
+        };
     }
 
     private function center(int $width): string
