@@ -1712,12 +1712,15 @@ Verification status across all critical acceptance criteria:
       on every write, and pairs that had already split are merged and repointed
 - [x] A rejected form keeps what was typed and says what is wrong, on every page
 - [x] One fingerprint per agent token, enforced by a unique index
+- [x] Documents reachable from navigation: a cross-asset list with type filter
+      and search, plus Templates and Add Asset entries, so a document is no
+      longer only findable through the tab it was generated from (PRD §43)
 - [x] PostgreSQL verified in CI as well as SQLite (PRD §14, §47) — the schema
       could not be built on PostgreSQL at all until fourteen initial migrations
       were renumbered, and the suite had been passing only because SQLite does
       not enforce foreign keys and reuses rowid 1 after a rolled-back test
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (290 passed, 1142 assertions on both engines)
+- [x] Automated test suite verified (294 passed, 1161 assertions on both engines)
 
 ## Not yet built
 

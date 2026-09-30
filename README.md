@@ -154,7 +154,7 @@ php artisan serve --port=8000
 ## 🧪 Testing
 
 ```bash
-php artisan test       # 290 tests · 1142 assertions (in-memory SQLite)
+php artisan test       # 294 tests · 1161 assertions (in-memory SQLite)
 vendor/bin/pint        # code style (Laravel Pint)
 ```
 

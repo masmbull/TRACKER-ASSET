@@ -57,6 +57,24 @@ Rules:
   already issued (never from a plain row count).
 - `documents.document_number` has a unique index as the final safety net.
 
+## Finding a Document
+
+`/documents` lists every generated document across all assets, newest first,
+with a type filter and a search over the document number, the title and the asset
+id. Links go to the preview and to the PDF download.
+
+It exists because the Documents tab on an asset page can only answer "what does
+*this* asset have?". Before it, the only route to a document was a direct link, so
+"show me every BAST issued this quarter" and "find the invoice for that asset
+somebody else registered" both had no answer, and a document that left the
+browser tab was effectively gone from the UI.
+
+Visibility is delegated to `AssetPolicy::viewAny`, the same decision `preview()`
+and `download()` make per document, so the list and its contents cannot disagree
+about who may see what. A document with no asset is still listed and rendered,
+with a dash in the asset column — a generated record always has an asset, so a
+null one means the row predates the rule rather than that it is unusable.
+
 ## Manual Documents
 
 The "Add Document" flow still exists for registering already-existing external
