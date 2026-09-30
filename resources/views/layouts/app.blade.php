@@ -62,6 +62,7 @@
                     // Adding an asset is the most common action in the app and had no
                     // navigation entry at all: the route existed, and the only way in
                     // was a button on the asset list page.
+                    ['route' => 'assets.qr.sheet', 'label' => 'QR Labels', 'gate' => 'viewAny', 'model' => App\Models\Asset::class, 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M3.75 4.5a.75.75 0 0 1 .75-.75h9.19l5.56 5.56a.75.75 0 0 1 .22.53v9.41a.75.75 0 0 1-.75.75h-14.25a.75.75 0 0 1-.75-.75V4.5Zm11.44 1.5H4.5v13.5h15V10.5h-3.56a.75.75 0 0 1-.53-.22L14 6.19V6Z" fill="currentColor"/>'],
                     ['route' => 'assets.create', 'label' => 'Add Asset', 'gate' => 'create', 'model' => App\Models\Asset::class, 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v8.25h8.25a.75.75 0 0 1 0 1.5h-8.25v8.25a.75.75 0 0 1-1.5 0v-8.25H2.75a.75.75 0 0 1 0-1.5h8.25V3a.75.75 0 0 1 .75-.75Z" fill="currentColor"/>'],
                 ],
                 'MANAGEMENT' => [
