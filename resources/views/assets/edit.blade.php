@@ -18,14 +18,14 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Asset ID *</label>
-                    <input type="text" name="asset_id" value="{{ $asset->asset_id }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="asset_id" value="{{ old('asset_id', $asset->asset_id) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Company *</label>
                     <select name="company_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($companies as $company)
-                            <option value="{{ $company->id }}" {{ $asset->company_id == $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
+                            <option value="{{ $company->id }}" {{ old('company_id', $asset->company_id) == $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -34,7 +34,7 @@
                     <select name="category_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($categories as $category)
-                            <option value="{{ $category->id }}" {{ $asset->category_id == $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
+                            <option value="{{ $category->id }}" {{ old('category_id', $asset->category_id) == $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -43,7 +43,7 @@
                     <select name="asset_status_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($statuses as $status)
-                            <option value="{{ $status->id }}" {{ $asset->asset_status_id == $status->id ? 'selected' : '' }}>{{ $status->name }}</option>
+                            <option value="{{ $status->id }}" {{ old('asset_status_id', $asset->asset_status_id) == $status->id ? 'selected' : '' }}>{{ $status->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -54,40 +54,40 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Brand *</label>
-                    <input type="text" name="brand" value="{{ $asset->brand }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="brand" value="{{ old('brand', $asset->brand) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Model *</label>
-                    <input type="text" name="model" value="{{ $asset->model }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="model" value="{{ old('model', $asset->model) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Serial Number *</label>
-                    <input type="text" name="serial_number" value="{{ $asset->serial_number }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="serial_number" value="{{ old('serial_number', $asset->serial_number) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Hostname *</label>
-                    <input type="text" name="hostname" value="{{ $asset->hostname }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="hostname" value="{{ old('hostname', $asset->hostname) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Location *</label>
                     <select name="location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($locations as $location)
-                            <option value="{{ $location->id }}" {{ $asset->location_id == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
+                            <option value="{{ $location->id }}" {{ old('location_id', $asset->location_id) == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Purchase Year</label>
-                    <input type="number" name="purchase_year" value="{{ $asset->purchase_year }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="number" name="purchase_year" value="{{ old('purchase_year', $asset->purchase_year) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Vendor</label>
-                    <input type="text" name="vendor" value="{{ $asset->vendor }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="vendor" value="{{ old('vendor', $asset->vendor) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Purchase Price</label>
-                    <input type="number" name="purchase_price" step="0.01" value="{{ $asset->purchase_price }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="number" name="purchase_price" step="0.01" value="{{ old('purchase_price', $asset->purchase_price) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
             </div>
         </x-card>
@@ -96,22 +96,22 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">OS Version</label>
-                    <input type="text" name="os_version" value="{{ $asset->os_version }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="os_version" value="{{ old('os_version', $asset->os_version) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">MAC Address</label>
-                    <input type="text" name="mac_address" value="{{ $asset->mac_address }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="mac_address" value="{{ old('mac_address', $asset->mac_address) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Static IP</label>
-                    <input type="text" name="static_ip" value="{{ $asset->static_ip }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="static_ip" value="{{ old('static_ip', $asset->static_ip) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Current User</label>
                     <select name="current_user_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($users as $user)
-                            <option value="{{ $user->id }}" {{ $asset->current_user_id == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
+                            <option value="{{ $user->id }}" {{ old('current_user_id', $asset->current_user_id) == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -120,7 +120,7 @@
                     <select name="admin_it_pic" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         <option value="">Select</option>
                         @foreach($users as $user)
-                            <option value="{{ $user->id }}" {{ $asset->admin_it_pic == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
+                            <option value="{{ $user->id }}" {{ old('admin_it_pic', $asset->admin_it_pic) == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -130,7 +130,7 @@
         <x-card title="Notes">
             <div>
                 <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Repair Notes</label>
-                <textarea name="repair_notes" rows="4" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ $asset->repair_notes }}</textarea>
+                <textarea name="repair_notes" rows="4" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ old('repair_notes', $asset->repair_notes) }}</textarea>
             </div>
         </x-card>
 

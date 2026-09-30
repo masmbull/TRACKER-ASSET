@@ -152,6 +152,14 @@ Two behaviours worth knowing:
   since the middleware rejects both with 401 before the inbox is read.
   `audit:sweep` filters on the same rule so it never queues a scan that cannot
   be delivered. Both need the scheduler running — see `docs/deployment.md`.
+- **One fingerprint per token, enforced.** The POST handler does
+  `updateOrCreate(['agent_token_id' => ...])` and `AgentApiToken` reads it back
+  through `hasOne()->latestOfMany('collected_at')`, so the code has always
+  assumed a single row per token. Nothing enforced that: a retried or concurrent
+  POST produced a second row and `latestOfMany()` then *hid* the split by always
+  answering with the newer one. Migration `2026_09_30_000018` keeps the newest row
+  per token (its `agent_software` children cascade away with it, which is right —
+  the list is replaced wholesale on every report) and adds the unique index.
 
 `AgentFingerprint::findings()` turns the readings into operator-facing badges
 (antivirus off, firewall off, BitLocker off, disk predicted failure, unlicensed
