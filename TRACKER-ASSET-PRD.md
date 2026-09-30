@@ -1719,8 +1719,14 @@ Verification status across all critical acceptance criteria:
       could not be built on PostgreSQL at all until fourteen initial migrations
       were renumbered, and the suite had been passing only because SQLite does
       not enforce foreign keys and reuses rowid 1 after a rolled-back test
+- [x] QR labels for assets that already exist (PRD §41): a branded SVG per asset
+      with the MITO mark centred and the caption beneath, error correction raised to
+      H so the mark does not cost scans, and a printable filterable bulk sheet at
+      `/assets/qr`. The scan target is built from `ASSET_QR_BASE_URL` rather than the
+      generating request, because a relative URL encodes localhost and is dead to a
+      phone
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (295 passed, 1162 assertions on both engines)
+- [x] Automated test suite verified (306 passed, 1188 assertions on both engines)
 - [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
       found the QR code silently broken for every role (PRD §41)
 

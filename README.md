@@ -45,7 +45,8 @@ The browser-based successor to the legacy Windows `ITAuditMITO` desktop workflow
 | Transfer Workflow (atomic, assignment history, sequential numbering) | ✅ Done |
 | Repair History | ✅ Done |
 | Master Data CRUD (Companies / Locations / Categories / Statuses, delete protection) | ✅ Done |
-| QR Code (per-asset PNG) + Barcode/QR scan page | ✅ Done |
+| QR Code — per-asset SVG label (MITO mark + caption) and a printable bulk label sheet — see `config/assets.php` | ✅ Done |
+| Barcode/QR scan page `/barcode` (resolve a scanned code to an asset) | ✅ Done |
 | Attachments Upload (validated, logged) | ✅ Done |
 | Reports (summary, breakdowns, audit coverage, CSV export) | ✅ Done |
 

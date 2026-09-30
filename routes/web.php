@@ -58,6 +58,11 @@ Route::middleware('auth')->group(function () {
         ->name('assets.import.confirm')
         ->middleware('can:import-assets');
 
+    // Before the resource route below: /assets/qr would otherwise be matched by
+    // assets/{asset} with "qr" as the id, and 404 on an asset lookup.
+    Route::get('/assets/qr', [QrController::class, 'sheet'])->name('assets.qr.sheet');
+    Route::get('/assets/{asset}/qr', [QrController::class, 'show'])->name('assets.qr');
+
     Route::resource('assets', AssetController::class);
 
     Route::get('/assets/{asset}/audit', [AssetController::class, 'audit'])->name('assets.audit');
@@ -80,8 +85,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/{document}', [DocumentController::class, 'preview'])->name('documents.preview');
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
-
-    Route::get('/assets/{asset}/qr', [QrController::class, 'show'])->name('assets.qr');
 
     Route::post('/assets/{asset}/attachments', [AttachmentController::class, 'store'])->name('assets.attachments.store');
     Route::get('/assets/{asset}/attachments/{attachment}', [AttachmentController::class, 'download'])->name('assets.attachments.download');
