@@ -1708,7 +1708,9 @@ Verification status across all critical acceptance criteria:
       job title, company and status, read live from Graph and never mirrored
 - [x] Document handover parties (sender/receiver entity, name, division, contact)
       carried from the form into the generated PDF
-- [x] Automated test suite verified (268 passed, 1069 assertions)
+- [x] One entity per master data row: names are stripped of invisible characters
+      on every write, and pairs that had already split are merged and repointed
+- [x] Automated test suite verified (285 passed, 1113 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 
 ## Not yet built

@@ -7,6 +7,7 @@ use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
+use App\Support\NameNormalizer;
 use Illuminate\Database\Seeder;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -65,12 +66,17 @@ class ExcelImportSeeder extends Seeder
                 $hostname = $row['Hostname'] ?? null;
 
                 try {
-                    $companyName = $row['Company Name'] ?? 'PT. Mahakarya Sukses Indonesia';
-                    $company = Company::where('name', $companyName)->first();
+                    // Normalised before the lookup: this seeder read the sheet
+                    // straight into where('name', ...), so a BOM-prefixed cell
+                    // missed the seeded company and created a second one.
+                    $companyName = NameNormalizer::normalize($row['Company Name'] ?? null)
+                        ?? 'PT. Mahakarya Sukses Indonesia';
+                    $company = Company::query()->whereNameIs($companyName)->first();
                     if (! $company) {
-                        $companyCode = 'CMP'.str_pad(Company::count() + 1, 3, '0', STR_PAD_LEFT);
-                        $company = Company::firstOrCreate(['code' => $companyCode], [
-                            'name' => $companyName, 'address' => '',
+                        $company = Company::create([
+                            'name' => $companyName,
+                            'code' => $this->nextCompanyCode(),
+                            'address' => '',
                         ]);
                     }
 
@@ -149,5 +155,24 @@ class ExcelImportSeeder extends Seeder
 
         Location::firstOrCreate(['name' => 'HO', 'branch' => 'Main', 'type' => 'office', 'address' => '', 'status' => 'active']);
         Location::firstOrCreate(['name' => 'Jakarta HQ', 'branch' => 'Main', 'type' => 'office', 'address' => '', 'status' => 'active']);
+    }
+
+    /**
+     * The next unused CMPnnn code.
+     *
+     * Count()+1 collides once any company is deleted, because the count drops
+     * while the codes do not. Highest-number-in-use cannot be overtaken that way.
+     */
+    private function nextCompanyCode(): string
+    {
+        $highest = 0;
+
+        foreach (Company::pluck('code') as $code) {
+            if (preg_match('/^CMP0*(\d+)$/i', (string) $code, $matches) === 1) {
+                $highest = max($highest, (int) $matches[1]);
+            }
+        }
+
+        return 'CMP'.str_pad((string) ($highest + 1), 3, '0', STR_PAD_LEFT);
     }
 }
