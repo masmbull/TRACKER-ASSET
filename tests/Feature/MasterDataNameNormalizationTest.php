@@ -121,7 +121,7 @@ class MasterDataNameNormalizationTest extends TestCase
         $this->assertSame('Test Co', Company::firstOrFail()->name);
 
         // The asset has to follow, or it would point at a row that is gone.
-        $this->assertSame(1, $stranded->fresh()->company_id);
+        $this->assertSame(Company::firstOrFail()->id, $stranded->fresh()->company_id);
     }
 
     public function test_the_repair_merges_a_duplicate_location(): void
@@ -136,7 +136,7 @@ class MasterDataNameNormalizationTest extends TestCase
         (new MasterDataNormalizer)->repair();
 
         $this->assertDatabaseMissing('locations', ['id' => $duplicate]);
-        $this->assertSame(1, $asset->fresh()->location_id);
+        $this->assertSame(Location::firstOrFail()->id, $asset->fresh()->location_id);
     }
 
     public function test_the_repair_rewrites_a_self_referencing_category_without_creating_a_loop(): void

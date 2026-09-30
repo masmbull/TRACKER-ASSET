@@ -1,5 +1,51 @@
 # Local Development — TRACKER-ASSET
 
+## Running the suite against PostgreSQL
+
+SQLite is the default because it needs no services, and it is the engine that
+hides a whole class of portability bug. Run both before trusting a change:
+
+```bash
+php artisan test   # SQLite, in-memory
+
+# PostgreSQL — the production engine (PRD §14, §47)
+createdb tracker_test
+DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5432 \
+DB_DATABASE=tracker_test DB_USERNAME=postgres DB_PASSWORD=postgres \
+  php artisan test
+```
+
+CI runs both as separate jobs, so a change that only works on one engine is
+caught on the pull request rather than on deploy.
+
+Two things the second engine finds that the first cannot:
+
+- **Foreign keys are not enforced by SQLite by default**, and the schema declared
+  several of them to tables that later migrations created. SQLite accepted the
+  forward references; PostgreSQL refuses to build the schema at all.
+- **SQLite hands out rowid 1 again after each rolled-back test. A PostgreSQL
+  sequence never rewinds.** A fixture written as `company_id => 1` is right for
+  the first test and names a company that no longer exists for every test after
+  it. `AssetFactory` and the test payloads now resolve the rows they mean.
+
+## If your database predates the migration renumbering
+
+Fourteen initial migrations were renamed on 2026-09-30 to remove forward
+foreign-key references, so `asset_transfers` and `document_templates` are
+created before the tables that point at them. The schema is unchanged; only the
+filenames are.
+
+A database that already ran the old filenames has 14 records under names that no
+longer exist, and `php artisan migrate` will try to re-run all of them and fail
+with "table already exists". Either rebuild, or re-file the records by name:
+
+```sql
+UPDATE migrations SET migration = REPLACE(migration, ...) WHERE migration LIKE '0001_01_01_%';
+```
+
+`docs/database-schema.md` lists the full old → new mapping. This is bookkeeping
+only — no data is touched, and no migration runs.
+
 ## Requirements
 
 - Windows 10/11

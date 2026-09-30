@@ -44,8 +44,9 @@ class AssetLifecycleTest extends TestCase
             'asset_id' => $asset->id,
             'user_id' => $support->id,
             'assigned_date' => '2024-01-01',
-            'from_location_id' => 1,
-            'to_location_id' => 1,
+            // Resolved rather than hardcoded to 1: see the note in AssetFactory.
+            'from_location_id' => Location::firstOrFail()->id,
+            'to_location_id' => Location::firstOrFail()->id,
         ]);
 
         $this->actingAs($support)->post(route('assets.retire', $asset))->assertRedirect();

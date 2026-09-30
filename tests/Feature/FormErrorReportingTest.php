@@ -55,10 +55,11 @@ class FormErrorReportingTest extends TestCase
             'model' => 'X1',
             'serial_number' => 'SN-1',
             'hostname' => 'HOST-1',
-            'company_id' => 1,
-            'category_id' => 1,
+            // Resolved rather than hardcoded to 1: see the note in AssetFactory.
+            'company_id' => Company::firstOrFail()->id,
+            'category_id' => AssetCategory::firstOrFail()->id,
             'location_id' => $this->jakarta->id,
-            'asset_status_id' => 1,
+            'asset_status_id' => AssetStatus::firstOrFail()->id,
         ], $overrides);
     }
 

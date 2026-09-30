@@ -32,14 +32,15 @@ class AuthorizationTest extends TestCase
     {
         return [
             'asset_id' => $assetId,
-            'company_id' => 1,
-            'category_id' => 1,
+            // Resolved rather than hardcoded to 1: see the note in AssetFactory.
+            'company_id' => Company::firstOrFail()->id,
+            'category_id' => AssetCategory::firstOrFail()->id,
             'brand' => 'Dell',
             'model' => 'Latitude 5520',
             'serial_number' => 'SN'.$assetId,
             'hostname' => 'PC-'.$assetId,
-            'location_id' => 1,
-            'asset_status_id' => 1,
+            'location_id' => Location::firstOrFail()->id,
+            'asset_status_id' => AssetStatus::firstOrFail()->id,
         ];
     }
 

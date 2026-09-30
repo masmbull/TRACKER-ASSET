@@ -1712,8 +1712,12 @@ Verification status across all critical acceptance criteria:
       on every write, and pairs that had already split are merged and repointed
 - [x] A rejected form keeps what was typed and says what is wrong, on every page
 - [x] One fingerprint per agent token, enforced by a unique index
-- [x] Automated test suite verified (290 passed, 1142 assertions)
+- [x] PostgreSQL verified in CI as well as SQLite (PRD §14, §47) — the schema
+      could not be built on PostgreSQL at all until fourteen initial migrations
+      were renumbered, and the suite had been passing only because SQLite does
+      not enforce foreign keys and reuses rowid 1 after a rolled-back test
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
+- [x] Automated test suite verified (290 passed, 1142 assertions on both engines)
 
 ## Not yet built
 
@@ -1721,9 +1725,7 @@ Tracked here so the checklist above is not read as "everything in the PRD ships"
 
 - [ ] SharePoint / OneDrive document storage (PRD §37, §38). Generated PDFs are
       written to local storage; `config/documents.php` records this deferral
-      rather than hiding it.
-- [ ] PostgreSQL in CI (PRD §47). `ci.yml` runs the suite on SQLite only, so the
-      schema-compatibility claim above is verified by hand, not continuously.
+      rather than hiding it. Needs tenant credentials to build against.
 - [ ] Docker image build & VPS deploy pipeline (PRD §47).
 
 ---
