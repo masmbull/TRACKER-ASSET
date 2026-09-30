@@ -1712,7 +1712,7 @@ Verification status across all critical acceptance criteria:
       on every write, and pairs that had already split are merged and repointed
 - [x] A rejected form keeps what was typed and says what is wrong, on every page
 - [x] One fingerprint per agent token, enforced by a unique index
-- [x] Automated test suite verified (287 passed, 1127 assertions)
+- [x] Automated test suite verified (290 passed, 1142 assertions)
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 
 ## Not yet built

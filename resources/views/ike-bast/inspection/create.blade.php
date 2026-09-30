@@ -41,7 +41,7 @@
             <select name="transfer_id" class="w-full border rounded px-3 py-2">
                 <option value="">None</option>
                 @foreach($asset->transfers as $transfer)
-                    <option value="{{ $transfer->id }}">{{ $transfer->transfer_number }} ({{ $transfer->transfer_date?->format('Y-m-d') }})</option>
+                    <option value="{{ $transfer->id }}" {{ (string) old('transfer_id') === (string) $transfer->id ? 'selected' : '' }}>{{ $transfer->transfer_number }} ({{ $transfer->transfer_date?->format('Y-m-d') }})</option>
                 @endforeach
             </select>
         </div>
