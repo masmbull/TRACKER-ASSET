@@ -110,6 +110,93 @@ class DocumentTemplateTest extends TestCase
         $this->assertSame($template->id, $document->template_id);
     }
 
+    /**
+     * The create form posts a JSON string, because that is all a textarea can send.
+     *
+     * The rule said `required|array`, which a textarea can never satisfy, so this
+     * form could not save anything. It went unnoticed because nothing covered the
+     * store path - the tests exercised the seeder and the generate picker, and the
+     * layout showed no validation errors, so a rejected submission came back as a
+     * pristine empty form.
+     */
+    public function test_a_template_can_be_created_from_the_form(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $response = $this->actingAs($support)->post(route('templates.store'), [
+            'name' => 'FAT Form A',
+            'document_type' => 'FAT',
+            'template_content' => '{"asset_id": {"label": "Asset ID", "type": "text"}}',
+        ]);
+
+        $response->assertRedirect(route('templates.index'))->assertSessionHasNoErrors();
+
+        $template = DocumentTemplate::where('name', 'FAT Form A')->firstOrFail();
+        $this->assertSame('FAT', $template->document_type);
+        $this->assertSame(
+            ['label' => 'Asset ID', 'type' => 'text'],
+            $template->template_content['asset_id']
+        );
+    }
+
+    /**
+     * Broken JSON has to say what is wrong with the JSON.
+     *
+     * "The template content must be an array" was both unhelpful and untrue from
+     * the author's side: they did write a JSON object, and the mistake is always
+     * one specific character. The draft also has to survive, since a hand-written
+     * schema is the most painful thing on any form in the app to retype.
+     */
+    public function test_broken_json_is_rejected_with_a_readable_complaint_and_keeps_the_draft(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+        $draft = '{"asset_id": {"label": "Asset ID",},}';
+
+        $this->actingAs($support)
+            ->from(route('templates.create'))
+            ->post(route('templates.store'), [
+                'name' => 'FAT Form A',
+                'document_type' => 'FAT',
+                'template_content' => $draft,
+            ])
+            ->assertRedirect(route('templates.create'))
+            ->assertSessionHasErrors('template_content');
+
+        $this->assertSame(0, DocumentTemplate::count());
+
+        $this->followingRedirects()
+            ->actingAs($support)
+            ->from(route('templates.create'))
+            ->post(route('templates.store'), [
+                'name' => 'FAT Form A',
+                'document_type' => 'FAT',
+                'template_content' => $draft,
+            ])
+            ->assertSee('not valid JSON')
+            // The name, the type and the whole schema come back.
+            ->assertSee('FAT Form A')
+            ->assertSee('Asset ID');
+    }
+
+    /**
+     * A caller that posts a real array is unaffected by the decoding above.
+     */
+    public function test_a_direct_array_submission_still_works(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('templates.store'), [
+            'name' => 'BAST Form B',
+            'document_type' => 'BAST',
+            'template_content' => ['it_name' => ['label' => 'Nama IT', 'type' => 'text']],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ['label' => 'Nama IT', 'type' => 'text'],
+            DocumentTemplate::where('name', 'BAST Form B')->firstOrFail()->template_content['it_name']
+        );
+    }
+
     public function test_template_show_page_lists_every_field_grouped_by_its_section(): void
     {
         User::factory()->create(['role' => 'admin']);

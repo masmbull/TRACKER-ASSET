@@ -28,22 +28,22 @@
         <div>
             <label class="block text-sm font-medium">Status</label>
             <select name="status" class="w-full border rounded px-3 py-2">
-                <option value="open">Open</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="open" {{ old('status', 'open') === 'open' ? 'selected' : '' }}>Open</option>
+                <option value="in_progress" {{ old('status') === 'in_progress' ? 'selected' : '' }}>In Progress</option>
+                <option value="completed" {{ old('status') === 'completed' ? 'selected' : '' }}>Completed</option>
+                <option value="cancelled" {{ old('status') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
             </select>
         </div>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Problem *</label>
-        <textarea name="problem" required class="w-full border rounded px-3 py-2"></textarea>
+        <textarea name="problem" required class="w-full border rounded px-3 py-2">{{ old('problem') }}</textarea>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Action Taken</label>
-        <textarea name="action" class="w-full border rounded px-3 py-2"></textarea>
+        <textarea name="action" class="w-full border rounded px-3 py-2">{{ old('action') }}</textarea>
     </div>
 
     <div class="grid grid-cols-2 gap-4">

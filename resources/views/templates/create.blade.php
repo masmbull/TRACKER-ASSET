@@ -17,18 +17,24 @@
             <div class="space-y-4">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Name *</label>
-                    <input type="text" name="name" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="FAT Form A">
+                    <input type="text" name="name" required value="{{ old('name') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="FAT Form A">
                 </div>
 
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Type *</label>
-                    <input type="text" name="document_type" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="FAT">
+                    <input type="text" name="document_type" required value="{{ old('document_type') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="FAT">
                 </div>
 
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Template Fields (JSON)</label>
-                    <textarea name="template_content" required class="min-h-[180px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder='{"field1": {"label": "Asset ID", "type": "text"}}'></textarea>
-                    <p class="mt-2 text-theme-xs text-gray-500">JSON format: each key is a field identifier, each value has label and type.</p>
+                    <textarea name="template_content" required class="min-h-[180px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder='{"field1": {"label": "Asset ID", "type": "text"}}'>{{ old('template_content') }}</textarea>
+                    <p class="mt-2 text-theme-xs text-gray-500">
+                        JSON format: each key is a field identifier, each value has label and type.
+                        {{-- This is the field most worth keeping. Everything else on
+                             this form is a name and a type code, but this is a
+                             hand-written schema, and a stray comma used to throw the
+                             whole thing away with no trace of what had been in it. --}}
+                    </p>
                 </div>
             </div>
         </x-card>
