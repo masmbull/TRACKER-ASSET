@@ -17,6 +17,53 @@ use Illuminate\Validation\Rule;
 class DocumentController extends Controller
 {
     /**
+     * Every generated document, across all assets (PRD §43).
+     *
+     * The Documents tab on the asset page only ever answered "what has this one
+     * asset got?". There was no way to ask "show me every BAST we issued this
+     * quarter" or to find last month's invoice for an asset somebody else
+     * registered - the only route to a document was a direct link, which means a
+     * document that left the browser tab became unreachable from the UI.
+     *
+     * @param  Request  $request  'type' narrows to one document type, 'q' searches
+     *                            the number, the title and the asset id.
+     */
+    public function index(Request $request)
+    {
+        // A document is visible exactly when its asset is - that is how preview()
+        // and download() already decide it. Reusing the asset policy keeps the
+        // list and the documents in it from disagreeing, and avoids inventing a
+        // second role matrix that would drift from the first.
+        $this->authorize('viewAny', Asset::class);
+
+        $type = $request->query('type');
+        $search = trim((string) $request->query('q', ''));
+
+        $documents = Document::query()
+            ->with(['asset', 'generator'])
+            ->when($type, fn ($query) => $query->where('document_type', $type))
+            ->when($search !== '', function ($query) use ($search): void {
+                $like = '%'.$search.'%';
+                $query->where(function ($query) use ($like): void {
+                    $query->where('document_number', 'like', $like)
+                        ->orWhere('title', 'like', $like)
+                        ->orWhereHas('asset', fn ($asset) => $asset->where('asset_id', 'like', $like));
+                });
+            })
+            ->orderByDesc('generated_date')
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('documents.index', [
+            'documents' => $documents,
+            'types' => array_keys((array) config('documents.types', [])),
+            'type' => $type,
+            'search' => $search,
+        ]);
+    }
+
+    /**
      * Auto-generate form: everything is prefilled from the register (PRD §32).
      */
     public function generate(Request $request, Asset $asset)

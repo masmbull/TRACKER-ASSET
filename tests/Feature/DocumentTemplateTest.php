@@ -197,6 +197,97 @@ class DocumentTemplateTest extends TestCase
         );
     }
 
+    /**
+     * There was no way to reach a document once its tab was closed.
+     *
+     * The Documents tab on the asset page answers "what does this one asset
+     * have?". It cannot answer "show me every BAST issued this quarter" or "find
+     * the invoice for that asset somebody else registered" - and since the only
+     * route to a document was a direct link, a document that left the browser
+     * became unreachable from the UI entirely.
+     */
+    public function test_documents_can_be_listed_across_every_asset(): void
+    {
+        $user = User::factory()->create(['role' => 'support']);
+        $asset = Asset::factory()->create(['asset_id' => 'LAP-DOC']);
+
+        $this->seed(DocumentTemplateSeeder::class);
+
+        $this->actingAs($user)->post(route('documents.generate.store', $asset), [
+            'document_type' => 'FAT',
+            'document_date' => '2026-09-26',
+        ])->assertRedirect();
+
+        $document = Document::firstOrFail();
+
+        $this->actingAs($user)->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee($document->document_number)
+            ->assertSee('FAT')
+            ->assertSee('LAP-DOC');
+    }
+
+    public function test_the_document_list_narrows_by_type_and_searches_by_number(): void
+    {
+        $user = User::factory()->create(['role' => 'support']);
+        $asset = Asset::factory()->create();
+
+        foreach ([['FAT', '2026-09-26'], ['BAST', '2026-09-27']] as [$type, $date]) {
+            Document::create([
+                'asset_id' => $asset->id,
+                'document_type' => $type,
+                'document_number' => "X/{$type}/2026/00001",
+                'title' => $type.' record',
+                'file_path' => 'documents/test.pdf',
+                'file_type' => 'pdf',
+                'generated_date' => $date,
+                'generated_by' => $user->id,
+            ]);
+        }
+
+        $this->actingAs($user)->get(route('documents.index', ['type' => 'BAST']))
+            ->assertOk()
+            ->assertSee('X/BAST/2026/00001')
+            ->assertDontSee('X/FAT/2026/00001');
+
+        $this->actingAs($user)->get(route('documents.index', ['q' => 'X/FAT']))
+            ->assertOk()
+            ->assertSee('X/FAT/2026/00001')
+            ->assertDontSee('X/BAST/2026/00001');
+    }
+
+    public function test_an_empty_document_list_distinguishes_no_filter_from_no_results(): void
+    {
+        $user = User::factory()->create(['role' => 'support']);
+
+        // "No documents yet." - and a pointer at how to make one.
+        $this->actingAs($user)->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee('No documents yet.')
+            ->assertSee('Documents tab');
+
+        Document::create([
+            'document_type' => 'FAT',
+            'document_number' => 'FAT/IT/2026/00001',
+            'title' => 'FAT record',
+            'file_path' => 'documents/test.pdf',
+            'file_type' => 'pdf',
+            'generated_date' => '2026-09-26',
+            'generated_by' => $user->id,
+        ]);
+
+        // A filter that matches nothing must not read as a broken page.
+        $this->actingAs($user)->get(route('documents.index', ['q' => 'nothing-matches-this']))
+            ->assertOk()
+            ->assertSee('No documents match this filter.')
+            ->assertDontSee('No documents yet.');
+    }
+
+    public function test_documents_require_authentication(): void
+    {
+        $this->get(route('documents.index'))->assertRedirect(route('login'));
+    }
+
     public function test_template_show_page_lists_every_field_grouped_by_its_section(): void
     {
         User::factory()->create(['role' => 'admin']);
