@@ -132,7 +132,12 @@ public partial class App : System.Windows.Application
         _trayIcon = new NotifyIcon
         {
             Icon = MitoIcon.Create() ?? SystemIcons.Information,
-            Text = "Mito Audit Tracker",
+            // Tooltip only - no balloon. It appears when somebody hovers the icon,
+            // which is a request for information rather than an interruption.
+            //
+            // Windows caps NotifyIcon.Text at 63 characters and throws past it, so
+            // this stays short and says where results went now the balloons are gone.
+            Text = "Mito Audit Tracker - running. See the web.",
             Visible = true,
             ContextMenuStrip = new ContextMenuStrip()
         };
@@ -178,7 +183,6 @@ public partial class App : System.Windows.Application
                         else if (command == "update")
                         {
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
-                            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Applying auto-update...", ToolTipIcon.Info);
                             if (AutoUpdater.PerformUpdate(config.ServerUrl, config.Token))
                             {
                                 Environment.Exit(0);
@@ -289,6 +293,17 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// Run a scan, reporting the outcome on the asset page rather than here.
+    /// </summary>
+    /// <remarks>
+    /// No balloon on success or failure. A background inventory agent should not
+    /// interrupt the person using the machine; the audit lands on the asset page
+    /// and on Live Fleet, which is where somebody actually looks for it. A
+    /// balloon saying "Scan completed successfully." told the user nothing they
+    /// did not already have, and one saying "Scan failed." popped up with no
+    /// indication of what failed or where to look.
+    /// </remarks>
     private void RunScan(AgentConfig config)
     {
         try
@@ -299,35 +314,31 @@ public partial class App : System.Windows.Application
             // bound to that device_id.
             payload["device_id"] = config.DeviceId;
 
-            var result = Api.Post(config.ServerUrl, config.Token, payload);
-            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker",
-                result is not null ? "Scan completed successfully." : "Scan failed.",
-                ToolTipIcon.Info);
+            Api.Post(config.ServerUrl, config.Token, payload);
         }
         catch
         {
-            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Scan failed.", ToolTipIcon.Error);
+            // Swallowed on purpose. The server marks the device offline when it
+            // stops reporting, which is the visible signal.
         }
     }
 
+    /// <summary>
+    /// Apply a queued update, again without saying so on this machine.
+    /// </summary>
     private void RunUpdate(AgentConfig config)
     {
         try
         {
-            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Checking for updates...", ToolTipIcon.Info);
-            bool updated = AutoUpdater.PerformUpdate(config.ServerUrl, config.Token);
-            if (updated)
+            if (AutoUpdater.PerformUpdate(config.ServerUrl, config.Token))
             {
+                // Replaced the running binary; this process is now the old one.
                 Environment.Exit(0);
-            }
-            else
-            {
-                _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Update check finished or already up-to-date.", ToolTipIcon.Info);
             }
         }
         catch
         {
-            _trayIcon.ShowBalloonTip(3000, "Mito Audit Tracker", "Update failed.", ToolTipIcon.Error);
+            // Nothing useful to show a user who did not ask for detail.
         }
     }
 
