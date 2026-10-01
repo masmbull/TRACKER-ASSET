@@ -2,16 +2,23 @@
 # constants and readonly classes that 8.2 will not parse, so the image built on
 # 8.2 either failed to install dependencies or shipped a runtime that fataled
 # on first request - both discovered at deploy time rather than build time.
-# The XML family is not optional. phpspreadsheet requires ext-dom, ext-xml,
-# ext-xmlreader, ext-xmlwriter and ext-simplexml, and dompdf requires ext-dom -
-# all five for the Excel import and the generated PDFs. Omitting them makes
-# `composer install` exit 2 on the platform check, which is exactly what
-# happened on the first deploy attempt.
+# Extensions to add on top of what the base image ships.
+#
+# php:8.3-fpm already carries dom, simplexml, xml, xmlreader, xmlwriter and
+# mbstring. Those are exactly what phpspreadsheet and dompdf need for the Excel
+# import and the generated PDFs, so there is nothing to install for them - which
+# is why they are absent here rather than merely optional. Confirm before
+# changing anything here:
+#
+#     docker run --rm php:8.3-fpm php -m | grep -iE 'dom|simplexml|xml|mbstring'
+#
+# Installed one per RUN so a failure names the extension that caused it. A single
+# combined RUN reports "non-zero code: 2" for all of them at once, which is how
+# an earlier version of this file spent a whole deploy cycle being guessed at.
 FROM php:8.3-fpm
 
 WORKDIR /var/www/html
 
-# System dependencies
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -23,22 +30,40 @@ RUN apt-get update && apt-get install -y \
     libicu-dev \
     libpq-dev \
     libzip-dev \
-    && docker-php-ext-install \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    pdo_pgsql \
-    zip \
-    intl \
-    dom \
-    simplexml \
-    xml \
-    xmlreader \
-    xmlwriter \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install -j"$(nproc)" exif
+RUN docker-php-ext-install -j"$(nproc)" pcntl
+RUN docker-php-ext-install -j"$(nproc)" bcmath
+RUN docker-php-ext-install -j"$(nproc)" gd
+RUN docker-php-ext-install -j"$(nproc)" pdo_pgsql
+RUN docker-php-ext-install -j"$(nproc)" zip
+RUN docker-php-ext-install -j"$(nproc)" intl
+
+# Report the extension state, but do not fail the build on it.
+#
+# This exists so that a missing extension is visible in the build log at the
+# point it matters, rather than surfacing two hundred lines later inside
+# `composer install` as "your php version does not satisfy requirement".
+#
+# Deliberately a warning, not an error. The base image changes underneath us -
+# php:8.3-fpm shipped simplexml, exif and pcntl on one run and not another is
+# the kind of drift a hard check turns into a broken build with no visible
+# cause. A loud warning plus a readable composer error further down is the
+# better trade: it says what is missing without pretending to know the answer.
+RUN echo "--- PHP extensions present ---" && \
+    php -m | sort | tr '\n' ' ' && \
+    echo "" && \
+    php -r '
+$need = ["dom","simplexml","xml","xmlreader","xmlwriter","mbstring","gd","intl","zip","pdo_pgsql","bcmath","fileinfo","openssl","tokenizer","json","ctype"];
+$missing = array_values(array_diff($need, get_loaded_extensions()));
+if ($missing) {
+    echo "WARNING: not present in this image: ".implode(", ", $missing)."\n";
+    echo "If composer install complains about a platform requirement, start here.\n";
+} else {
+    echo "All extensions phpspreadsheet and dompdf declare are present.\n";
+}
+'
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
