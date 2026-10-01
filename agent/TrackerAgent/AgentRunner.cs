@@ -36,8 +36,40 @@ public static class AgentRunner
     [DllImport("kernel32.dll")]
     static extern bool AttachConsole(int pid);
 
-    [DllImport("kernel32.dll")]
-    static extern bool AllocConsole();
+    /// <summary>
+    /// Attach to the launching terminal if there is one, and report whether this
+    /// process is interactive.
+    /// </summary>
+    static bool TryAttachConsole()
+    {
+        try
+        {
+            // Autostart through the Run key has no parent terminal, so this returns
+            // false there. That is the case that must stay silent rather than
+            // conjure a window - hence no AllocConsole fallback.
+            return AttachConsole(AttachParentProcess);
+        }
+        catch
+        {
+            // AttachConsole can fail for reasons other than "no parent" on a
+            // locked-down machine; either way there is no console to write to.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Discard output when there is nowhere to send it.
+    /// </summary>
+    /// <remarks>
+    /// Without this, every Console.WriteLine from the poll loop throws or is
+    /// silently dropped, and Console.ForegroundColor throws outright. Redirecting
+    /// to null is what makes the headless path safe.
+    /// </remarks>
+    static void SilenceConsole()
+    {
+        Console.SetOut(TextWriter.Null);
+        Console.SetError(TextWriter.Null);
+    }
 
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -45,12 +77,17 @@ public static class AgentRunner
 
     public static int Run(string[] args)
     {
-        // WinExe has no console - attach to the launching terminal so one-shot
-        // results are visible when run from PowerShell/CMD.
-        if (!AttachConsole(AttachParentProcess))
-        {
-            AllocConsole();
-        }
+        // WinExe has no console of its own. One-shot output is still worth seeing
+        // when someone runs this from PowerShell or CMD, so the parent terminal is
+        // adopted for that case.
+        //
+        // What it must never do is *create* a console. Autostart launches this
+        // binary through the Run key with no parent terminal attached, and
+        // AllocConsole() there opened a black window on every single boot - which
+        // then filled with "Poll error" lines whenever the server was not
+        // reachable, making a background agent look like a broken one. Only
+        // attach to a terminal that already exists; create nothing.
+        var interactive = TryAttachConsole();
 
         string serverUrl = ResolveDefaultServerUrl();
         string token = Environment.GetEnvironmentVariable("TRACKER_AUDIT_TOKEN") ?? "";
@@ -76,10 +113,12 @@ public static class AgentRunner
             }
         }
 
-        if (quiet)
+        // No terminal to write to (the autostart case) behaves exactly like --quiet.
+        // The poll loop logs on every failure, and with no console those writes
+        // either go nowhere or throw on Console.ForegroundColor.
+        if (quiet || !interactive)
         {
-            Console.SetOut(TextWriter.Null);
-            Console.SetError(TextWriter.Null);
+            SilenceConsole();
         }
 
         if (uninstall)
@@ -618,7 +657,11 @@ public static class AgentRunner
             var exe = Environment.ProcessPath
                 ?? Path.Combine(AppContext.BaseDirectory, "TrackerAgent.exe");
 
-            var args = $"--daemon --url \"{url}\" --token \"{token}\" --poll {pollSeconds}";
+            // --quiet is belt and braces: Run() already silences itself when it
+            // cannot attach to a terminal. Passing it explicitly means the autostart
+            // entry stays quiet even if that check ever regresses, and it records in
+            // the registry entry itself that this is a background launch.
+            var args = $"--daemon --quiet --url \"{url}\" --token \"{token}\" --poll {pollSeconds}";
             if (!string.IsNullOrWhiteSpace(assetId))
             {
                 args += $" --asset-id \"{assetId}\"";
