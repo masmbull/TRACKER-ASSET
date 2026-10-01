@@ -46,24 +46,18 @@ RUN docker-php-ext-install -j"$(nproc)" intl
 # point it matters, rather than surfacing two hundred lines later inside
 # `composer install` as "your php version does not satisfy requirement".
 #
-# Deliberately a warning, not an error. The base image changes underneath us -
-# php:8.3-fpm shipped simplexml, exif and pcntl on one run and not another is
-# the kind of drift a hard check turns into a broken build with no visible
-# cause. A loud warning plus a readable composer error further down is the
-# better trade: it says what is missing without pretending to know the answer.
-RUN echo "--- PHP extensions present ---" && \
-    php -m | sort | tr '\n' ' ' && \
-    echo "" && \
-    php -r '
-$need = ["dom","simplexml","xml","xmlreader","xmlwriter","mbstring","gd","intl","zip","pdo_pgsql","bcmath","fileinfo","openssl","tokenizer","json","ctype"];
-$missing = array_values(array_diff($need, get_loaded_extensions()));
-if ($missing) {
-    echo "WARNING: not present in this image: ".implode(", ", $missing)."\n";
-    echo "If composer install complains about a platform requirement, start here.\n";
-} else {
-    echo "All extensions phpspreadsheet and dompdf declare are present.\n";
-}
-'
+# Deliberately a warning, not an error. The contents of the base image drift
+# between runs, and a hard check turns that drift into a build failure with no
+# visible cause. A loud warning plus a readable composer error further down is
+# the better trade.
+#
+# One line, no line continuations. Docker parses each line of a RUN as a
+# separate instruction unless it ends in a backslash, and a multi-line string
+# inside `php -r '...'` is not something that survives that - it produced
+# "dockerfile parse error: unknown instruction: $need", because the second line
+# of the PHP looked like a Dockerfile directive.
+COPY docker/check-extensions.php /usr/local/bin/check-extensions.php
+RUN php /usr/local/bin/check-extensions.php && rm /usr/local/bin/check-extensions.php
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
