@@ -229,8 +229,18 @@ KN apply -f k8s/deployment-web.yaml      >/dev/null; ok "web"
 #
 # This must come after the apply above: the deployments have to exist before
 # their image can be set.
-KN set image deployment/tracker-asset-web container=php-fpm "${IMAGE}" >/dev/null
-KN set image deployment/tracker-asset-scheduler container=scheduler "${IMAGE}" >/dev/null
+# The value is <container>=<image>, and the name on the left is the container
+# name as written in the manifest: php-fpm in deployment-web.yaml, scheduler in
+# deployment-scheduler.yaml.
+#
+# `container=php-fpm` does not mean "the container named php-fpm". kubectl reads
+# the left side of the `=` as the container name, so it took that argument as a
+# container literally called "container" and then read ${IMAGE} as a second
+# resource to act on. That fails with "all resources must be specified before
+# image changes" and, under `set -e`, ended the deploy right there - before the
+# ingress, before the migrations, before the pods.
+KN set image deployment/tracker-asset-web php-fpm="${IMAGE}" >/dev/null
+KN set image deployment/tracker-asset-scheduler scheduler="${IMAGE}" >/dev/null
 ok "image ${IMAGE} applied"
 
 step "Applying ingress"
@@ -250,34 +260,87 @@ step "Running database migrations"
 
 KN delete job tracker-asset-migrate --ignore-not-found >/dev/null 2>&1 || true
 
-KN run tracker-asset-migrate \
-    --image="$IMAGE" \
-    --restart=Never \
-    --overrides='{
-      "spec": {
-        "securityContext": {"runAsNonRoot": true, "runAsUser": 33, "runAsGroup": 33, "fsGroup": 33},
-        "containers": [{
-          "name": "migrate",
-          "image": "'"$IMAGE"'",
-          "command": ["php", "artisan", "migrate", "--force"],
-          "securityContext": {"allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}},
-          "env": [
-            {"name": "APP_ENV", "value": "production"},
-            {"name": "APP_DEBUG", "value": "false"},
-            {"name": "DB_CONNECTION", "value": "pgsql"},
-            {"name": "DB_HOST", "value": "'"$DB_HOST"'"},
-            {"name": "DB_PORT", "value": "5432"},
-            {"name": "DB_DATABASE", "value": "'"$DB_NAME"'"},
-            {"name": "DB_USERNAME", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-db-secret", "key": "db_username"}}},
-            {"name": "DB_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-db-secret", "key": "db_password"}}},
-            {"name": "APP_KEY", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-secrets", "key": "app_key"}}},
-            {"name": "CACHE_STORE", "value": "redis"},
-            {"name": "SESSION_DRIVER", "value": "redis"},
-            {"name": "REDIS_HOST", "value": "tracker-asset-redis"}
-          ]
-        }]
-      }
-    }' >/dev/null
+# A real Job, not `kubectl run`.
+#
+# `kubectl run --restart=Never` creates a bare Pod. A Pod made that way carries
+# no job-name label, so the wait loop below - which selects on job-name= - never
+# matches it and reports "migrations did not finish in time" even when every
+# migration applied; `kubectl logs job/...` has no object to read when one
+# really does fail; and because the line above deletes a *job*, a re-run finds
+# the old Pod still sitting there and dies on "pods tracker-asset-migrate
+# already exists". Everything below assumes a Job exists, so the thing created
+# here has to be one. Applying a manifest does that on any kubectl version,
+# where the run generator flags have changed across releases.
+KN apply -f - >/dev/null <<MIGRATE_JOB
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tracker-asset-migrate
+  labels:
+    app: tracker-asset
+    component: migrate
+spec:
+  # Retried twice, then left in place long enough to read. A migration that
+  # fails for a real reason has to stay inspectable, and a single attempt that
+  # dies on a transient connection error would be a dead end. The TTL clears it
+  # well before the next deploy needs the name back.
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 900
+  template:
+    metadata:
+      labels:
+        app: tracker-asset
+        component: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+      containers:
+        - name: migrate
+          image: "${IMAGE}"
+          command: ["php", "artisan", "migrate", "--force"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_DEBUG
+              value: "false"
+            - name: DB_CONNECTION
+              value: pgsql
+            - name: DB_HOST
+              value: "${DB_HOST}"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: "${DB_NAME}"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-db-secret
+                  key: db_username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-db-secret
+                  key: db_password
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: app_key
+            - name: CACHE_STORE
+              value: redis
+            - name: SESSION_DRIVER
+              value: redis
+            - name: REDIS_HOST
+              value: tracker-asset-redis
+MIGRATE_JOB
 
 # Wait, but bounded: a migration blocked on a wrong password would otherwise
 # sit here silently.
