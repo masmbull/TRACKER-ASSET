@@ -1737,8 +1737,21 @@ Verification status across all critical acceptance criteria:
       erratic, yielding stickers that scan on a desk and fail in a warehouse.
       The harness is itself checked against codes it must reject, so a pass means
       something
+- [x] A printed QR label scans on the `/barcode` page (PRD §42). The labels encode
+      a URL, and a scanner types the whole thing, so exact-match identifier lookup
+      alone resolved every printed label to "not found" — the label feature and the
+      scan page could not both have been working. The label URL is unwrapped to its
+      asset id, deliberately host-agnostic so stickers printed before a host change
+      still resolve, and only `/assets/{id}` is unwrapped so a typed path cannot
+      reach records the identifier lookup would not. Both tests fail against the
+      old resolver
+- [x] A non-numeric scan code no longer raises a database type error on
+      PostgreSQL. Matching the primary key in the identifier query cast a
+      barcode like `BC-100200300` to `bigint`; SQLite shrugged and passed, while
+      PostgreSQL raised 22P02 and turned every scan into a 500. Two engines, one
+      answer, and the difference was only visible by running both
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (309 passed, 1195 assertions on both engines)
+- [x] Automated test suite verified (313 passed, 1218 assertions on both engines)
 - [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
       found the QR code silently broken for every role (PRD §41)
 
