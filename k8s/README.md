@@ -1,128 +1,96 @@
 # Deploying to the office Kubernetes cluster
 
-The app is a standard Laravel container: PHP-FPM behind nginx, PostgreSQL, a
-scheduler, and one shared volume for uploads. Seven manifests live in `k8s/`.
+## The short version
 
-**Read this first.** Two things in here are filled with placeholders and will
-not work until you change them: the `APP_KEY` and the database password in
-`secrets.yaml`, and `db_host` in `configmap.yaml`.
+```bash
+# once, at the top of deploy.sh:
+#   REGISTRY=registry.office.local
+#   APP_HOST=tracker-asset.office.local
+#   DB_HOST=postgres.tracker.svc.cluster.local
 
-## Before you start, on the cluster
+./deploy.sh
+```
 
-Two questions decide whether the manifests apply cleanly at all:
+That one command checks the prerequisites, creates the namespace, makes you fill
+in the secret, creates storage, builds and pushes the image, applies every
+manifest, runs the migrations, waits for the pods, copies in the agent binary,
+and prints what to do next.
+
+Run it again after any code change — it rebuilds, repushes and reapplies without
+touching your data or your secret.
+
+The first run stops once, on purpose, so you can fill in two real values:
+the database password and the app key. It creates `k8s/secrets.yaml` from the
+template and tells you so, then exits. Fill it in and run again.
+
+## What you need on the machine you run it from
+
+docker, kubectl with its context already pointed at the office cluster, and a
+registry you can push to.
+
+## Before the first run
+
+Two facts about your cluster decide whether this works as written. Neither can
+be checked from this repository.
 
 ```bash
 # 1. Does your storage class support two pods writing at once?
 kubectl get storageclass
 ```
 
-The web Deployment runs 2 replicas sharing one PVC. That needs
-`ReadWriteMany`. If the only classes available are `ReadWriteOnce`, the second
-pod stays in `ContainerCreating` forever and a node drain takes the site down
-instead of failing over. In that case set `replicas: 1` in
-`deployment-web.yaml` — it is a real trade, but a working single replica beats
-a dead pair.
+The web Deployment runs 2 replicas sharing one volume, which needs
+`ReadWriteMany`. If only `ReadWriteOnce` is available, the second pod stays in
+`ContainerCreating` and a node drain takes the site down rather than failing
+over. In that case set `replicas: 1` in `k8s/deployment-web.yaml` — a working
+single replica beats a pair that deadlock. `deploy.sh` warns if the claim is
+not Bound.
 
 ```bash
 # 2. Which ingress controller is installed?
 kubectl get ingressclass
 ```
 
-`ingress.yaml` assumes nginx. If it is Traefik or an external LB, ignore that
-file and point whatever you use at the `tracker-asset-web` Service.
+`ingress.yaml` assumes nginx. The script only applies it if an nginx class
+exists; otherwise it tells you to point your own controller at the
+`tracker-asset-web` service.
 
-## 1. Build and push the image
+## Why Redis is part of this
 
-There is no registry configured yet, so replace `REGISTRY` in
-`deployment-web.yaml` and both Deployments with your own. Needs the .NET 8 SDK
-only for the agent binary, not for the app.
+The web Deployment runs two replicas, so anything stored on local disk is
+per-pod. Sessions on disk means a login that works on pod A is unknown to pod
+B, and roughly half of all requests land on the wrong pod. The database driver
+is not available either — this app has no `sessions` table, which is worth
+knowing if you ever read `config/session.php` and see `database` as the default.
 
-```bash
-# Build locally, tag for your registry
-docker build -t registry.office.local/tracker-asset:1.0.0 .
+So sessions, cache and queue all go to Redis, matching `.env.example`. Redis
+holds nothing that must survive a restart; the data is in PostgreSQL.
 
-# Push
-docker push registry.office.local/tracker-asset:1.0.0
+## Things `deploy.sh` cannot do for you
 
-# Then set that tag in both deployment files (image: ...), not :latest,
-# so a rollback means changing a tag rather than rebuilding.
-```
+**Database migrations run as a Job, not an `exec`.** An `exec` needs a running
+pod, which is circular on a first deploy — the pods crash-loop on a missing
+schema. The Job runs once and Kubernetes records the result.
 
-## 2. Create the secret
+**The agent binary is not in the image.** It is 150 MB and gitignored. The
+download route serves it from the shared volume, so the script copies it in
+from `storage/app/agent/TrackerAgent.exe` if that file exists. If it does not,
+the script warns and the download button 404s until you build it (see
+`agent/README.md`) and re-run.
 
-```bash
-# Generate a real key on any machine with the app checked out
-php artisan key:generate --show
-```
+**`ASSET_QR_BASE_URL` is set to the same hostname as `APP_URL` by default.** It
+must be an address a phone can reach — a phone on office wifi cannot resolve
+`tracker-asset-web.default.svc.cluster.local`, so pointing QR labels at an
+internal service name produces labels that are dead to the handheld scanner.
 
-Copy the template, fill in the password and key, and apply **the copy** — the
-template itself is named differently and the real one is ignored, so a filled-in
-file can never be committed by accident:
+## Files here
 
-```bash
-cp k8s/secrets-template.yaml k8s/secrets.yaml
-$EDITOR k8s/secrets.yaml          # replace both CHANGE_ME values
-kubectl apply -f k8s/secrets.yaml
-```
-
-`k8s/secrets.yaml` is in `.gitignore`. Do not rename it to something tracked.
-
-## 3. Apply the rest, in order
-
-```bash
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/pvc-storage.yaml
-kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/deployment-web.yaml
-kubectl apply -f k8s/deployment-scheduler.yaml
-kubectl apply -f k8s/ingress.yaml
-```
-
-Watch it come up rather than assuming:
-
-```bash
-kubectl get pods -w
-```
-
-## 4. Run the migrations
-
-Migrations do not run on their own. Without this the app boots and every page
-that touches the database 500s.
-
-```bash
-kubectl exec deploy/tracker-asset-web -- php artisan migrate --force
-```
-
-## 5. Point DNS (or use a port-forward to check first)
-
-```bash
-# Quick check before touching DNS
-kubectl port-forward svc/tracker-asset-web 8080:80
-# open http://localhost:8080
-```
-
-Then add `tracker-asset.office.local` to whatever serves office DNS, pointing
-at the ingress address:
-
-```bash
-kubectl get ingress tracker-asset -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-```
-
-## The two things most likely to bite
-
-**`ASSET_QR_BASE_URL` must be an address the phones can reach.** A phone on
-office wifi cannot resolve `tracker-asset-web.default.svc.cluster.local`, so
-setting it to an internal service name produces QR labels that are dead to the
-handheld scanner. Use the same hostname as `app_url`.
-
-**The agent binary is not in the image.** It is ~150 MB and deliberately
-gitignored. The download route (`/agent/download`) serves it from the shared
-volume, so deploy it once into the PVC:
-
-```bash
-kubectl cp agent/TrackerAgent/../../storage/app/agent/TrackerAgent.exe \
-  $(kubectl get pod -l app=tracker-asset,component=web -o jsonpath='{.items[0].metadata.name}'):\
-  /var/www/html/storage/app/agent/TrackerAgent.exe
-```
-
-Until that file exists, the "Download agent" button in the UI 404s.
+| File | Purpose |
+|---|---|
+| `deployment-web.yaml` | php-fpm, 2 replicas |
+| `deployment-scheduler.yaml` | `schedule:work`. Not optional — `agent:resolve-stale-commands` runs here every minute |
+| `redis.yaml` | sessions, cache, queue |
+| `service.yaml` / `ingress.yaml` | ClusterIP and the nginx rule |
+| `pvc-storage.yaml` | uploads, PDFs, agent binary |
+| `configmap.yaml` | non-secret settings; `deploy.sh` generates the live one |
+| `secrets-template.yaml` | committed template, no values |
+| `../deploy.sh` | the one command |

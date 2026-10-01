@@ -86,13 +86,27 @@ spec:
                 secretKeyRef:
                   name: tracker-asset-secrets
                   key: app_key
-            # Sessions, cache and compiled views are written to disk. Without
-            # this the pods start on a read-only root filesystem and every
-            # request fails when Laravel tries to compile a Blade view.
-            - name: LARAVEL_CACHE_STORE
-              value: file
+            # Sessions, cache and queue go to Redis, not to disk.
+            #
+            # Not a preference. Two replicas share nothing on local disk by
+            # default, so a file-based session written by pod A is invisible to
+            # pod B and roughly half of all requests would drop the login. The
+            # database driver is not available either - this app has no
+            # `sessions` table.
             - name: SESSION_DRIVER
-              value: file
+              value: redis
+            - name: CACHE_STORE
+              value: redis
+            - name: QUEUE_CONNECTION
+              value: redis
+            - name: REDIS_HOST
+              value: tracker-asset-redis
+            - name: REDIS_PORT
+              value: "6379"
+            # Compiled views still go to disk - those are per-pod and shared
+            # fine, because each pod compiles its own copy.
+            - name: VIEW_COMPILED_PATH
+              value: /var/www/html/storage/framework/views
           volumeMounts:
             - name: storage
               mountPath: /var/www/html/storage

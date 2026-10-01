@@ -81,10 +81,20 @@ spec:
                 secretKeyRef:
                   name: tracker-asset-secrets
                   key: app_key
-            - name: LARAVEL_CACHE_STORE
-              value: file
+            # The scheduler reads and writes the same cache as the web pods. If these two
+            # disagreed the scheduler would work from a stale cache while the
+            # site served fresh data, which is the kind of bug nobody reports
+            # because it looks like intermittent nonsense.
             - name: SESSION_DRIVER
-              value: file
+              value: redis
+            - name: CACHE_STORE
+              value: redis
+            - name: QUEUE_CONNECTION
+              value: redis
+            - name: REDIS_HOST
+              value: tracker-asset-redis
+            - name: REDIS_PORT
+              value: "6379"
           volumeMounts:
             - name: storage
               mountPath: /var/www/html/storage

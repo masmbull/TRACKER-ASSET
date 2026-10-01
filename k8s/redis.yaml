@@ -1,0 +1,89 @@
+---
+# Redis.
+#
+# Not optional. The web Deployment runs two replicas, and sessions on local disk
+# mean a login that works on pod A is unknown to pod B - roughly half of all
+# requests land on the wrong pod and the user is bounced back to the login form.
+#
+# There is no `sessions` table in this app's 35 migrations, so SESSION_DRIVER
+# cannot be "database" either; Redis is the only correct choice here. It is also
+# what .env.example already specifies for cache and queue.
+#
+# Single replica with no persistence. It holds sessions and cache only - anything
+# that must survive a restart lives in PostgreSQL - so a cache that empties is a
+# nuisance, not data loss.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracker-asset-redis
+  labels:
+    app: tracker-asset
+    component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tracker-asset
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: tracker-asset
+        component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # appendonly off is deliberate: this is cache and session scratch
+          # space, not a system of record. Persisting it would only slow the
+          # writes on every request.
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+            initialDelaySeconds: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracker-asset-redis
+  labels:
+    app: tracker-asset
+    component: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: tracker-asset
+    component: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
