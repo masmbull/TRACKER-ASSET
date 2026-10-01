@@ -6,9 +6,18 @@ metadata:
     app: tracker-asset
     component: web
 spec:
-  # Two replicas so a rollout does not take the site down, and so a single node
-  # draining does not leave the office with no access to its asset register.
-  replicas: 2
+  # One replica, because this is a single-node cluster.
+  #
+  # A second pod could not be scheduled anywhere else - there is no second node
+  # - so it buys no failover, only a second copy of the same app competing for a
+  # 4-core i3-4160 and, with a ReadWriteOnce volume, a second pod that can never
+  # start anyway. One pod that always serves beats two where one is always
+  # CrashLooping.
+  #
+  # If this ever moves to a multi-node cluster with ReadWriteMany storage,
+  # raise this to 2. The storage manifest has to change first or the second pod
+  # will hang on ContainerCreating.
+  replicas: 1
   selector:
     matchLabels:
       app: tracker-asset
@@ -74,12 +83,12 @@ spec:
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: tracker-asset-secrets
+                  name: tracker-asset-db-secret
                   key: db_username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: tracker-asset-secrets
+                  name: tracker-asset-db-secret
                   key: db_password
             - name: APP_KEY
               valueFrom:
@@ -136,12 +145,20 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
           resources:
+            # Sized for a single-node office cluster on a 4-core i3-4160.
+            # These are requests/limits, not reservations of dedicated hardware:
+            # the pod can burst to the limit, and the scheduler throttles it if
+            # the node is busy. The limit exists to stop one pod eating the box,
+            # not to promise the CPU.
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 250m
+              memory: 384Mi
             limits:
+              # 1 core for the web pod. The collector does a registry + WMI walk
+              # during a scan, which is genuinely CPU-hungry, and starving it
+              # makes audits time out on the server side.
               cpu: "1"
-              memory: 1Gi
+              memory: 1200Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false

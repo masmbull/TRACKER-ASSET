@@ -20,6 +20,24 @@
 # Sized for what is actually stored: uploaded spreadsheets and documents,
 # generated PDFs, audit exports, and the ~150 MB agent binary that the
 # download route serves.
+# ReadWriteOnce, because that is what this cluster actually has.
+#
+# Verified on the office cluster: the only storage class is
+# "local-path" (rancher.io/local-path), which provisions hostPath volumes and
+# supports ReadWriteOnce alone. A ReadWriteMany claim does not fail loudly - it
+# sits Pending forever while the second pod waits on ContainerCreating, and the
+# symptom is a site that looks deployed but serves half its requests.
+#
+# ReadWriteOnce is also the honest choice on a single-node cluster: a second
+# replica could never be scheduled on another node anyway, so there is no
+# failover to protect. See replicas in deployment-web.yaml, which is set to 1
+# for the same reason.
+#
+# local-path keeps data on the node's own disk under
+# /var/lib/rancher/k3s/storage. Consequences worth knowing:
+#   - It survives pod deletion and node reboot.
+#   - It does NOT survive reinstalling or wiping k3s.
+#   - Backups have to be taken from the host, not from inside the cluster.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -28,11 +46,8 @@ metadata:
     app: tracker-asset
 spec:
   accessModes:
-    - ReadWriteMany
-  # No storageClassName: it binds to whatever the cluster defaults to. Set this
-  # explicitly once you have checked `kubectl get storageclass`, because the
-  # default on many office clusters is a RWO block provisioner and the claim
-  # will sit Pending forever with no error event worth reading.
+    - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
       storage: 20Gi

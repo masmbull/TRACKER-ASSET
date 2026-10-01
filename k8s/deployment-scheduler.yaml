@@ -69,12 +69,12 @@ spec:
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: tracker-asset-secrets
+                  name: tracker-asset-db-secret
                   key: db_username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: tracker-asset-secrets
+                  name: tracker-asset-db-secret
                   key: db_password
             - name: APP_KEY
               valueFrom:

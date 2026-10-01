@@ -1,0 +1,126 @@
+# PostgreSQL for the office cluster.
+#
+# OPTIONAL - do not apply this if the office already has a PostgreSQL the app can
+# reach. In that case set DB_HOST in deploy.sh to its address and skip this file.
+# Running two databases for one app is a good way to end up writing to the wrong
+# one.
+#
+# If the office does NOT already have PostgreSQL, this is what the app talks to.
+#
+# A StatefulSet rather than a Deployment, because a database that can be
+# rescheduled onto a different volume is a database that loses its data. The
+# identity has to be stable.
+#
+# This is sized and configured for an internal asset register on one server -
+# not a database anyone should point a production workload at. Shared_buffers is
+# small because the box has 15 GB shared with Kubernetes itself.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tracker-asset-postgres
+  labels:
+    app: tracker-asset
+    component: postgres
+spec:
+  serviceName: tracker-asset-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tracker-asset
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: tracker-asset
+        component: postgres
+    spec:
+      securityContext:
+        # The postgres image refuses to run as root and requires these ids. Set
+        # on the pod so the volume it mounts is also chowned to the right owner.
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: tracker_asset
+            - name: POSTGRES_USER
+              value: tracker
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-db-secret
+                  key: db_password
+            # Checksums on every page write. Worth it here: this is the only copy
+            # of the asset register, and silent corruption after a crash is worse
+            # than a slightly slower write.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "tracker", "-d", "tracker_asset"]
+            periodSeconds: 10
+            initialDelaySeconds: 20
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "tracker"]
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              # The limit is deliberately above shared_buffers plus the working
+              # memory the app needs; a hard cap at 512Mi on a database that
+              # evicts constantly is a slow database, not a small one.
+              memory: 1280Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tracker-asset-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracker-asset-postgres
+  labels:
+    app: tracker-asset
+    component: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: tracker-asset
+    component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tracker-asset-postgres-data
+  labels:
+    app: tracker-asset
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
