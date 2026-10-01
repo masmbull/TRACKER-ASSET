@@ -150,13 +150,30 @@ COPY . /var/www/html
 # would pass.
 COPY --from=assets /app/public/build ./public/build
 
-# Composer autoloader is regenerated after the real source is in place, so the
-# classmap points at the copied files rather than the empty skeleton.
-RUN composer dump-autoload --optimize --no-dev
-
-# Create storage and cache directories
+# Laravel needs these directories to exist before anything of it boots. They are
+# deliberately absent from the build context: .dockerignore excludes
+# storage/framework/{cache,sessions,views}, and git does not track empty
+# directories anyway, so the build has to create them itself.
+#
+# This RUN must stay ahead of `composer dump-autoload` below, not after it.
+# dump-autoload fires the post-autoload-dump hook, which runs
+# `artisan package:discover`, which boots the application. Blade asks for its
+# compiled-view path during that boot, and with storage/framework/views missing
+# the build dies with "Please provide a valid cache path" - a message that names
+# neither the directory nor the step that wanted it.
+#
+# Adding --no-scripts to that dump-autoload is not an alternative fix: it would
+# skip package discovery at build time, and bootstrap/cache/packages.php would
+# then have to be written on the first request instead, which fails outright if
+# bootstrap/cache is not writable at runtime.
 RUN mkdir -p storage/logs storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
+
+# Composer autoloader is regenerated after the real source is in place, so the
+# classmap points at the copied files rather than the empty skeleton. This also
+# writes bootstrap/cache/{packages,services}.php, baking package discovery into
+# the image instead of repeating it on every request. The order is load-bearing.
+RUN composer dump-autoload --optimize --no-dev
 
 # Writable by the unprivileged user Kubernetes runs as. Baking the ownership in
 # matters because an emptyDir/PVC mounted over storage would otherwise hide it.
