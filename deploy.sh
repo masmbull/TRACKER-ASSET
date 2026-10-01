@@ -24,8 +24,14 @@ IMAGE_NAME="${IMAGE_NAME:-tracker-asset}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 NAMESPACE="${NAMESPACE:-tracker-asset}"
 APP_HOST="${APP_HOST:-tracker-asset.office.local}"
-DB_HOST="${DB_HOST:-postgres.tracker.svc.cluster.local}"
+# The PostgreSQL that comes with postgres.yaml. If the office already runs a
+# PostgreSQL the app can reach, point this at that instead and set
+# USE_BUNDLED_POSTGRES=no below - running two databases for one app is how you
+# end up writing to the wrong one.
+DB_HOST="${DB_HOST:-tracker-asset-postgres}"
+USE_BUNDLED_POSTGRES="${USE_BUNDLED_POSTGRES:-yes}"
 DB_NAME="${DB_NAME:-tracker_asset}"
+DB_USER="${DB_USER:-tracker}"
 STORAGE_SIZE="${STORAGE_SIZE:-20Gi}"
 
 if [ -t 1 ]; then RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; BOLD=$'\033[1m'; OFF=$'\033[0m'
@@ -93,8 +99,11 @@ MSG
 
     grep -q CHANGE_ME k8s/secrets.yaml && die "k8s/secrets.yaml still has CHANGE_ME placeholders. Fill them in and run again."
 
+    # No password syncing needed. The database credentials live in
+    # tracker-asset-db-secret and every workload reads them from there, so the
+    # app and PostgreSQL cannot disagree about the password.
     KN apply -f k8s/secrets.yaml >/dev/null
-    ok "secret created"
+    ok "secrets created"
 fi
 
 # --- configmap --------------------------------------------------------------
@@ -126,9 +135,9 @@ fi
 phase=$(KN get pvc tracker-asset-storage -o jsonpath='{.status.phase}' 2>/dev/null || echo Pending)
 if [ "$phase" != "Bound" ]; then
     warn "Volume claim is $phase, not Bound."
-    warn "If your cluster default is ReadWriteOnce and you run 2 replicas, the second"
-    warn "pod will never start and a node drain takes the site down. Either point"
-    warn "k8s/pvc-storage.yaml at a ReadWriteMany class, or set replicas: 1."
+    warn "This cluster's local-path provisioner only does ReadWriteOnce, which the"
+    warn "manifest now asks for. If it stays Pending, check:"
+    warn "  kubectl describe pvc tracker-asset-storage -n ${NAMESPACE}"
 fi
 
 # --- image ------------------------------------------------------------------
@@ -153,6 +162,18 @@ ok "image reference written into the manifests"
 # --- workloads --------------------------------------------------------------
 
 step "Applying workloads"
+
+if [ "$USE_BUNDLED_POSTGRES" = "yes" ]; then
+    KN apply -f k8s/postgres.yaml >/dev/null
+    ok "postgresql"
+    printf '  waiting for database'
+    for _ in $(seq 1 30); do
+        if KN exec statefulset/tracker-asset-postgres -- pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+            printf '\n'; ok "database accepting connections"; break
+        fi
+        printf '.'; sleep 2
+    done
+fi
 
 KN apply -f k8s/redis.yaml               >/dev/null; ok "redis"
 KN apply -f k8s/service.yaml             >/dev/null; ok "service"
@@ -194,8 +215,8 @@ KN run tracker-asset-migrate \
             {"name": "DB_HOST", "value": "'"$DB_HOST"'"},
             {"name": "DB_PORT", "value": "5432"},
             {"name": "DB_DATABASE", "value": "'"$DB_NAME"'"},
-            {"name": "DB_USERNAME", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-secrets", "key": "db_username"}}},
-            {"name": "DB_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-secrets", "key": "db_password"}}},
+            {"name": "DB_USERNAME", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-db-secret", "key": "db_username"}}},
+            {"name": "DB_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-db-secret", "key": "db_password"}}},
             {"name": "APP_KEY", "valueFrom": {"secretKeyRef": {"name": "tracker-asset-secrets", "key": "app_key"}}},
             {"name": "CACHE_STORE", "value": "redis"},
             {"name": "SESSION_DRIVER", "value": "redis"},
