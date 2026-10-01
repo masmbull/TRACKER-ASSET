@@ -1,21 +1,35 @@
-# PHP 8.3, not 8.2. composer.json requires ^8.3 and the app uses typed
-# constants and readonly classes that 8.2 will not parse, so the image built on
-# 8.2 either failed to install dependencies or shipped a runtime that fataled
-# on first request - both discovered at deploy time rather than build time.
+# PHP 8.4, not 8.3.
+#
+# composer.json says ^8.3, which permits anything below 9.0 - but composer.lock
+# was resolved on 8.4 and pinned symfony/console and fifteen other components at
+# 8.1.x, and those require PHP >= 8.4.1. The constraint in composer.json is not
+# the version the lock file can install on, and it is the lock file that
+# `composer install` obeys.
+#
+# Built on 8.3 that arrives as composer exit code 2 - a dependency solving error
+# that never mentions the image - which is how it went undiagnosed for a build.
+# 8.4 is also what CI runs and what the lock was resolved against, so the image
+# was the only place still claiming 8.3.
+#
+# To support 8.3 for real, re-resolve the lock against that platform rather than
+# lowering the image again:
+#
+#     composer config platform.php 8.3.0 && composer update
+#
 # Extensions to add on top of what the base image ships.
 #
-# php:8.3-fpm already carries dom, simplexml, xml, xmlreader, xmlwriter and
+# php:8.4-fpm already carries dom, simplexml, xml, xmlreader, xmlwriter and
 # mbstring. Those are exactly what phpspreadsheet and dompdf need for the Excel
 # import and the generated PDFs, so there is nothing to install for them - which
 # is why they are absent here rather than merely optional. Confirm before
 # changing anything here:
 #
-#     docker run --rm php:8.3-fpm php -m | grep -iE 'dom|simplexml|xml|mbstring'
+#     docker run --rm php:8.4-fpm php -m | grep -iE 'dom|simplexml|xml|mbstring'
 #
 # Installed one per RUN so a failure names the extension that caused it. A single
 # combined RUN reports "non-zero code: 2" for all of them at once, which is how
 # an earlier version of this file spent a whole deploy cycle being guessed at.
-FROM php:8.3-fpm
+FROM php:8.4-fpm
 
 WORKDIR /var/www/html
 
