@@ -27,7 +27,19 @@ FROM node:22 AS assets
 
 WORKDIR /app
 
-COPY package.json package-lock.json .npmrc ./
+# .npmrc is deliberately not copied, though it sits next to these files on a
+# developer's machine.
+#
+# It holds ignore-scripts=true there, but .gitignore line 20 keeps it out of the
+# repository by policy - so `COPY .npmrc` fails the build on every machine that
+# has never run npm locally, which is the server and every fresh clone. That is
+# exactly how this stage failed the first time it was run: "file not found in
+# build context: stat .npmrc".
+#
+# Dropping it costs nothing. fsevents is the only package in package-lock.json
+# carrying an install script, and it is darwin-only, so on linux ignore-scripts
+# has nothing to act on either way.
+COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
