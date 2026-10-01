@@ -174,11 +174,27 @@ fi
 step "Building image"
 
 IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-docker build -t "$IMAGE" -t "${REGISTRY}/${IMAGE_NAME}:latest" . >/dev/null
+
+# Build output is deliberately not silenced.
+#
+# It used to be, and that hid the one line that explained a failing build:
+# composer's own message naming the package and the platform requirement it could
+# not satisfy. All that survived was docker's trailing "returned a non-zero
+# code: 2" on stderr, which names neither the package nor the version. A quiet
+# build is not worth a build you cannot diagnose.
+docker build -t "$IMAGE" -t "${REGISTRY}/${IMAGE_NAME}:latest" . \
+    || die "image build failed - the reason is in the output above. Nothing was pushed or applied."
+
 ok "built ${IMAGE}"
 
 step "Pushing image"
-docker push "$IMAGE" >/dev/null
+
+# Push progress stays hidden: it is a hundred lines of layer digests that say
+# nothing when it works. Failure is not hidden - docker prints that to stderr
+# itself, and the message below says which registry refused and what to check.
+docker push "$IMAGE" >/dev/null \
+    || die "push to ${REGISTRY} failed (is the registry reachable, and are you logged in to it?)"
+
 ok "pushed ${IMAGE}"
 
 # --- workloads --------------------------------------------------------------
