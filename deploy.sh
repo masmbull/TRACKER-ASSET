@@ -19,11 +19,22 @@ cd "$(dirname "$0")"
 # --- settings ---------------------------------------------------------------
 # Everything you might need to change is in this block.
 
-REGISTRY="${REGISTRY:-}"
+# Settings can come from the environment, so nothing here has to be edited by
+# hand - which matters because this file is tracked in git and every manual
+# edit turns the next `git pull` into a conflict.
+#
+# One-time setup on the server:
+#
+#     echo 'export TRACKER_REGISTRY=REDACTED_SERVER_IP:5000' >> ~/.bashrc
+#     echo 'export TRACKER_APP_HOST=tracker-asset.office.local' >> ~/.bashrc
+#     source ~/.bashrc
+#
+# Running once without those set prints the exact commands to add.
+REGISTRY="${REGISTRY:-${TRACKER_REGISTRY:-}}"
 IMAGE_NAME="${IMAGE_NAME:-tracker-asset}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 NAMESPACE="${NAMESPACE:-tracker-asset}"
-APP_HOST="${APP_HOST:-tracker-asset.office.local}"
+APP_HOST="${APP_HOST:-${TRACKER_APP_HOST:-tracker-asset.office.local}}"
 # The PostgreSQL that comes with postgres.yaml. If the office already runs a
 # PostgreSQL the app can reach, point this at that instead and set
 # USE_BUNDLED_POSTGRES=no below - running two databases for one app is how you
@@ -56,7 +67,20 @@ kubectl cluster-info >/dev/null 2>&1 \
     || die "kubectl cannot reach a cluster. Check: kubectl config current-context"
 ok "cluster reachable ($(kubectl config current-context))"
 
-[ -n "$REGISTRY" ] || die "REGISTRY is empty. Set it near the top of this script, e.g. REGISTRY=registry.office.local"
+if [ -z "$REGISTRY" ]; then
+    cat >&2 <<MSG
+  No registry configured. Add these two lines once, then re-run:
+
+    echo 'export TRACKER_REGISTRY=REDACTED_SERVER_IP:5000' >> ~/.bashrc
+    echo 'export TRACKER_APP_HOST=tracker-asset.office.local' >> ~/.bashrc
+    source ~/.bashrc
+
+  Use your own address if it differs. Without a registry there is nowhere to
+  push the built image, and Kubernetes on another node cannot pull it from the
+  Docker daemon on this one.
+MSG
+    exit 1
+fi
 
 docker info >/dev/null 2>&1 || die "docker is installed but the daemon is not responding. Is Docker Desktop running?"
 ok "docker daemon running"
@@ -157,13 +181,6 @@ step "Pushing image"
 docker push "$IMAGE" >/dev/null
 ok "pushed ${IMAGE}"
 
-# The manifests carry a placeholder. Rewriting it here is what makes this one
-# command sufficient - otherwise two YAML files need editing by hand first.
-for manifest in k8s/deployment-web.yaml k8s/deployment-scheduler.yaml; do
-    sed -i.bak "s|image: REGISTRY/.*|image: ${IMAGE}|" "$manifest" && rm -f "$manifest.bak"
-done
-ok "image reference written into the manifests"
-
 # --- workloads --------------------------------------------------------------
 
 step "Applying workloads"
@@ -184,6 +201,21 @@ KN apply -f k8s/redis.yaml               >/dev/null; ok "redis"
 KN apply -f k8s/service.yaml             >/dev/null; ok "service"
 KN apply -f k8s/deployment-scheduler.yaml >/dev/null; ok "scheduler"
 KN apply -f k8s/deployment-web.yaml      >/dev/null; ok "web"
+
+# Point the running deployments at the image just pushed, with `kubectl set
+# image` rather than by rewriting the manifest with sed.
+#
+# The manifests are tracked in git. Rewriting them made every deploy dirty the
+# working tree, so the next `git pull` aborted with "local changes would be
+# overwritten by merge" - which is what happened on the office server, twice,
+# before this was fixed. A deploy script that fights the next git pull is worse
+# than no deploy script at all.
+#
+# This must come after the apply above: the deployments have to exist before
+# their image can be set.
+KN set image deployment/tracker-asset-web container=php-fpm "${IMAGE}" >/dev/null
+KN set image deployment/tracker-asset-scheduler container=scheduler "${IMAGE}" >/dev/null
+ok "image ${IMAGE} applied"
 
 step "Applying ingress"
 if kubectl get ingressclass 2>/dev/null | grep -q nginx; then
