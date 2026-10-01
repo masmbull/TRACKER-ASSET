@@ -2,6 +2,11 @@
 # constants and readonly classes that 8.2 will not parse, so the image built on
 # 8.2 either failed to install dependencies or shipped a runtime that fataled
 # on first request - both discovered at deploy time rather than build time.
+# The XML family is not optional. phpspreadsheet requires ext-dom, ext-xml,
+# ext-xmlreader, ext-xmlwriter and ext-simplexml, and dompdf requires ext-dom -
+# all five for the Excel import and the generated PDFs. Omitting them makes
+# `composer install` exit 2 on the platform check, which is exactly what
+# happened on the first deploy attempt.
 FROM php:8.3-fpm
 
 WORKDIR /var/www/html
@@ -27,6 +32,11 @@ RUN apt-get update && apt-get install -y \
     pdo_pgsql \
     zip \
     intl \
+    dom \
+    simplexml \
+    xml \
+    xmlreader \
+    xmlwriter \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

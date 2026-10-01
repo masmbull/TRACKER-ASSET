@@ -132,12 +132,17 @@ else
     ok "volume claim created"
 fi
 
+# Pending here is normal, not a fault. The office cluster's local-path class uses
+# WaitForFirstConsumer, which means the claim deliberately stays Pending until a
+# pod actually needs the volume - the provisioner then creates the hostPath on
+# the node that pod lands on. It binds the moment the web pod starts.
+#
+# What would be a fault is it staying Pending after the pods are running:
+#
+#     kubectl describe pvc tracker-asset-storage -n ${NAMESPACE}
 phase=$(KN get pvc tracker-asset-storage -o jsonpath='{.status.phase}' 2>/dev/null || echo Pending)
 if [ "$phase" != "Bound" ]; then
-    warn "Volume claim is $phase, not Bound."
-    warn "This cluster's local-path provisioner only does ReadWriteOnce, which the"
-    warn "manifest now asks for. If it stays Pending, check:"
-    warn "  kubectl describe pvc tracker-asset-storage -n ${NAMESPACE}"
+    ok "claim is $phase (expected before a pod uses it; local-path waits for a consumer)"
 fi
 
 # --- image ------------------------------------------------------------------
