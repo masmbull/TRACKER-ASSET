@@ -33,6 +33,16 @@ storage/app/documents/
 storage/app/attachments/
 bootstrap/cache/*.php
 
+# Front-end build state. public/build is compiled in the assets stage of the
+# Dockerfile, so whatever a developer has locally is stale by definition - and
+# public/hot, which `npm run dev` writes, would make Blade's @vite directive
+# point the deployed image at a vite dev server on localhost that does not exist
+# in the cluster. Neither file is committed, so neither belongs in a build
+# context. Excluding public/build is also what makes the assets stage the only
+# possible source of the assets that ship.
+public/build/
+public/hot
+
 # The compiled agent binary is 150 MB and is gitignored on purpose. It is
 # fetched by the agent download route at runtime, not baked into the image.
 storage/app/agent/*.exe

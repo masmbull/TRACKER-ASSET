@@ -1,3 +1,40 @@
+# --- stage 1: front-end assets ------------------------------------------------
+#
+# Separate stage so node and node_modules never reach the runtime image.
+#
+# public/build is gitignored, so the compiled CSS and JS cannot arrive through
+# `COPY .` in the stage below - they have to be built here and copied across, or
+# the deployed image serves Blade templates whose @vite directive points at
+# files that do not exist. The page renders; the styling and every Livewire
+# interaction do not. Nothing logs an error.
+#
+# The whole source is copied, not just vite.config.js and resources/. Tailwind 4
+# derives its utility list by scanning the project for class names, so a build
+# stage holding only the entry CSS would emit a stylesheet with nearly every
+# class stripped - a page that loads, looks wrong, and gives no hint why.
+#
+# node:22 rather than Debian's nodejs: vite 8.3.0 and laravel-vite-plugin 3.2.0
+# both declare `engines: ^20.19.0 || >=22.12.0`, and Debian ships 18. The
+# platform builds of rolldown, oxide and lightningcss that npm will pick are all
+# present in package-lock.json for linux-x64, so `npm ci` resolves here.
+#
+# This stage is discarded, so the size of the full node image over alpine costs
+# one pull at build time and nothing in the result.
+#
+# Package files are installed before the source so `npm ci` stays cached -
+# editing a Blade file rebuilds the assets, not the dependency tree.
+FROM node:22 AS assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --no-audit --no-fund
+
+COPY . .
+RUN npm run build
+
+# --- stage 2: php runtime -----------------------------------------------------
+#
 # PHP 8.4, not 8.3.
 #
 # composer.json says ^8.3, which permits anything below 9.0 - but composer.lock
@@ -83,16 +120,17 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN composer install --no-interaction --optimize-autoloader --no-dev --no-scripts
 
-# Node is needed to compile the front-end assets. Vite's output lives in
-# public/build and is NOT in git, so an image built without this step boots
-# with a Livewire page that renders but does nothing - no error, just dead UI.
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund \
-    && npm run build \
-    && rm -rf node_modules
-
 # Copy the application source
 COPY . /var/www/html
+
+# The compiled front-end assets, from stage 1.
+#
+# Copied after the source, and only from the stage that builds them. public/build
+# is excluded in .dockerignore, so it cannot arrive from the build context - if
+# this COPY were missing or the assets stage silently produced nothing, the build
+# would still succeed and the fault would not surface until someone loaded a page
+# in a browser.
+COPY --from=assets /app/public/build ./public/build
 
 # Composer autoloader is regenerated after the real source is in place, so the
 # classmap points at the copied files rather than the empty skeleton.
