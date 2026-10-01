@@ -48,10 +48,20 @@ return [
         |
         | A logo is an occluder: every module it covers is a module the scanner
         | cannot read. "H" recovers about 30% of the code, which is what buys the
-        | space for the mark; at the default "M" (~15%) a logo this size starts
-        | costing real scans on a scratched sticker. Guidance for a centred logo is
-        | under a quarter of the code, and the logo sits on a white plate so it
-        | never lands on black modules it cannot be told apart from.
+        | space for the mark; guidance for a centred logo is under a quarter of the
+        | code. The logo sits on a white plate so it never lands on black modules
+        | it cannot be told apart from.
+        |
+        | Measured, not assumed. tools/verify-qr-scannability.py rasterises a real
+        | label and decodes it with OpenCV, degrading it the way a phone camera
+        | would. At a 37mm label: H reads 30/30, Q 30/30, M 21/30. M is the
+        | interesting result - not merely weaker but erratic, passing and failing
+        | as the label shrinks, which produces stickers that scan on a desk and
+        | fail in a warehouse. Re-run that script after changing either number.
+        |
+        | Verified at print sizes down to 24mm. Below roughly 30mm every level
+        | starts to struggle, so a small label wants a bigger plate ratio turned
+        | down, not a louder mark.
         */
         'error_correction' => 'H',
 

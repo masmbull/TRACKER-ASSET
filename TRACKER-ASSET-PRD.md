@@ -1730,6 +1730,13 @@ Verification status across all critical acceptance criteria:
       linked logo would have been blank on the label sheet — the one place the
       branding matters. Asserted, with the mark checked to decode back to the
       original file
+- [x] Label scannability measured rather than assumed
+      (`tools/verify-qr-scannability.py`): a real label is rasterised and decoded
+      with OpenCV, degraded as a phone camera would degrade it. At a 37 mm label
+      error correction H reads 30/30 and M reads 21/30 — M is not just weaker but
+      erratic, yielding stickers that scan on a desk and fail in a warehouse.
+      The harness is itself checked against codes it must reject, so a pass means
+      something
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
 - [x] Automated test suite verified (309 passed, 1195 assertions on both engines)
 - [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
