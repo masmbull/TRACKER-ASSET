@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracker-asset-web
+  labels:
+    app: tracker-asset
+    component: web
+spec:
+  # Two replicas so a rollout does not take the site down, and so a single node
+  # draining does not leave the office with no access to its asset register.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tracker-asset
+      component: web
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: tracker-asset
+        component: web
+    spec:
+      securityContext:
+        # Matches the www-data ownership baked into the image. Running as root
+        # would work but means a container escape is immediately a cluster-root
+        # compromise.
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+      containers:
+        - name: php-fpm
+          image: REGISTRY/tracker-asset:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9000
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_DEBUG
+              value: "false"
+            - name: APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: app_url
+            - name: ASSET_QR_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: asset_qr_base_url
+            - name: DB_CONNECTION
+              value: pgsql
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_host
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_port
+            - name: DB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_database
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: db_username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: db_password
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: app_key
+            # Sessions, cache and compiled views are written to disk. Without
+            # this the pods start on a read-only root filesystem and every
+            # request fails when Laravel tries to compile a Blade view.
+            - name: LARAVEL_CACHE_STORE
+              value: file
+            - name: SESSION_DRIVER
+              value: file
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+            - name: bootstrap-cache
+              mountPath: /var/www/html/bootstrap/cache
+          # Deliberately generous. A cold PHP-FPM worker re-collecting the
+          # inventory helpers is slow, and a liveness probe that is merely
+          # impatient will restart healthy pods in a loop.
+          startupProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: tracker-asset-storage
+        # Compiled config/routes/views are cheap and pod-specific; sharing one
+        # ReadWriteMany volume between replicas would just add a locking
+        # bottleneck for no benefit.
+        - name: bootstrap-cache
+          emptyDir: {}

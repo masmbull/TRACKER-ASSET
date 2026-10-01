@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracker-asset-scheduler
+  labels:
+    app: tracker-asset
+    component: scheduler
+spec:
+  # Exactly one. Two schedulers means every scheduled command runs twice, which
+  # for audit:sweep means duplicate audit records.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tracker-asset
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: tracker-asset
+        component: scheduler
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+      containers:
+        - name: scheduler
+          image: REGISTRY/tracker-asset:latest
+          imagePullPolicy: IfNotPresent
+          # Not php-fpm. The web image's default command would start a second web
+          # server that serves nothing, so this Deployment would report Ready
+          # while the scheduler never ran a single task.
+          command: ["php", "artisan", "schedule:work"]
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_DEBUG
+              value: "false"
+            - name: APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: app_url
+            - name: ASSET_QR_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: asset_qr_base_url
+            - name: DB_CONNECTION
+              value: pgsql
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_host
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_port
+            - name: DB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: tracker-asset-config
+                  key: db_database
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: db_username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: db_password
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tracker-asset-secrets
+                  key: app_key
+            - name: LARAVEL_CACHE_STORE
+              value: file
+            - name: SESSION_DRIVER
+              value: file
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+            - name: bootstrap-cache
+              mountPath: /var/www/html/bootstrap/cache
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: tracker-asset-storage
+        - name: bootstrap-cache
+          emptyDir: {}

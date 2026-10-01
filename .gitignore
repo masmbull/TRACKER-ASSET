@@ -43,3 +43,8 @@ server.php
 tailadmin-free-tailwind-dashboard-template-main/
 cookie.jar
 
+
+# K8s secrets. The committed file is k8s/secrets-template.yaml and holds no
+# values. Copying it to k8s/secrets.yaml to fill in real credentials gets that
+# copy ignored automatically.
+k8s/secrets.yaml

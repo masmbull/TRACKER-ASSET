@@ -1,0 +1,38 @@
+# Persistent storage for uploads, generated PDFs and the agent binary.
+#
+# This is the single most important file in this directory and the one most
+# often got wrong.
+#
+# The web Deployment runs TWO replicas, so this volume must be mounted
+# read-write by both at once. That rules out ReadWriteOnce: with RWO the second
+# pod stays stuck in ContainerCreating until the first pod is evicted, which
+# means a node drain silently takes the whole site down instead of failing
+# over.
+#
+# Check what your cluster storage class actually supports before applying:
+#
+#     kubectl get storageclass
+#
+# If it offers ReadWriteMany (NFS, CephFS, Azure Files, some vSphere CSI), use
+# it. If it only offers ReadWriteOnce, set web replicas to 1 in
+# deployment-web.yaml rather than letting the two replicas deadlock.
+#
+# Sized for what is actually stored: uploaded spreadsheets and documents,
+# generated PDFs, audit exports, and the ~150 MB agent binary that the
+# download route serves.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tracker-asset-storage
+  labels:
+    app: tracker-asset
+spec:
+  accessModes:
+    - ReadWriteMany
+  # No storageClassName: it binds to whatever the cluster defaults to. Set this
+  # explicitly once you have checked `kubectl get storageclass`, because the
+  # default on many office clusters is a RWO block provisioner and the claim
+  # will sit Pending forever with no error event worth reading.
+  resources:
+    requests:
+      storage: 20Gi
