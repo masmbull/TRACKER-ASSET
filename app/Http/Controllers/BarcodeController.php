@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 /**
@@ -28,13 +29,7 @@ class BarcodeController extends Controller
 
         $code = trim((string) $request->validate(['code' => 'required|string|max:255'])['code']);
 
-        $asset = Asset::query()
-            ->where('barcode', $code)
-            ->orWhere('qr_code', $code)
-            ->orWhere('asset_id', $code)
-            ->orWhere('serial_number', $code)
-            ->orWhere('hostname', $code)
-            ->first();
+        $asset = $this->find($code);
 
         if (! $asset) {
             return back()->withInput()->withErrors([
@@ -42,16 +37,95 @@ class BarcodeController extends Controller
             ]);
         }
 
-        $matchedBy = collect([
+        return redirect()
+            ->route('assets.show', $asset)
+            ->with('success', "Asset found by {$this->matchedBy($asset, $code)}.");
+    }
+
+    /**
+     * Resolve whatever a scanner typed to an asset.
+     *
+     * The obvious lookup is an exact match against the stored identifiers, but
+     * that is not enough on its own: the QR labels this app prints encode a URL
+     * (see AssetQrCode), and a scanner types the whole thing. A code of
+     * "https://assets.mito.co.id/assets/42" therefore has to be unwrapped before
+     * the identifier lookup, or every printed label scans to "not found".
+     *
+     * The host is deliberately not checked. A sticker keeps whatever host it was
+     * printed with, so labels printed before a host change, or during local
+     * development, still resolve.
+     */
+    private function find(string $code): ?Asset
+    {
+        $code = trim($code);
+
+        $asset = $this->query($code)->first();
+
+        if ($asset) {
+            return $asset;
+        }
+
+        $id = $this->idFromLabel($code);
+
+        return $id === null ? null : $this->findById($id);
+    }
+
+    /**
+     * The asset id a label URL carries, or null when the code is not one.
+     *
+     * Only /assets/{number} is unwrapped. Accepting anything looser would turn
+     * this into a way to fetch an arbitrary record by typing a path.
+     */
+    private function idFromLabel(string $code): ?int
+    {
+        if (preg_match('#/assets/(\d+)/?$#', $code, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
+    }
+
+    private function query(string $code): Builder
+    {
+        return Asset::query()
+            ->where('barcode', $code)
+            ->orWhere('qr_code', $code)
+            ->orWhere('asset_id', $code)
+            ->orWhere('serial_number', $code)
+            ->orWhere('hostname', $code);
+    }
+
+    /**
+     * Look up by primary key, kept out of the shared query on purpose.
+     *
+     * "id" is a bigint, and a scanner's input is arbitrary text: PostgreSQL
+     * raises "invalid input syntax for type bigint" on 'BC-100200300' rather
+     * than returning no rows. SQLite quietly casts and would let this pass, so
+     * the cast is made explicit here and only ever applied to something already
+     * known to be an integer.
+     */
+    private function findById(int $id): ?Asset
+    {
+        return Asset::query()->find($id);
+    }
+
+    /**
+     * How it was found, for the message the user sees.
+     */
+    private function matchedBy(Asset $asset, string $code): string
+    {
+        $field = collect([
             'barcode' => $asset->barcode,
             'qr_code' => $asset->qr_code,
             'asset_id' => $asset->asset_id,
             'serial_number' => $asset->serial_number,
             'hostname' => $asset->hostname,
-        ])->search(fn ($value) => $value !== null && $value === $code) ?: 'identifier';
+        ])->search(fn ($value) => $value !== null && $value === $code);
 
-        return redirect()
-            ->route('assets.show', $asset)
-            ->with('success', "Asset found by {$matchedBy}.");
+        if ($field !== false) {
+            return $field;
+        }
+
+        return $this->idFromLabel($code) === null ? 'identifier' : 'QR label';
     }
 }
