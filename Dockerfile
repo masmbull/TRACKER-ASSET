@@ -125,11 +125,17 @@ COPY . /var/www/html
 
 # The compiled front-end assets, from stage 1.
 #
-# Copied after the source, and only from the stage that builds them. public/build
-# is excluded in .dockerignore, so it cannot arrive from the build context - if
-# this COPY were missing or the assets stage silently produced nothing, the build
-# would still succeed and the fault would not surface until someone loaded a page
-# in a browser.
+# Copied after the source. public/build is excluded in .dockerignore, so it
+# cannot arrive via `COPY .` above and this line is the only thing that can
+# supply it.
+#
+# That exclusion is also the guard. If the assets stage stopped producing
+# output, this COPY fails on the missing path and the deploy stops, rather than
+# shipping an image whose pages render unstyled with every Livewire interaction
+# dead and nothing in any log to say why. Deleting the exclusion takes the guard
+# with it: with public/build back in the build context, `COPY .` would satisfy
+# the path from whatever happened to be on the developer's disk, and the build
+# would pass.
 COPY --from=assets /app/public/build ./public/build
 
 # Composer autoloader is regenerated after the real source is in place, so the
