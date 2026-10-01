@@ -1,0 +1,50 @@
+.git
+.gitignore
+.github
+
+# Local environment. Copying a .env into the image bakes the developer's
+# APP_KEY and database password into a layer anyone with the image can read,
+# and it would then override whatever the cluster injects at runtime.
+.env
+.env.*
+!.env.example
+
+# Installed dependencies are rebuilt inside the image. Copying the host's
+# vendor/ also copies its platform-specific binaries, which are wrong for the
+# image's platform and break composer install in confusing ways.
+vendor/
+node_modules/
+
+# Filled-in Kubernetes credentials. Same reason as .env above: the committed
+# template is harmless, but the copy somebody makes of it to enter a real
+# password must never reach an image layer.
+k8s/secrets.yaml
+
+# Deployment tooling output that is not application source.
+k8s/*-real.yaml
+
+# Local developer state that must never reach a deployed image.
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+storage/app/imports/
+storage/app/documents/
+storage/app/attachments/
+bootstrap/cache/*.php
+
+# The compiled agent binary is 150 MB and is gitignored on purpose. It is
+# fetched by the agent download route at runtime, not baked into the image.
+storage/app/agent/*.exe
+
+# Local tooling output
+npm-debug.log*
+yarn-error.log*
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+*.swp

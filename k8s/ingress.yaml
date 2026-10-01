@@ -1,0 +1,43 @@
+# Ingress. If the cluster already has an nginx/ingress-nginx, the
+# ingressClassName below is usually right - but confirm, do not assume:
+#
+#     kubectl get ingressclass
+#
+# If the office uses Traefik or an external load balancer instead, this file is
+# the wrong shape and the Service above is the thing to point at.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tracker-asset
+  labels:
+    app: tracker-asset
+  annotations:
+    # Uploads are streamed by the import and attachment routes. The default
+    # 1 MB body limit silently rejects a spreadsheet with a confusing error,
+    # so it is raised here to match what the app actually accepts.
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    # The Excel import reads a whole workbook into memory; the default 60s
+    # proxy timeout cuts it off mid-upload on a large file.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tracker-asset.office.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tracker-asset-web
+                port:
+                  number: 80
+  # TLS is deliberately not enabled here. A self-signed certificate on an
+  # office LAN is a decision for whoever runs the cluster, and enabling it
+  # without a real certificate produces a browser warning on every visit.
+  # Uncomment once a certificate exists:
+  #
+  # tls:
+  #   - hosts: ["tracker-asset.office.local"]
+  #     secretName: tracker-asset-tls
