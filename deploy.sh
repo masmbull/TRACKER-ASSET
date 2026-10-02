@@ -295,13 +295,14 @@ KN apply -f k8s/deployment-web.yaml      >/dev/null; ok "web"
 # the deploy right there - before the ingress, before the migrations, before the
 # pods.
 #
-# seed-public is that web Deployment's init container, and it has to be set in
-# the same call. It runs the application image too, and the manifests carry the
-# placeholder image name `REGISTRY/tracker-asset:latest` - apply alone would
-# leave the init container pointing at an image called literally "REGISTRY", and
-# the pod would never get past Init:ErrImagePull. kubectl has accepted init
-# container names here since 1.14.
-KN set image deployment/tracker-asset-web php-fpm="${IMAGE}" seed-public="${IMAGE}" >/dev/null
+# seed-public and seed-storage are that web Deployment's two init containers, and
+# both have to be set in the same call. They run the application image too, and
+# the manifests carry the placeholder image name
+# `REGISTRY/tracker-asset:latest` - apply alone would leave the init containers
+# pointing at an image called literally "REGISTRY", and the pod would never get
+# past Init:ErrImagePull. kubectl has accepted init container names here since
+# 1.14.
+KN set image deployment/tracker-asset-web php-fpm="${IMAGE}" seed-public="${IMAGE}" seed-storage="${IMAGE}" >/dev/null
 KN set image deployment/tracker-asset-scheduler scheduler="${IMAGE}" >/dev/null
 ok "image ${IMAGE} applied"
 

@@ -140,6 +140,13 @@ container copies `public/` out of the application image into an emptyDir, and
 nginx mounts that read-only. Miss it and every `/build/*.css` request 404s while
 every PHP page works — an unstyled site and a clean log.
 
+A second init container, `seed-storage`, does the mirror-image job for the
+storage claim. On a first deploy that claim is empty, and mounting an empty
+directory over `/var/www/html/storage` hides the subdirectories the image
+created there — `logs`, `framework/views`, and the rest. Laravel recreates some
+of them and not others, and the ones it does not are 500s that quote a path
+which exists in every image built here and in no container running it.
+
 Upload limits live in that server block too. The Ingress used to carry them as
 `nginx.ingress.kubernetes.io/proxy-body-size: 64m`, which Traefik would ignore;
 it imposes no request body limit at all, so the 64 MB limit and the 300-second
