@@ -109,11 +109,44 @@ do not just leave it in a terminal, because it dies with the SSH session.
 - Secrets in environment variables / secrets manager
 - PostgreSQL automated backup with retention
 
-## CI/CD (Phase 9)
+## CI/CD (PRD §47)
+
+Implemented:
 
 ```text
-Developer → git push → GitHub Actions → tests → Docker image → push image → deploy VPS → docker compose up -d
+Developer → git push → GitHub Actions (ci.yml)
+              → composer install → tests (SQLite + PostgreSQL) + Pint
+              → build Docker image
+              → push image        (main only)
 ```
+
+The image job declares `needs: [tests, tests-postgres, pint]`, so the order in
+that chain is enforced by the workflow rather than by convention: a commit that
+fails either engine or the style gate never gets an image.
+
+- **Registry:** GHCR, `ghcr.io/masmbull/tracker-asset:<commit sha>`, with
+  `latest` alongside it as a pointer for humans reading the package page —
+  never what a deployment pulls. The name is lowercased before pushing; GHCR
+  rejects `ghcr.io/masmbull/TRACKER-ASSET` with "invalid reference format".
+- **Auth:** the run's `packages: write` scope and the built-in `GITHUB_TOKEN`.
+  No repository secret exists in this path, so none can silently expire.
+- **Pull requests** build the same Dockerfile but do not publish, so a broken
+  build is caught before merge without a branch ever putting a tag on the
+  registry.
+- **Pulling one** (the package is private unless you change its visibility):
+  `docker login ghcr.io` with a PAT carrying `read:packages`, then
+  `docker pull ghcr.io/masmbull/tracker-asset:<sha>`.
+
+Still manual, on purpose:
+
+- **Office cluster:** `./deploy.sh` builds the same Dockerfile and pushes to the
+  office registry (`192.168.1.178:5000`), which GitHub Actions cannot reach.
+  CI proves a green commit builds; deploy.sh is what puts it in front of users.
+  Pointing the cluster at GHCR's exact bytes instead would need registry
+  credentials on the nodes and internet from them — not configured, not
+  required.
+- **VPS / `docker compose up -d`** (the second half of §47 and §48's Compose
+  target): no VPS is provisioned yet. PRD §52 tracks this as not built.
 
 ## Backup Strategy
 
