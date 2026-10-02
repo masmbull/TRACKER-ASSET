@@ -1,0 +1,57 @@
+# NOT a Kubernetes manifest. This is node-level containerd configuration and
+# `kubectl apply` will reject it. deploy.sh does not apply it either.
+#
+# It is tracked here because it is the one part of this deployment that lives on
+# the host instead of in the cluster, and not having it is what leaves every pod
+# in ImagePullBackOff after a build and push that both reported success.
+#
+# Copy it to every node that will run these pods, then restart k3s there:
+#
+#     sudo mkdir -p /etc/rancher/k3s
+#     sudo cp k8s/registries.yaml /etc/rancher/k3s/registries.yaml
+#     sudo systemctl restart k3s
+#
+# Why it is needed
+# ----------------
+# `docker push` and kubelet do not use the same client, so a successful push
+# proves nothing about whether the pods can pull. The push in deploy.sh goes
+# through the Docker daemon, which trusts this registry over plain HTTP because
+# of insecure-registries in /etc/docker/daemon.json. kubelet pulls through k3s's
+# embedded containerd, which reads only this file - and containerd's implicit
+# default endpoint for any registry is https://<registry>/v2. A registry that
+# speaks HTTP fails that TLS handshake, and the pod reports ImagePullBackOff.
+#
+# The symptom is misleading in both directions: the build succeeds, the push
+# succeeds, the manifests apply cleanly, and only the pods fail. `docker pull`
+# on the node succeeds too, because that is the Docker daemon doing it.
+#
+# Confirm the real error before changing anything. `kubectl describe pod` prints
+# it in the Events section and it names the cause exactly:
+#
+#     kubectl describe pod -n tracker-asset -l app=tracker-asset,component=web | tail -20
+#
+#   "http: server gave HTTP response to HTTPS client"  -> this file's problem.
+#   "connection refused" or "i/o timeout"              -> a network problem, and
+#                                                         this file cannot fix it.
+#   "x509: certificate signed by unknown authority"     -> the registry does
+#                                                         serve TLS; keep the
+#                                                         endpoint as https and
+#                                                         add configs: with
+#                                                         tls.ca_file instead.
+#
+# Only the terminal error from the default endpoint is shown by kubelet, so when
+# it looks like the endpoints below are being ignored, the full reason is in
+# /var/lib/rancher/k3s/agent/containerd/containerd.log on the node that ran the
+# pod.
+#
+# Doc: https://docs.k3s.io/installation/private-registry
+mirrors:
+  # The key must match the registry host exactly as it appears in the image name,
+  # port included. This is the same value as TRACKER_REGISTRY in deploy.sh;
+  # changing one without the other leaves the mirror permanently unused.
+  "REDACTED_SERVER_IP:5000":
+    endpoint:
+      # http:// is load-bearing. Leave it out and containerd assumes https and
+      # fails at the TLS handshake - which is the failure this file exists to
+      # remove.
+      - "http://REDACTED_SERVER_IP:5000"
