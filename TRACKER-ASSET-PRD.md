@@ -1762,7 +1762,24 @@ Tracked here so the checklist above is not read as "everything in the PRD ships"
 - [ ] SharePoint / OneDrive document storage (PRD §37, §38). Generated PDFs are
       written to local storage; `config/documents.php` records this deferral
       rather than hiding it. Needs tenant credentials to build against.
-- [ ] Docker image build & VPS deploy pipeline (PRD §47).
+- [ ] Docker image build in CI (PRD §47, build-and-push half). Implemented in
+      `.github/workflows/ci.yml`: the image job `needs` both test jobs and Pint,
+      builds the Dockerfile, and on push to main publishes
+      `ghcr.io/masmbull/tracker-asset:<commit>` — lowercased, because GHCR
+      rejects the `TRACKER-ASSET` half of the repository name with "invalid
+      reference format" — using the `packages: write` scope and the token every
+      run already carries, so there is no repository secret to expire. Pull
+      requests build without publishing. Ticks only when the first run on main
+      is green: the agent that wrote it had no docker and no access to this
+      private repository's Actions log, and an unobserved green is not
+      verification. The office cluster does not pull from GHCR — `deploy.sh`
+      still builds and pushes to the office registry itself, because GitHub
+      cannot reach `REDACTED_SERVER_IP:5000`.
+- [ ] VPS deploy, the second half of PRD §47 (`push image → deploy VPS → docker
+      compose up -d`), and §48's Compose production target. No VPS is
+      provisioned and there are no credentials to deploy with, so the arrow has
+      nowhere to land. Production in this repository is the office k3s cluster
+      through `./deploy.sh`; tracked here rather than retargeted in silence.
 
 ---
 

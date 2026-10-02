@@ -133,3 +133,80 @@ jobs:
 
       - name: Run Pint (dirty check)
         run: vendor/bin/pint --test
+
+  # PRD §47, the half that was missing: composer install -> tests -> build
+  # Docker image -> push image.
+  #
+  # It lives in this workflow instead of its own because the order is the point.
+  # A workflow can only `needs` jobs in the same run, so the chain in §47 is
+  # enforced by the file rather than by convention: a commit that fails either
+  # engine, or the style gate, never gets an image. An image nobody has tested
+  # should not exist under a tag someone can pull.
+  #
+  # The deploy arrow after this stops on purpose. The office deployment is
+  # ./deploy.sh - build, push to the office registry, apply to the k3s cluster -
+  # and PRD §52 keeps the VPS half of §47 open rather than quietly retargeting
+  # it. What this job publishes is the proof that this commit builds, addressed
+  # by the commit hash that makes it a known quantity.
+  image:
+    runs-on: ubuntu-latest
+    name: Docker image (GHCR)
+    needs: [tests, tests-postgres, pint]
+    # Enough to push, and nothing more. `packages: write` is what lets the job
+    # publish with the token every run already carries - there is no repository
+    # secret here to create, rotate, or watch expire at the wrong moment.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # GHCR takes lowercase image names only, and github.repository is
+      # "masmbull/TRACKER-ASSET". Pushing it as written fails with "invalid
+      # reference format" - a repository name that reads correctly in every
+      # other context is the one thing that can kill this job before the build
+      # starts, so it is lowered here rather than remembered.
+      - name: Resolve image name
+        id: image
+        run: |
+          echo "name=ghcr.io/$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        # Publishing happens only on push. The trigger today already limits that
+        # to main, but the ref is named so this stays true if a second branch is
+        # ever added to `on:` - and a pull_request run is handed a token without
+        # write scope, so logging in there would fail for a reason that has
+        # nothing to do with the diff. The build itself still runs, which is why
+        # login is gated and the job is not.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          # Same expression as above: pull requests build but do not publish.
+          # A Dockerfile that no longer builds is then caught before merge, and
+          # no half-reviewed branch puts a tag on the registry.
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # The commit hash is the real tag, for the same reason deploy.sh tags
+          # by commit: it changes exactly when the code does, which is what makes
+          # "which build is running?" answerable. `latest` rides along for a
+          # human reading the package page; nothing should deploy it.
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+          # Layer cache between runs. Without it every push pays for composer
+          # install and npm ci again - the two slowest stages in the Dockerfile,
+          # and neither depends on anything a given commit changes.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
