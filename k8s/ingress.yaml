@@ -1,10 +1,29 @@
-# Ingress. If the cluster already has an nginx/ingress-nginx, the
-# ingressClassName below is usually right - but confirm, do not assume:
+# Ingress, written for the controller this cluster actually has.
+#
+# Confirmed on the office cluster rather than assumed:
 #
 #     kubectl get ingressclass
+#     NAME                CONTROLLER                      AGE
+#     traefik (default)   traefik.io/ingress-controller   40h
 #
-# If the office uses Traefik or an external load balancer instead, this file is
-# the wrong shape and the Service above is the thing to point at.
+# k3s ships Traefik and it is the only class installed here. This file used to
+# name nginx, so deploy.sh skipped it - leaving no route to the app from outside
+# the cluster at all, however healthy the pods looked from inside.
+#
+# Two things changed with it, and both matter:
+#
+#   1. The nginx-ingress annotations that raised the upload body limit and the
+#      FastCGI timeouts are gone. Traefik would have ignored them, and it needs
+#      no replacement: it applies no request body size limit by default, where
+#      nginx's own default is 1 MB. Those limits now live in nginx's own config
+#      inside the pod (k8s/nginx-configmap.yaml), which is where they have to be
+#      enforced anyway - nginx is what accepts the upload, and nginx-ingress was
+#      only ever carrying the setting to the same place.
+#
+#   2. Traffic has to arrive at nginx, not at php-fpm. The Service's targetPort
+#      is the named port `http`, which is nginx's 8080. php-fpm speaks FastCGI,
+#      and Traefik has no FastCGI support, so an ingress pointed at it could
+#      never have worked - see the note in deployment-web.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,16 +31,20 @@ metadata:
   labels:
     app: tracker-asset
   annotations:
-    # Uploads are streamed by the import and attachment routes. The default
-    # 1 MB body limit silently rejects a spreadsheet with a confusing error,
-    # so it is raised here to match what the app actually accepts.
-    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
-    # The Excel import reads a whole workbook into memory; the default 60s
-    # proxy timeout cuts it off mid-upload on a large file.
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Only one, and it is not about body size or timeouts.
+    #
+    # Traefik attaches a router to every entrypoint it defines unless told
+    # otherwise, and it defines `websecure` (:443) alongside `web` (:80). This
+    # rule carries no `tls:` section, so a router left to match both would answer
+    # on 443 with Traefik's built-in self-signed certificate - which is exactly
+    # the browser warning the note at the bottom of this file says this
+    # deployment avoids. Pinning it to `web` keeps that decision true.
+    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
-  ingressClassName: nginx
+  # Has to match the name in `kubectl get ingressclass`. deploy.sh checks for
+  # `traefik` before applying this and warns rather than applying it to a
+  # cluster that does not have one.
+  ingressClassName: traefik
   rules:
     - host: tracker-asset.office.local
       http:
