@@ -32,7 +32,28 @@ cd "$(dirname "$0")"
 # Running once without those set prints the exact commands to add.
 REGISTRY="${REGISTRY:-${TRACKER_REGISTRY:-}}"
 IMAGE_NAME="${IMAGE_NAME:-tracker-asset}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
+# Tagged by commit, not `latest`.
+#
+# `latest` plus the manifests' `imagePullPolicy: IfNotPresent` is a silent
+# no-op on the second deploy: the image string is identical, so the pod
+# template does not change, so no rollout happens at all and the old pods keep
+# serving the old code - while the script reports success. Even when a rollout
+# is forced by something else, the node still has `latest` cached under that
+# name and skips the pull, so the new pods run the old image.
+#
+# A commit tag makes the image string change exactly when the code does, which
+# is what makes the rollout happen. Set IMAGE_TAG in the environment to
+# override - a release name, a date, anything - and it is used as given.
+if [ -z "${IMAGE_TAG:-}" ]; then
+    if git rev-parse --short HEAD >/dev/null 2>&1; then
+        IMAGE_TAG="$(git rev-parse --short HEAD)"
+    else
+        # Not a git checkout. Nothing to tag by, and a deploy that dies here
+        # would be worse than one that overwrites a tag on a directory someone
+        # unpacked from a zip.
+        IMAGE_TAG=latest
+    fi
+fi
 NAMESPACE="${NAMESPACE:-tracker-asset}"
 APP_HOST="${APP_HOST:-${TRACKER_APP_HOST:-tracker-asset.office.local}}"
 # The PostgreSQL that comes with postgres.yaml. If the office already runs a
@@ -84,6 +105,35 @@ fi
 
 docker info >/dev/null 2>&1 || die "docker is installed but the daemon is not responding. Is Docker Desktop running?"
 ok "docker daemon running"
+
+# --- can the node pull what this script is about to push? --------------------
+#
+# A successful push proves nothing about the pull that follows, because they are
+# done by two different clients. This script pushes through the Docker daemon,
+# which has been told to trust the registry over plain HTTP (insecure-registries
+# in /etc/docker/daemon.json). Kubelet pulls through k3s's embedded containerd,
+# which reads only /etc/rancher/k3s/registries.yaml and otherwise assumes https.
+#
+# So the failure looks like this: the build succeeds, the push succeeds, every
+# manifest applies cleanly, and every pod sits in ImagePullBackOff - with
+# `docker pull` on the same machine working fine.
+#
+# Checked here rather than after the build, and it warns rather than dies: this
+# script may be running somewhere that is not a node, and every node needs the
+# file, so a guess at the wrong answer must not be able to stop a deploy.
+if [ -d /etc/rancher/k3s ]; then
+    if grep -qs -- "$REGISTRY" /etc/rancher/k3s/registries.yaml; then
+        ok "containerd is configured for ${REGISTRY}"
+    else
+        warn "/etc/rancher/k3s/registries.yaml does not mention ${REGISTRY}."
+        warn "If that registry is plain HTTP, every pod will fail to pull and"
+        warn "stay in ImagePullBackOff. To fix it on this node:"
+        warn "  sudo cp k8s/registries.yaml /etc/rancher/k3s/registries.yaml"
+        warn "  edit the registry name inside if it differs, then:"
+        warn "  sudo systemctl restart k3s"
+        warn "Why: see the header of k8s/registries.yaml."
+    fi
+fi
 
 # --- namespace --------------------------------------------------------------
 
@@ -215,6 +265,11 @@ fi
 
 KN apply -f k8s/redis.yaml               >/dev/null; ok "redis"
 KN apply -f k8s/service.yaml             >/dev/null; ok "service"
+# Before the Deployment that mounts it, not after. A Pod whose ConfigMap volume
+# does not exist is never scheduled - it sits in ContainerCreating - so applying
+# these two the other way round turns every first deploy into a two-minute wait
+# for a pod that was never going to start.
+KN apply -f k8s/nginx-configmap.yaml     >/dev/null; ok "nginx config"
 KN apply -f k8s/deployment-scheduler.yaml >/dev/null; ok "scheduler"
 KN apply -f k8s/deployment-web.yaml      >/dev/null; ok "web"
 
@@ -229,26 +284,48 @@ KN apply -f k8s/deployment-web.yaml      >/dev/null; ok "web"
 #
 # This must come after the apply above: the deployments have to exist before
 # their image can be set.
-# The value is <container>=<image>, and the name on the left is the container
+# The value is <container>=<image>, and each name on the left is a container
 # name as written in the manifest: php-fpm in deployment-web.yaml, scheduler in
 # deployment-scheduler.yaml.
 #
-# `container=php-fpm` does not mean "the container named php-fpm". kubectl reads
-# the left side of the `=` as the container name, so it took that argument as a
-# container literally called "container" and then read ${IMAGE} as a second
-# resource to act on. That fails with "all resources must be specified before
-# image changes" and, under `set -e`, ended the deploy right there - before the
-# ingress, before the migrations, before the pods.
-KN set image deployment/tracker-asset-web php-fpm="${IMAGE}" >/dev/null
+# The left side is a container name, not a literal "container". Writing
+# container=php-fpm made kubectl take `container` as a container that does not
+# exist and read ${IMAGE} as a second resource to act on. That fails with "all
+# resources must be specified before image changes" and, under `set -e`, ended
+# the deploy right there - before the ingress, before the migrations, before the
+# pods.
+#
+# seed-public is that web Deployment's init container, and it has to be set in
+# the same call. It runs the application image too, and the manifests carry the
+# placeholder image name `REGISTRY/tracker-asset:latest` - apply alone would
+# leave the init container pointing at an image called literally "REGISTRY", and
+# the pod would never get past Init:ErrImagePull. kubectl has accepted init
+# container names here since 1.14.
+KN set image deployment/tracker-asset-web php-fpm="${IMAGE}" seed-public="${IMAGE}" >/dev/null
 KN set image deployment/tracker-asset-scheduler scheduler="${IMAGE}" >/dev/null
 ok "image ${IMAGE} applied"
 
 step "Applying ingress"
-if kubectl get ingressclass 2>/dev/null | grep -q nginx; then
+
+# k3s ships Traefik, and on the office cluster it is the only class installed -
+# confirmed with `kubectl get ingressclass`, not assumed. k8s/ingress.yaml names
+# it.
+#
+# The check is by name rather than by grepping the whole class list, because
+# "an ingress class is installed" is not the question. The question is whether
+# the one the manifest names is here. An Ingress whose ingressClassName does not
+# exist is accepted by the API server and then ignored by every controller: the
+# object exists, no route exists, and nothing anywhere reports it. That is the
+# silent half of what went wrong on the first run of this script.
+if kubectl get ingressclass traefik >/dev/null 2>&1; then
     KN apply -f k8s/ingress.yaml >/dev/null
-    ok "ingress (class: nginx)"
+    ok "ingress (class: traefik) for http://${APP_HOST}"
+elif kubectl get ingressclass nginx >/dev/null 2>&1; then
+    warn "this cluster's ingress class is nginx, but k8s/ingress.yaml names traefik."
+    warn "Skipped. Set ingressClassName in that file to nginx, drop the traefik"
+    warn "annotation, and re-run."
 else
-    warn "No nginx ingress class found - skipped ingress.yaml."
+    warn "no traefik or nginx ingress class found - skipped ingress.yaml."
     warn "Expose it yourself pointing at service tracker-asset-web port 80."
 fi
 # --- migrations -------------------------------------------------------------
@@ -361,14 +438,29 @@ done
 step "Waiting for web pods"
 
 printf '  waiting'
+webready=no
 for _ in $(seq 1 60); do
     ready=$(KN get deploy tracker-asset-web -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo 0)
     want=$(KN get deploy tracker-asset-web -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 1)
     if [ "${ready:-0}" != "0" ] && [ "${ready:-0}" = "${want:-1}" ]; then
-        printf '\n'; ok "web ready (${ready} replica(s))"; break
+        printf '\n'; ok "web ready (${ready} replica(s))"; webready=yes; break
     fi
     printf '.'; sleep 2
 done
+
+# Say so when it is not up, rather than printing dots and then announcing "Done".
+# This loop had no else branch at all, which is how a deploy that ended with two
+# pods in ImagePullBackOff still finished with a green "Done", a URL, and no
+# hint that the site was not being served - the one line that mattered was the
+# one line that was never printed.
+if [ "$webready" != yes ]; then
+    printf '\n'
+    warn "web pods are not ready - the URL below will not answer yet."
+    KN get pods -l app=tracker-asset,component=web 2>/dev/null || true
+    warn "Reason: kubectl describe pod -n ${NAMESPACE} -l app=tracker-asset,component=web"
+    warn "  Events names the cause: ImagePullBackOff is the registry,"
+    warn "  CrashLoopBackOff is the container itself."
+fi
 
 # --- agent binary -----------------------------------------------------------
 # Not in the image: 150 MB and gitignored. The download route serves it from the
