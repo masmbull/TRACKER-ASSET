@@ -41,12 +41,61 @@ spec:
         runAsUser: 33
         runAsGroup: 33
         fsGroup: 33
+      # nginx serves the compiled CSS and JS straight off the filesystem, and a
+      # container's filesystem is its own - the nginx image has no application
+      # source at all, so /var/www/html/public simply does not exist inside it.
+      # Without this step nginx answers 404 for every /build/*.css and *.js
+      # request and the page loads unstyled, while every PHP route works
+      # perfectly and nothing logs an error.
+      #
+      # The compose file never hit this because it bind-mounts the whole repo
+      # into both containers (`.:/var/www/html` in docker-compose.yml). There is
+      # no repository to bind-mount on a cluster node, so the public directory
+      # is copied out of the application image - the same image and the same
+      # commit tag that php-fpm runs, set together by `kubectl set image` in
+      # deploy.sh - into an emptyDir that nginx then mounts read-only.
+      #
+      # It is an init container rather than a shared mount in both containers on
+      # purpose: php-fpm keeps the public directory baked into the image, so a
+      # copy that fails leaves a pod that still serves PHP correctly, instead of
+      # one that cannot boot at all. `cp -R`, not `cp -a`: preserving ownership
+      # would mean chown to www-data, which the unprivileged uid this pod runs as
+      # is not allowed to do, and cp would then exit non-zero and hold the pod in
+      # Init:CrashLoopBackOff.
+      initContainers:
+        - name: seed-public
+          image: REGISTRY/tracker-asset:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - cp -R /var/www/html/public/. /app-public/
+          volumeMounts:
+            - name: app-public
+              mountPath: /app-public
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: php-fpm
           image: REGISTRY/tracker-asset:latest
           imagePullPolicy: IfNotPresent
+          # Renamed from `http` to `fpm`.
+          #
+          # `http` was a claim this container cannot back: it serves the FastCGI
+          # protocol on this port, not HTTP. Nothing in a pod should be called
+          # `http` except the container that really does speak it, because the
+          # Service targets a port by name - and a port named `http` here is
+          # exactly how the Service, the Ingress and the health probes all ended
+          # up aimed at a FastCGI socket.
+          #
+          # Names must also be unique within a pod, and `http` now belongs to
+          # nginx. A targetPort matching two containers is ambiguous, and
+          # Kubernetes silently picks one.
           ports:
-            - name: http
+            - name: fpm
               containerPort: 9000
           env:
             - name: APP_ENV
@@ -121,29 +170,19 @@ spec:
               mountPath: /var/www/html/storage
             - name: bootstrap-cache
               mountPath: /var/www/html/bootstrap/cache
-          # Deliberately generous. A cold PHP-FPM worker re-collecting the
-          # inventory helpers is slow, and a liveness probe that is merely
-          # impatient will restart healthy pods in a loop.
-          startupProbe:
-            httpGet:
-              path: /up
-              port: http
-            periodSeconds: 5
-            failureThreshold: 30
-          livenessProbe:
-            httpGet:
-              path: /up
-              port: http
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 5
-          readinessProbe:
-            httpGet:
-              path: /up
-              port: http
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
+          # No probes on this container, on purpose.
+          #
+          # They used to be here - an httpGet on /up against this port - and
+          # that probe can never pass. It sends an HTTP request to a socket that
+          # speaks FastCGI, so the startup probe burned its thirty attempts and
+          # Kubernetes killed the container, over and over. The pod could not
+          # become Ready no matter how correct everything else was.
+          #
+          # The probes moved to nginx, which does answer HTTP. Nothing is
+          # weakened by that: nginx serves /up by proxying it to this container,
+          # so a passing probe still proves PHP-FPM and the application work -
+          # which is what Ready should mean before the Service sends this pod
+          # real traffic.
           resources:
             # Sized for a single-node office cluster on a 4-core i3-4160.
             # These are requests/limits, not reservations of dedicated hardware:
@@ -165,6 +204,96 @@ spec:
             capabilities:
               drop:
                 - ALL
+
+        # The HTTP front end. Every request that reaches this pod - from the
+        # Service, from the Ingress, from Kubernetes' own probes - arrives here
+        # first and is turned into a FastCGI request for php-fpm above.
+        #
+        # It is not optional and it is not a nicety: without it nothing in this
+        # pod can answer an HTTP request. k8s/nginx-configmap.yaml has the
+        # server block and explains the whole chain.
+        - name: nginx
+          image: nginx:alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            # The name the Service's `targetPort: http` resolves to. Keep the
+            # name and the Service keeps working without being edited.
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+            # Where the application's compiled assets come from - see the note on
+            # the seed-public init container above. Read-only: nginx only reads
+            # here, and it is the copy PHP never uses, so nothing can drift.
+            - name: app-public
+              mountPath: /var/www/html/public
+              readOnly: true
+            # Both emptyDir, and both required.
+            #
+            # The stock nginx image ships /var/cache/nginx and /run owned by
+            # root, and this pod runs as uid 33. nginx cannot write its temp
+            # directories or its pid file there, so it exits during startup on a
+            # permission error without ever serving anything. An emptyDir is
+            # created world-writable, so mounting one over each path is what
+            # lets the stock image run as a non-root uid - no rebuilt image and
+            # no root container.
+            #
+            # /var/run is a symlink to /run in this image, so mounting /run is
+            # what satisfies the pid path the image's own nginx.conf sets.
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /run
+            # Read-only: nginx only reads here. Mounted so a request for a file
+            # under public/storage can be served directly if that symlink
+            # exists. The app's own downloads go through PHP routes and do not
+            # need it, so this is an optimisation rather than a requirement.
+            - name: storage
+              mountPath: /var/www/html/storage
+              readOnly: true
+          # The probes live here, not on php-fpm: this is the container that can
+          # answer them. /up is Laravel's own health route, and nginx serves it
+          # by proxying to php-fpm, so a 200 proves the whole chain.
+          #
+          # Generous on purpose. A cold PHP-FPM worker re-collecting the
+          # inventory helpers is slow, and a probe that is merely impatient will
+          # restart healthy pods in a loop.
+          startupProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            # Small. This container accepts a connection, hands it to PHP-FPM
+            # and streams the answer back; the work happens in the container
+            # above.
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       volumes:
         - name: storage
           persistentVolumeClaim:
@@ -173,4 +302,25 @@ spec:
         # ReadWriteMany volume between replicas would just add a locking
         # bottleneck for no benefit.
         - name: bootstrap-cache
+          emptyDir: {}
+        # The nginx server block, as a ConfigMap rather than a file baked into
+        # the image: it changes far more often than the image does, and a config
+        # change should not need a rebuild of PHP and the front-end assets to
+        # take effect.
+        #
+        # This ordering is a dependency, not a preference. A Pod cannot start at
+        # all while a volume it references does not exist, so deploy.sh applies
+        # this ConfigMap before it applies this Deployment.
+        - name: nginx-config
+          configMap:
+            name: tracker-asset-nginx
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        # Populated by the seed-public init container from the application image,
+        # then mounted read-only at /var/www/html/public in nginx. Pod-local and
+        # rebuilt on every pod start, so it can never serve assets from an older
+        # build than the php-fpm container beside it.
+        - name: app-public
           emptyDir: {}
