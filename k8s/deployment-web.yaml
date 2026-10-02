@@ -78,6 +78,46 @@ spec:
             capabilities:
               drop:
                 - ALL
+        # A different problem from the copy above, though it looks like the same
+        # one: on a first deploy the storage volume is an empty claim, and an
+        # empty directory mounted over /var/www/html/storage hides every
+        # subdirectory the image created underneath it - logs, framework/views
+        # for compiled Blade templates, framework/sessions, framework/cache/data.
+        #
+        # Laravel recreates some of those on demand and not others. The ones it
+        # does not arrive as a 500 quoting a path nobody can find in a fresh
+        # image: a log file that cannot be opened, or a missing view cache path.
+        # `mkdir -p` here costs nothing, is idempotent, and removes the entire
+        # class of failure. deploy.sh's agent-binary step already creates
+        # storage/app/agent the same way, by executing into the running pod.
+        #
+        # The directories come out owned by the uid the pod runs as - the same
+        # uid php-fpm runs as - and the claim is mounted read-write, because this
+        # is the volume being written to.
+        #
+        # workingDir rather than a shell: the paths are the same five every time,
+        # and a list of arguments is easier to read and to check than a folded
+        # one-line shell command.
+        - name: seed-storage
+          image: REGISTRY/tracker-asset:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /var/www/html/storage
+          command:
+            - mkdir
+            - -p
+            - logs
+            - app/public
+            - framework/cache/data
+            - framework/sessions
+            - framework/views
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: php-fpm
           image: REGISTRY/tracker-asset:latest
