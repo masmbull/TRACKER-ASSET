@@ -134,6 +134,41 @@ production, and it is the reason the repair does not fold case variants for you.
 php artisan excel:check "IT Assets.xlsx"
 ```
 
+## Exporting the Local Register to Another Environment
+
+`php tools/export-for-import.php` writes `storage/app/imports/local-assets-merged.xlsx`:
+the local database in the format this workflow's import screen accepts, for
+populating a fresh deployment from local data.
+
+The app's own export (`/assets/export`) cannot be re-imported: it speaks modern
+headers (`Company`, `OS Version`, `Status`) while `config/asset-import.php` speaks
+the legacy sheet's (`Company Name`, `OS / Versi`, `Status Aset`), so half the
+columns land unmapped and are dropped. The tool reuses the original sheet's 39
+headers verbatim instead — the result normalises onto `column_map` by construction
+— and merges rather than dumps, because neither source is complete on its own:
+hardware and status come from the database (the agent has re-reported them since
+the original import, and the sheet's `Status Aset` column is empty for all 272
+rows), while custody columns (`User Pertama`, `USER SEKARANG`, `Admin/IT PIC`,
+`Riwayat Perbaikan`) come from the sheet, because the original seeder never read
+them.
+
+Identity is cleaned before writing, because the importer skips any row repeating
+`asset_id`, `serial_number` or `hostname` — inside the file or against the
+register. The register holds junk serials from WMI (`System Serial Number` six
+times, bare `-` seven) and generic hostnames (`MSI` six times), so the tool empties
+junk and repeated serials (a warning, which still imports) and suffixes repeated
+hostnames (`MSI-2`; hostname cannot be blanked — it is required). Without that,
+261 local rows would arrive as roughly 230. Verify what is about to be shipped:
+
+```bash
+php tools/export-for-import.php
+php artisan excel:check "storage/app/imports/local-assets-merged.xlsx"
+```
+
+Custody columns are matched by serial, then hostname, never by `asset_id` — 247
+of 261 rows carry generated ids. Repeated keys break the tie with the second key
+and otherwise stay blank: a wrong custody row is worse than a missing one.
+
 ## Safety Rules
 
 - Nothing is written until the preview is confirmed.
