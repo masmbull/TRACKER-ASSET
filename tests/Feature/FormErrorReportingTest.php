@@ -132,4 +132,78 @@ class FormErrorReportingTest extends TestCase
             ->assertOk()
             ->assertSee('Bandung');
     }
+
+    /**
+     * The message has to be next to the control, not only in the layout banner.
+     *
+     * The two tests above assert `assertSessionHasErrors` and `old()`, and both
+     * passed while no form rendered a single @error. The layout does print
+     * `$errors->all()` in one block above the content, so a rejected submit was
+     * never silent - but a person reading "The cost field must be a number"
+     * still had to hunt for which Cost box that was. The banner says what is
+     * wrong; the per-field message says where, and this asserts that.
+     *
+     * Matching the inline message by its own markup matters: asserting the bare
+     * rule text would pass against the layout banner alone, which is precisely
+     * the case this test exists to distinguish.
+     */
+    public function test_a_rejected_repair_points_at_the_field_that_failed(): void
+    {
+        $asset = Asset::factory()->create();
+
+        $response = $this->followingRedirects()
+            ->actingAs($this->support)
+            ->from(route('assets.repair.create', $asset))
+            ->post(route('assets.repair.store', $asset), [
+                'date' => now()->toDateString(),
+                'problem' => 'Screen flickers',
+                'cost' => 'not-a-number', // rejected by the numeric rule
+            ])
+            ->assertOk();
+
+        // The cost input itself must be marked red, and its error message
+        // rendered next to it - not merely in the layout banner above.
+        // Asserting the literal `@error(...)` directive is wrong: it is compiled
+        // away, so the source never appears in the HTML. What matters is the
+        // rendered result - a red border on the control and the message beside
+        // it. The message alone would pass against the banner, so it is paired
+        // with the border class on the control, which the banner cannot produce.
+        $html = $response->assertSee('name="cost"', false)
+            ->assertSee('The cost field must be a number')
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/name="cost"[^>]*border-red-400/',
+            $html,
+            'the cost input should be highlighted when its value is rejected'
+        );
+    }
+
+    /**
+     * Same for the edit form, whose asset_id is the field a user is most likely
+     * to collide with: every asset carries one, so "already taken" there is a
+     * routine mistake with no obvious cause.
+     */
+    public function test_a_rejected_edit_points_at_the_field_that_failed(): void
+    {
+        $asset = Asset::factory()->create(['asset_id' => 'LAP-ORIGINAL']);
+        Asset::factory()->create(['asset_id' => 'LAP-TAKEN']);
+
+        $response = $this->followingRedirects()
+            ->actingAs($this->support)
+            ->from(route('assets.edit', $asset))
+            ->put(route('assets.update', $asset), $this->assetPayload([
+                'asset_id' => 'LAP-TAKEN',
+                'brand' => 'HP',
+            ]))
+            ->assertOk()
+            ->assertSee('already been taken');
+
+        // The taken asset_id - not some other field - carries the highlight.
+        $this->assertMatchesRegularExpression(
+            '/name="asset_id"[^>]*border-error-400/',
+            $response->getContent(),
+            'the asset_id input should be highlighted when the value is taken'
+        );
+    }
 }
