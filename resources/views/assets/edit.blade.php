@@ -14,11 +14,29 @@
         @csrf
         @method('PUT')
 
+        {{-- Every field below can fail server-side (asset_id unique, brand/model/
+             serial/hostname required). Without this the browser's `required`
+             attribute is the only guard, so a duplicate Asset ID or an empty
+             required field rejected by `$request->validate()` returns to this
+             form with no message and the same values - the user resubmits and
+             fails again, with nothing on screen saying why. --}}
+        @if($errors->any())
+            <div class="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-theme-sm text-error-700 dark:border-error-800/40 dark:bg-error-500/10 dark:text-error-400">
+                <p class="font-semibold">Please fix the following before saving:</p>
+                <ul class="mt-1 list-inside list-disc space-y-0.5">
+                    @foreach($errors->all() as $message)
+                        <li>{{ $message }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <x-card title="Basic Information">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Asset ID *</label>
-                    <input type="text" name="asset_id" value="{{ old('asset_id', $asset->asset_id) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="asset_id" value="{{ old('asset_id', $asset->asset_id) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('asset_id') border-error-400 focus:border-error-500 focus:ring-error-500/10 @enderror">
+                    @error('asset_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Company *</label>
@@ -54,28 +72,33 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Brand *</label>
-                    <input type="text" name="brand" value="{{ old('brand', $asset->brand) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="brand" value="{{ old('brand', $asset->brand) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('brand') border-error-400 @enderror">
+                    @error('brand') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Model *</label>
-                    <input type="text" name="model" value="{{ old('model', $asset->model) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="model" value="{{ old('model', $asset->model) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('model') border-error-400 @enderror">
+                    @error('model') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Serial Number *</label>
-                    <input type="text" name="serial_number" value="{{ old('serial_number', $asset->serial_number) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="serial_number" value="{{ old('serial_number', $asset->serial_number) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('serial_number') border-error-400 @enderror">
+                    @error('serial_number') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Hostname *</label>
-                    <input type="text" name="hostname" value="{{ old('hostname', $asset->hostname) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="hostname" value="{{ old('hostname', $asset->hostname) }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('hostname') border-error-400 @enderror">
+                    @error('hostname') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Location *</label>
-                    <select name="location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <select name="location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('location_id') border-error-400 @enderror">
                         <option value="">Select</option>
                         @foreach($locations as $location)
                             <option value="{{ $location->id }}" {{ old('location_id', $asset->location_id) == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                         @endforeach
                     </select>
+                    @error('location_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Purchase Year</label>

@@ -20,25 +20,46 @@
 <form method="POST" action="/assets/{{ $asset->id }}/repair" class="bg-white p-6 rounded shadow space-y-4">
     @csrf
 
+    {{-- The layout prints every validation error in one block above the form
+         (app.blade.php, `@if($errors->any())`), so a rejected submit is never
+         silent. What it cannot do is point at the offending input: a person
+         looking at "The cost field must be a number" has to hunt for which
+         "Cost" box that was. These per-field messages and the red border on the
+         control itself close that gap - the summary says what is wrong, these
+         say where. --}}
+    @if($errors->any())
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p class="font-semibold">Please fix the following before saving:</p>
+            <ul class="mt-1 list-inside list-disc space-y-0.5">
+                @foreach($errors->all() as $message)
+                    <li>{{ $message }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Repair Date *</label>
-            <input type="date" name="date" required value="{{ old('date', now()->toDateString()) }}" class="w-full border rounded px-3 py-2">
+            <input type="date" name="date" required value="{{ old('date', now()->toDateString()) }}" class="w-full border rounded px-3 py-2 @error('date') border-red-400 @enderror">
+            @error('date') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Status</label>
-            <select name="status" class="w-full border rounded px-3 py-2">
+            <select name="status" class="w-full border rounded px-3 py-2 @error('status') border-red-400 @enderror">
                 <option value="open" {{ old('status', 'open') === 'open' ? 'selected' : '' }}>Open</option>
                 <option value="in_progress" {{ old('status') === 'in_progress' ? 'selected' : '' }}>In Progress</option>
                 <option value="completed" {{ old('status') === 'completed' ? 'selected' : '' }}>Completed</option>
                 <option value="cancelled" {{ old('status') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
             </select>
+            @error('status') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Problem *</label>
-        <textarea name="problem" required class="w-full border rounded px-3 py-2">{{ old('problem') }}</textarea>
+        <textarea name="problem" required class="w-full border rounded px-3 py-2 @error('problem') border-red-400 @enderror">{{ old('problem') }}</textarea>
+        @error('problem') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
     </div>
 
     <div>
@@ -49,11 +70,13 @@
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Vendor</label>
-            <input type="text" name="vendor" class="w-full border rounded px-3 py-2">
+            <input type="text" name="vendor" value="{{ old('vendor') }}" class="w-full border rounded px-3 py-2 @error('vendor') border-red-400 @enderror">
+            @error('vendor') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Cost (Rp)</label>
-            <input type="number" name="cost" step="0.01" class="w-full border rounded px-3 py-2">
+            <input type="number" name="cost" step="0.01" value="{{ old('cost') }}" class="w-full border rounded px-3 py-2 @error('cost') border-red-400 @enderror">
+            @error('cost') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
 
