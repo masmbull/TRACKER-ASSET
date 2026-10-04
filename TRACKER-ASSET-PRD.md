@@ -1751,9 +1751,24 @@ Verification status across all critical acceptance criteria:
       PostgreSQL raised 22P02 and turned every scan into a 500. Two engines, one
       answer, and the difference was only visible by running both
 - [x] Comprehensive documentation updated (`CLAUDE.md`, `README.md`, `PRD.md`)
-- [x] Automated test suite verified (313 passed, 1218 assertions on both engines)
+- [x] Automated test suite verified (319 passed, 1234 assertions) **on both
+      engines, each run independently**: SQLite in-memory, and PostgreSQL 16.14
+      confirmed by dropping the test database first and watching all 29 tables
+      reappear — the byte-identical output of the two runs proves nothing, and
+      neither does a green run whose connection name silently fell back.
+      `docs/local-development.md` records how to force each engine from
+      PowerShell, where the POSIX `VAR=value && …` form fails in a way that
+      reads as a broken application
 - [x] No page answers 5xx: every GET route is walked by `PageSweepTest`, which
       found the QR code silently broken for every role (PRD §41)
+- [x] The sidebar offers a page once, and the current page is marked active.
+      "Templates" appeared twice (a grouped entry plus a hand-written `<li>`
+      added in PRD §43 and never removed), the stray copy left the `<li>` for
+      Services nested inside it, and `$route === 'templates.*'` compared a
+      string against a pattern so nothing ever highlighted. `SidebarNavigationTest`
+      counts links to a route rather than searching for the label, because the
+      label also appears in prose and a text assertion passes with both copies
+      present — which is how this survived review
 
 ## Not yet built
 
