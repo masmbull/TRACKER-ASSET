@@ -18,6 +18,47 @@ DB_DATABASE=tracker_test DB_USERNAME=postgres DB_PASSWORD=postgres \
 CI runs both as separate jobs, so a change that only works on one engine is
 caught on the pull request rather than on deploy.
 
+### On Windows / PowerShell
+
+The `VAR=value && command` form above is POSIX shell. PowerShell has no `VAR=value`
+prefix, and routing it through `cmd /c` fails in a way that looks like a broken
+application rather than a broken invocation:
+
+```powershell
+cmd /c "set DB_CONNECTION=pgsql && php artisan test"
+# every test fails: Database connection [pgsql DB_HOST=127.0.0.1 ...] not configured
+```
+
+The connection name becomes the whole assignment string. Set the variables on the
+process instead, then start PHP:
+
+```powershell
+[Environment]::SetEnvironmentVariable('DB_CONNECTION', 'pgsql', 'Process')
+[Environment]::SetEnvironmentVariable('DB_HOST',       '127.0.0.1', 'Process')
+[Environment]::SetEnvironmentVariable('DB_PORT',       '5432', 'Process')
+[Environment]::SetEnvironmentVariable('DB_DATABASE',   'tracker_test', 'Process')
+[Environment]::SetEnvironmentVariable('DB_USERNAME',   'postgres', 'Process')
+[Environment]::SetEnvironmentVariable('DB_PASSWORD',   'postgres', 'Process')
+
+php artisan test
+```
+
+`Start-Process` has no `-Environment` on Windows PowerShell 5.1 either; setting it
+on the current process first works because the child inherits it.
+
+To be certain which engine a run used, drop the test database and watch it come
+back:
+
+```powershell
+psql -U postgres -c "DROP DATABASE IF EXISTS tracker_test;"
+php artisan test
+psql -U postgres -d tracker_test -c "\dt"
+```
+
+A table count of 29 means the run really migrated and queried PostgreSQL. Byte
+counts of the output prove nothing — the summary lines are the same length on
+both engines.
+
 Two things the second engine finds that the first cannot:
 
 - **Foreign keys are not enforced by SQLite by default**, and the schema declared

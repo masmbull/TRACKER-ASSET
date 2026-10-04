@@ -115,8 +115,13 @@ RUN docker-php-ext-install -j"$(nproc)" intl
 # it surfaced first as the health page's Queue row reporting a bare "Error" for a
 # queue that was fine, and would have surfaced next as a 500 on every login the
 # moment the office cluster came up.
+#
+# `yes ''` answers every prompt pecl asks (igbinary, lzf, zstd, msgpack, lz4)
+# with the default "no". Left alone, pecl blocks on stdin waiting for an answer
+# nobody is there to give, and the build hangs until it is killed - which looks
+# like a network timeout and sends people looking in the wrong place.
 RUN apt-get update && apt-get install -y --no-install-recommends $PHPIZE_DEPS \
-    && pecl install redis \
+    && yes '' | pecl install redis \
     && docker-php-ext-enable redis \
     && rm -rf /var/lib/apt/lists/*
 
