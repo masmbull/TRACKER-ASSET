@@ -16,7 +16,6 @@
  * directly. Anything absent here is worth knowing about before the build is
  * three minutes in.
  */
-
 $required = [
     // Required by phpspreadsheet - the Excel import.
     'dom',
