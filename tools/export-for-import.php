@@ -46,15 +46,15 @@
  * Then:   upload the file on the server at /import (Import Excel).
  */
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
-$sheetPath = dirname(__DIR__) . '/IT Assets.xlsx';
-$dbPath = dirname(__DIR__) . '/database/database.sqlite';
-$outPath = $argv[1] ?? dirname(__DIR__) . '/storage/app/imports/local-assets-merged.xlsx';
+$sheetPath = dirname(__DIR__).'/IT Assets.xlsx';
+$dbPath = dirname(__DIR__).'/database/database.sqlite';
+$outPath = $argv[1] ?? dirname(__DIR__).'/storage/app/imports/local-assets-merged.xlsx';
 
 foreach ([$sheetPath, $dbPath] as $p) {
     if (! is_file($p)) {
@@ -135,7 +135,7 @@ function pick_sheet_row(array $bySerial, array $byHost, string $sn, string $hn):
 
 // --- read the database ------------------------------------------------------
 
-$pdo = new PDO('sqlite:' . $dbPath);
+$pdo = new PDO('sqlite:'.$dbPath);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $dbRows = $pdo->query(
     'SELECT a.*, s.name AS status_name, c.name AS category_name,
@@ -179,7 +179,7 @@ $dbFields = [
 
 // --- write the merged workbook ---------------------------------------------
 
-$out = new Spreadsheet();
+$out = new Spreadsheet;
 $ws = $out->getActiveSheet();
 // The importer looks for a sheet named after config('asset-import.sheet_names')
 // first; it falls back to sheet 0 either way, but matching the name keeps the
@@ -246,7 +246,7 @@ foreach ($dbRows as $db) {
         $n = 1;
         while (isset($usedHost[mb_strtolower($candidate)])) {
             $n++;
-            $candidate = $hostRaw . '-' . $n;
+            $candidate = $hostRaw.'-'.$n;
         }
         if ($candidate !== $hostRaw) {
             $renamedHosts++;
@@ -278,7 +278,7 @@ foreach ($dbRows as $db) {
         }
         $cells[] = $v;
     }
-    $ws->fromArray($cells, null, 'A' . $excelRow);
+    $ws->fromArray($cells, null, 'A'.$excelRow);
     $excelRow++;
 }
 
@@ -296,4 +296,3 @@ printf("  junk serials emptied   : %d\n", $junkSerials);
 printf("  repeats serials emptied: %d\n", $repeatSerials);
 printf("  hostnames suffixed     : %d\n", $renamedHosts);
 printf("  columns                : %d (original header order, verbatim)\n", count($written));
-
