@@ -103,6 +103,23 @@ RUN docker-php-ext-install -j"$(nproc)" pdo_pgsql
 RUN docker-php-ext-install -j"$(nproc)" zip
 RUN docker-php-ext-install -j"$(nproc)" intl
 
+# phpredis, from PECL rather than the bundled set.
+#
+# config/database.php pins client => phpredis and composer carries no predis, so
+# this extension is the only Redis client the image can ever have. The k8s
+# manifests run SESSION_DRIVER, CACHE_STORE and QUEUE_CONNECTION all on Redis -
+# two replicas share nothing on disk, so sessions cannot be files - meaning
+# without it every request that touches a session dies with
+# `Class "Redis" not found`. Nothing in this image's history caught it because
+# local development runs cache=file and queue=sync and never calls Redis at all;
+# it surfaced first as the health page's Queue row reporting a bare "Error" for a
+# queue that was fine, and would have surfaced next as a 500 on every login the
+# moment the office cluster came up.
+RUN apt-get update && apt-get install -y --no-install-recommends $PHPIZE_DEPS \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && rm -rf /var/lib/apt/lists/*
+
 # Report the extension state, but do not fail the build on it.
 #
 # This exists so that a missing extension is visible in the build log at the

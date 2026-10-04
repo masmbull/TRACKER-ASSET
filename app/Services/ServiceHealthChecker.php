@@ -270,11 +270,14 @@ class ServiceHealthChecker
                 );
             }
 
-            if (! extension_loaded('redis') && config('database.redis.default.client') === 'phpredis') {
+            // `database.redis.client`, not `database.redis.default.client`: the
+            // client key sits beside `default`, not inside it, so the old path
+            // read null and this check silently never fired.
+            if (! extension_loaded('redis') && config('database.redis.client') === 'phpredis') {
                 throw new ProbeFailure('phpredis extension missing but '.implode(', ', $usedBy).' need Redis');
             }
 
-            $client = config('database.redis.default.client');
+            $client = config('database.redis.client');
             // Read back what was just written: proves the connection works end
             // to end, not merely that a socket opened.
             Redis::connection()->set('tracker:healthprobe', '1', 'EX', 30);
@@ -312,6 +315,36 @@ class ServiceHealthChecker
                 // Not a failure: these run jobs inline, so there is no broker to
                 // be down. Saying so beats showing a red row for a healthy setup.
                 return sprintf('%s · runs inline, no broker', $connection);
+            }
+
+            if ($connection === 'database') {
+                // The broker is a table, not a socket. This probe used to reach
+                // for Redis on every non-inline driver, which tested a service the
+                // database queue does not use - and in an image without the
+                // phpredis extension threw `Class "Redis" not found`, so a healthy
+                // queue reported down with the detail "Error". What the row has to
+                // prove is the thing jobs would actually fail on: the table.
+                $table = (string) config('queue.connections.database.table', 'jobs');
+
+                try {
+                    DB::table($table)->exists();
+                } catch (Throwable) {
+                    throw new ProbeFailure(sprintf('%s · %s table not readable', $connection, $table));
+                }
+
+                return sprintf('%s · %s table reachable', $connection, $table);
+            }
+
+            if ($connection !== 'redis') {
+                // Unknown driver: name it rather than guess at a broker this
+                // check does not know how to reach. A red row that says which
+                // driver it cannot probe is actionable; a false "reachable" or a
+                // bare exception class is not.
+                throw new ProbeFailure(sprintf('%s · no probe for this driver', $connection));
+            }
+
+            if (! extension_loaded('redis') && config('database.redis.client') === 'phpredis') {
+                throw new ProbeFailure('phpredis extension missing but queue=redis needs Redis');
             }
 
             Redis::connection('default')->connect();

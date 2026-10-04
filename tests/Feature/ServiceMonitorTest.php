@@ -159,6 +159,44 @@ class ServiceMonitorTest extends TestCase
     }
 
     /**
+     * The database queue's broker is a table, not a socket.
+     *
+     * The probe used to reach for Redis on every non-inline driver. On a server
+     * running queue=database, against an image with no phpredis extension, that
+     * threw `Class "Redis" not found` and a perfectly healthy queue reported down
+     * with the detail "Error" - a red row whose text explained nothing. The jobs
+     * table is what a dispatched job would actually fail on, so that is what the
+     * row checks.
+     */
+    public function test_a_database_queue_is_probed_through_its_table_not_redis(): void
+    {
+        config(['queue.default' => 'database']);
+
+        $report = app(ServiceHealthChecker::class)->check();
+        $queue = collect($report['services'])->firstWhere('name', 'Queue');
+
+        $this->assertSame('ok', $queue['status']);
+        $this->assertStringContainsString('jobs table reachable', $queue['detail']);
+    }
+
+    /**
+     * A driver the probe does not know must say so by name.
+     *
+     * The alternative is reaching for the wrong broker again: assuming every
+     * non-inline queue is Redis is exactly the bug the test above pins down.
+     */
+    public function test_an_unprobed_queue_driver_is_named_rather_than_guessed(): void
+    {
+        config(['queue.default' => 'sqs']);
+
+        $report = app(ServiceHealthChecker::class)->check();
+        $queue = collect($report['services'])->firstWhere('name', 'Queue');
+
+        $this->assertSame('down', $queue['status']);
+        $this->assertStringContainsString('sqs', $queue['detail']);
+    }
+
+    /**
      * The point of the JSON endpoint: a stopped scheduler is a real outage, and
      * a load balancer reads the status code rather than a cheerful body.
      */
