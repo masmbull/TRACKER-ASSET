@@ -226,25 +226,41 @@ class AgentDistributionTest extends TestCase
         }
     }
 
+    /**
+     * Enrolment hands out a token *and* a readable device number.
+     *
+     * The number is the server's to assign. The agent's own id is base64 of 32
+     * random bytes - "ZGV2aWNlLTAwMQ==" is unreadable in a screenshot and
+     * unquotable over the phone - and letting the agent invent it also let two
+     * machines racing each other pick the same identity. It is kept in
+     * hardware_id now, which is what re-registration matches on.
+     */
     public function test_device_registration_issues_token(): void
     {
         $payload = [
             'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'hardware_id' => 'ZGV2aWNlLTAwMQ==',
             'name' => 'field-laptop',
             'platform' => 'Windows 11',
         ];
 
         $first = $this->postJson('/api/agent/register', $payload);
-        $first->assertOk()->assertJsonStructure(['token', 'message']);
+        $first->assertOk()->assertJsonStructure(['token', 'message', 'device_id']);
         $this->assertNotEmpty($first->json('token'));
+        $this->assertSame('MITO-0001', $first->json('device_id'));
 
+        // Registering again is the agent restarting or re-authenticating, not a
+        // second machine: same token, same number, one row.
         $second = $this->postJson('/api/agent/register', $payload);
         $second->assertOk()->assertJsonPath('token', $first->json('token'));
+        $second->assertJsonPath('device_id', 'MITO-0001');
 
         $this->assertDatabaseHas('agent_api_tokens', [
-            'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'device_id' => 'MITO-0001',
+            'hardware_id' => 'ZGV2aWNlLTAwMQ==',
             'platform' => 'Windows 11',
         ]);
+        $this->assertSame(1, AgentApiToken::count());
     }
 
     /**
@@ -261,11 +277,12 @@ class AgentDistributionTest extends TestCase
     {
         $this->postJson('/api/agent/register', [
             'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'hardware_id' => 'ZGV2aWNlLTAwMQ==',
             'name' => 'new-laptop',
             'platform' => 'Windows 11',
         ])->assertOk();
 
-        $token = AgentApiToken::where('device_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
+        $token = AgentApiToken::where('hardware_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
 
         $this->assertDatabaseHas('agent_commands', [
             'agent_token_id' => $token->id,
@@ -286,13 +303,14 @@ class AgentDistributionTest extends TestCase
     {
         $payload = [
             'device_id' => 'ZGV2aWNlLTAwMQ==',
+            'hardware_id' => 'ZGV2aWNlLTAwMQ==',
             'name' => 'field-laptop',
             'platform' => 'Windows 11',
         ];
 
         $this->postJson('/api/agent/register', $payload)->assertOk();
 
-        $token = AgentApiToken::where('device_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
+        $token = AgentApiToken::where('hardware_id', 'ZGV2aWNlLTAwMQ==')->firstOrFail();
         $afterFirst = AgentCommand::where('agent_token_id', $token->id)
             ->where('command', 'scan')
             ->count();

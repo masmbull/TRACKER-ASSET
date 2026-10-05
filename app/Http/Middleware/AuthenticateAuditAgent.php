@@ -32,6 +32,24 @@ class AuthenticateAuditAgent
 
         $token->update(['last_used_at' => now()]);
 
+        // The agent sends its build version on every authenticated call, so this
+        // is the one place that has to notice it - and it is also the moment we
+        // learn the device is still answering at all.
+        //
+        // Written on each call rather than only at register, because an in-place
+        // self-update swaps the binary without re-registering: the version that
+        // matters after an update is the next heartbeat, not the one from before.
+        $reportedVersion = $request->input('agent_version')
+            ?: $request->header('X-Agent-Version');
+
+        $token->last_seen_at = now();
+
+        if (filled($reportedVersion) && $reportedVersion !== $token->agent_version) {
+            $token->agent_version = mb_substr((string) $reportedVersion, 0, 64);
+        }
+
+        $token->save();
+
         $request->attributes->set('agent_token_id', $token->id);
         $request->attributes->set('agent_token_name', $token->name);
 

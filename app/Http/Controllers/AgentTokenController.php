@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AgentRelease;
 use Illuminate\Http\Request;
 
 class AgentTokenController extends Controller
@@ -12,7 +13,16 @@ class AgentTokenController extends Controller
     {
         $tokens = AgentApiToken::orderByDesc('id')->get();
 
-        return view('agent.index', compact('tokens'));
+        // What the download button hands out, and what was live before it.
+        //
+        // Shown on the page rather than buried in a build script because the
+        // question it answers is asked while looking at a laptop, not while
+        // building: "is the file I just downloaded the new one, and do these
+        // machines still have the old one?"
+        $currentRelease = AgentRelease::current();
+        $previousRelease = AgentRelease::previous();
+
+        return view('agent.index', compact('tokens', 'currentRelease', 'previousRelease'));
     }
 
     public function download(AgentApiToken $token, Request $request)
