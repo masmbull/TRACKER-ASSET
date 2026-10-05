@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 /**
- * Command inbox for resident agents (PRD §11).
+ * Command inbox for resident agents (PRD ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§11).
  *
  * The agent polls GET /api/agent/inbox with its Bearer token, executes the
  * pending command, then acks it. The dashboard enqueues commands via the web
@@ -76,7 +76,7 @@ class AgentCommandApiController extends Controller
      */
     private function pendingCommands(int $tokenId)
     {
-        return AgentCommand::query()
+        $commands = AgentCommand::query()
             // A row the agent picked up and then died on would otherwise be lost
             // forever: it is no longer 'pending', so this query would never hand
             // it out again, and nothing else resets it. A command that has been
@@ -111,7 +111,29 @@ class AgentCommandApiController extends Controller
                     ->orWhereNotNull('agent_token_id');
             })
             ->limit(10)
-            ->get(['id', 'command', 'payload']);
+            ->get(['id', 'command', 'payload', 'agent_token_id']);
+
+        // An update a device does not need is not free to skip: handing it out
+        // makes the agent pull a ~160 MB binary and restart itself, so on a
+        // company-wide click every laptop in the office would restart, including
+        // the machines already carrying that exact build.
+        //
+        // Filtered here rather than by deleting rows, because a broadcast has no
+        // target to edit - "cancel it for this device" is decided at the moment it
+        // is handed over. A targeted update is left alone: an operator who
+        // clicked Update on one machine meant that machine, and second-guessing
+        // them would make the button unreliable.
+        //
+        // Only once: the version is read from the token rather than per command,
+        // because isOutdated() compares against the release table and a fleet of
+        // twenty would otherwise run that comparison twenty times per poll.
+        $isCurrent = AgentApiToken::find($tokenId)?->isOutdated() === false;
+
+        return $commands
+            ->reject(fn ($command) => $command->command === 'update'
+                && $command->agent_token_id === null
+                && $isCurrent)
+            ->values();
     }
 
     /**

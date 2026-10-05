@@ -613,16 +613,32 @@ class AgentFleetController extends Controller
     /**
      * Broadcast self-update to every agent (the daemon re-pulls the newest
      * binary and restarts itself).
+     *
+     * Devices already on the release are skipped, per device rather than by
+     * cancelling the broadcast. A broadcast row with no target reaches every
+     * agent that asks, including the ones just restarted onto the new build, so
+     * "skip the current ones" has to be a decision made when the command is
+     * handed out. Getting this wrong is expensive rather than merely noisy: each
+     * agent pulls a ~160 MB binary, and a company-wide update that re-downloaded
+     * to machines already carrying that exact build would restart the whole
+     * office's antivirus mid-scan for nothing.
      */
     public function updateAll()
     {
-        // The URL points at the binary download, which is the only artifact a
-        // deployed agent consumes. It used to hand out `agent.run` (the retired
-        // PowerShell script), which no shipped agent ever fetches — so the
-        // payload was advertising a file that does not exist in the fleet.
         $this->enqueue(null, 'update', ['url' => URL::route('agent.download.latest')]);
 
-        return back()->with('success', 'Update broadcast to all agents — each re-pulls the latest binary and restarts.');
+        $current = AgentApiToken::query()
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->get()
+            ->filter(fn (AgentApiToken $t) => $t->isOutdated() === false)
+            ->count();
+
+        $note = $current > 0
+            ? " {$current} already on the release will be left alone."
+            : '';
+
+        return back()->with('success', "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.");
     }
 
     /**
