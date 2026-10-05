@@ -191,18 +191,29 @@ private static void Authenticate(HttpRequestMessage req, string token)
 private sealed record SoftwareEntry(string? Name, string? Version, string? Publisher, string? InstalledAt);
 
     public static List<JsonElement>? GetInbox(string url, string token) =>
-        GetInbox(url, token, out _);
+        GetInbox(url, token, 0, out _);
 
     /// <param name="unauthorized">
     /// True when the server actively rejected the credential. The daemon needs
     /// this to tell "token is dead" apart from "network blip": the first is
     /// recoverable by re-registering, the second must simply be retried.
     /// </param>
-    public static List<JsonElement>? GetInbox(string url, string token, out bool unauthorized)
+    /// <param name="waitSeconds">
+    /// Ask the server to hold the request open until a command exists, instead of
+    /// returning empty straight away. Zero keeps the old behaviour: return now,
+    /// sleep, ask again.
+    /// </param>
+    public static List<JsonElement>? GetInbox(string url, string token, int waitSeconds, out bool unauthorized)
     {
         unauthorized = false;
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"{url}/api/agent/inbox");
+        // The wait has to outlive the server's own cap or the client gives up
+        // first and the long-poll is just a slow poll. The server clamps to 60s.
+        var endpoint = waitSeconds > 0
+            ? $"{url}/api/agent/inbox?wait={Math.Clamp(waitSeconds, 1, 60)}"
+            : $"{url}/api/agent/inbox";
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
         Authenticate(req, token);
 
         using var resp = Http.Send(req);

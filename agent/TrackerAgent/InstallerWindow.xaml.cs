@@ -248,8 +248,15 @@ public partial class InstallerWindow : Window
     /// <summary>
     /// The whole install in one pass: files, device identity, registration,
     /// autostart, resident background agent and a first hardware scan so the
-    /// device appears in Master Assets and Live Fleet right away.
+    /// device appears in Live Fleet right away.
     /// </summary>
+    /// <remarks>
+    /// The scan does not create an asset. A laptop whose serial is not on the
+    /// register waits on the fleet page as an unregistered device, and an
+    /// administrator adds it from there - that is what the promotion form is
+    /// for. This comment used to claim the device appeared in Master Assets,
+    /// which stopped being true when auto-creation was removed.
+    /// </remarks>
     private bool RunInstall(string serverUrl)
     {
         try
@@ -746,7 +753,8 @@ public partial class InstallerWindow : Window
                 "Installation complete",
                 $"Agent installed to {_installDir}\n\n" +
                 $"Connected to {_serverUrl}\n\n" +
-                "The device is reporting now — it appears in Master Assets and Live Fleet.",
+                "This laptop is now on Live Fleet. If it is not on the register yet, an " +
+                "administrator adds it from the fleet page — nothing was registered automatically.",
                 SuccessBrush);
 
             // Nothing to click on success: close the window after a moment.
