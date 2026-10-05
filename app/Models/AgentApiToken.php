@@ -9,7 +9,7 @@ class AgentApiToken extends Model
 {
     protected $fillable = [
         'name', 'token_hash', 'token_plain', 'abilities', 'last_used_at', 'expires_at', 'is_active',
-        'device_id', 'platform',
+        'device_id', 'platform', 'agent_version', 'last_seen_at', 'hardware_id',
     ];
 
     protected function casts(): array
@@ -19,8 +19,27 @@ class AgentApiToken extends Model
             'last_used_at' => 'datetime',
             'expires_at' => 'datetime',
             'is_active' => 'boolean',
+            'last_seen_at' => 'datetime',
             'token_plain' => 'encrypted',
         ];
+    }
+
+    /**
+     * Is this device behind the build the download button serves?
+     *
+     * null means "it has never told us" - every device enrolled before agents
+     * reported their version. That is not the same as out of date, and the
+     * fleet page says so rather than guessing a number to compare.
+     */
+    public function isOutdated(): ?bool
+    {
+        return AgentRelease::isBehind($this->agent_version);
+    }
+
+    /** Short label for the fleet table: the version, or why we have none. */
+    public function versionLabel(): string
+    {
+        return $this->agent_version ?: 'unknown';
     }
 
     public function isUsable(): bool

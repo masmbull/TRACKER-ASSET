@@ -20,6 +20,41 @@
     </div>
 </x-card>
 
+{{-- Which build the download button is serving, and what it replaced.
+     Without this the page says "latest" and means nothing verifiable: two
+     different files carry that label, and nothing on screen distinguishes a
+     fleet that took the update from one that never will. --}}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <x-card title="Release Version" class="border-brand-200 dark:border-brand-800">
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            {{ $currentRelease?->version ?? 'not recorded' }}
+        </p>
+        <p class="mt-1 text-theme-xs text-gray-500">
+            {{ $currentRelease?->released_at?->diffForHumans() ?? 'Register one with: php artisan agent:release <version>' }}
+        </p>
+    </x-card>
+
+    <x-card title="Previous Version">
+        <p class="text-2xl font-semibold text-gray-500">
+            {{ $previousRelease?->version ?? '—' }}
+        </p>
+        <p class="mt-1 text-theme-xs text-gray-500">
+            {{ $previousRelease?->released_at?->diffForHumans() ?? 'No earlier release on record' }}
+        </p>
+    </x-card>
+
+    <x-card title="Fleet Status">
+        @php
+            $outdated = $tokens->filter(fn ($t) => $t->isOutdated() === true)->count();
+            $unknown = $tokens->filter(fn ($t) => blank($t->agent_version))->count();
+        @endphp
+        <p class="text-2xl font-semibold {{ $outdated > 0 ? 'text-warning-600' : 'text-success-600' }}">
+            {{ $outdated }}<span class="text-theme-sm font-normal text-gray-500"> outdated</span>
+        </p>
+        <p class="mt-1 text-theme-xs text-gray-500">{{ $unknown }} reporting no version</p>
+    </x-card>
+</div>
+
 <div class="grid grid-cols-1 gap-6">
     <x-card title="How to Deploy" padding="p-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -53,6 +88,7 @@
                 <thead>
                     <tr class="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                         <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Device</th>
+                        <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Agent Version</th>
                         <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Status</th>
                         <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Last Seen</th>
                         <th class="text-left py-3 px-4 font-semibold text-gray-600 dark:text-gray-400">Expires</th>
@@ -68,7 +104,31 @@
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                                     </div>
                                     <span class="font-medium text-gray-900 dark:text-white">{{ $token->name }}</span>
+                                    @if($token->device_id)
+                                        <span class="block text-theme-xs text-gray-400">{{ $token->device_id }}</span>
+                                    @endif
                                 </div>
+                            </td>
+                            {{-- The build this laptop is actually running, next to the
+                                 build we serve. "unknown" is its own state: every
+                                 device enrolled before agents reported a version
+                                 reads that, and painting it as up to date would be
+                                 a claim nobody can check. --}}
+                            <td class="py-3 px-4">
+                                @php $outdated = $token->isOutdated(); @endphp
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                                    @if($outdated === true)
+                                        bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-400
+                                    @elseif($outdated === false)
+                                        bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-400
+                                    @else
+                                        bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400
+                                    @endif">
+                                    {{ $token->versionLabel() }}
+                                    @if($outdated === true)
+                                        <span class="font-normal">· outdated</span>
+                                    @endif
+                                </span>
                             </td>
                             <td class="py-3 px-4">
                                 @if($token->isUsable())

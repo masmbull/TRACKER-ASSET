@@ -10,18 +10,57 @@ use Illuminate\Http\Request;
 
 class AgentRegistrationController extends Controller
 {
+    /**
+     * Next sequential device number, e.g. MITO-0007.
+     *
+     * Scans the existing numbers rather than counting rows: a deleted or revoked
+     * device must not cause the next laptop to be handed a number that was
+     * already in use, and count() would happily reuse MITO-0003 after MITO-0003
+     * was removed. Gaps are therefore permanent, which is also what makes a
+     * number stable to quote on the phone after a device is retired.
+     */
+    private static function nextDeviceId(): string
+    {
+        $prefix = 'MITO-';
+        $highest = 0;
+
+        AgentApiToken::query()
+            ->where('device_id', 'like', $prefix.'%')
+            ->pluck('device_id')
+            ->each(function (string $id) use ($prefix, &$highest) {
+                $digits = substr($id, strlen($prefix));
+
+                if (ctype_digit($digits)) {
+                    $highest = max($highest, (int) $digits);
+                }
+            });
+
+        return $prefix.str_pad((string) ($highest + 1), 4, '0', STR_PAD_LEFT);
+    }
+
     public function register(Request $request): JsonResponse
     {
         $request->validate([
             'device_id' => 'required|string',
+            'hardware_id' => 'nullable|string|max:191',
             'name' => 'nullable|string|max:255',
             'platform' => 'nullable|string|max:255',
+            'agent_version' => 'nullable|string|max:64',
         ]);
 
         $deviceId = $request->string('device_id')->toString();
 
+        // What the agent generated for itself, kept separately so this row stays
+        // findable once the server has replaced device_id with a number a human
+        // can read. Without it a reinstall would mint a second row for the same
+        // laptop - the exact duplication the sequential id exists to prevent.
+        $hardwareId = $request->filled('hardware_id')
+            ? $request->string('hardware_id')->toString()
+            : $deviceId;
+
         // Check if device already registered
-        $existing = AgentApiToken::where('device_id', $deviceId)->first();
+        $existing = AgentApiToken::where('hardware_id', $hardwareId)->first()
+            ?? AgentApiToken::where('device_id', $deviceId)->first();
         if ($existing) {
             // A revoked/expired device stays revoked. Re-registering must not be
             // a way around the Revoke button on the Tokens page, otherwise
@@ -38,6 +77,11 @@ class AgentRegistrationController extends Controller
             if (filled($existing->token_plain)) {
                 return response()->json([
                     'token' => $existing->token_plain,
+                    // Handed back on every path, so an agent that stored a random
+                    // id from before this change adopts the readable number the
+                    // first time it registers again instead of being stuck with
+                    // "Device-k3Jd8fPq" forever.
+                    'device_id' => $existing->device_id,
                     'message' => 'Device already registered',
                 ]);
             }
@@ -52,10 +96,13 @@ class AgentRegistrationController extends Controller
             $existing->update([
                 'token_hash' => hash('sha256', $rotated),
                 'token_plain' => $rotated,
+                'agent_version' => $request->string('agent_version')->toString() ?: $existing->agent_version,
+                'last_seen_at' => now(),
             ]);
 
             return response()->json([
                 'token' => $rotated,
+                'device_id' => $existing->device_id,
                 'rotated' => true,
                 'message' => 'Device re-registered (previous token could not be recovered)',
             ]);
@@ -64,7 +111,16 @@ class AgentRegistrationController extends Controller
         // Create new token for this device
         $token = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $token);
-        $baseName = $request->string('name')->toString() ?: 'Device-'.substr($deviceId, 0, 8);
+
+        // Sequential, human-readable device number: MITO-0001, MITO-0002, ...
+        //
+        // A random id was unreadable across a room ("Device-k3Jd8fPq") and gave
+        // an operator nothing to quote over the phone. Derived from the highest
+        // number already issued rather than from a row count, so deleting a
+        // device cannot make the next one reuse its number.
+        $assignedDeviceId = self::nextDeviceId();
+
+        $baseName = $request->string('name')->toString() ?: 'Device-'.$assignedDeviceId;
         $name = $baseName;
         $counter = 1;
         // Ensure unique name
@@ -73,9 +129,12 @@ class AgentRegistrationController extends Controller
         }
 
         $agentToken = AgentApiToken::create([
-            'device_id' => $deviceId,
+            'device_id' => $assignedDeviceId,
+            'hardware_id' => $hardwareId,
             'name' => $name,
             'platform' => $request->string('platform')->toString(),
+            'agent_version' => $request->string('agent_version')->toString() ?: null,
+            'last_seen_at' => now(),
             'token_hash' => $tokenHash,
             'token_plain' => $token,
             'is_active' => true,
@@ -101,6 +160,10 @@ class AgentRegistrationController extends Controller
 
         return response()->json([
             'token' => $token,
+            // The server-assigned number, which the agent stores and reports
+            // from then on. The agent's own random id stays in hardware_id and
+            // is never shown to anyone.
+            'device_id' => $assignedDeviceId,
             'message' => 'Device registered successfully',
         ]);
     }
