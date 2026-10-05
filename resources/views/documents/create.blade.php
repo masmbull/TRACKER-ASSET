@@ -38,15 +38,21 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Type *</label>
-                    <input type="text" name="document_type" required value="{{ old('document_type') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="FAT, BAST, Transfer, etc.">
+                    <input type="text" name="document_type" required value="{{ old('document_type') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('document_type') border-error-400 @enderror" placeholder="FAT, BAST, Transfer, etc.">
+                    @error('document_type') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Number *</label>
-                    <input type="text" name="document_number" required value="{{ old('document_number') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="document_number" required value="{{ old('document_number') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('document_number') border-error-400 @enderror">
+                    {{-- unique on documents: a collision here is a routine mistake
+                         (every FAT/BAST carries a number) and nothing on the form
+                         hints that the number, not the asset, was the problem. --}}
+                    @error('document_number') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div class="md:col-span-2">
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Title *</label>
-                    <input type="text" name="title" required value="{{ old('title') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="text" name="title" required value="{{ old('title') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('title') border-error-400 @enderror">
+                    @error('title') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Template</label>
@@ -63,11 +69,13 @@
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">File Path *</label>
-                    <input type="text" name="file_path" required value="{{ old('file_path') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="/storage/docs/...">
+                    <input type="text" name="file_path" required value="{{ old('file_path') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('file_path') border-error-400 @enderror" placeholder="/storage/docs/...">
+                    @error('file_path') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">File Type *</label>
-                    <input type="text" name="file_type" required value="{{ old('file_type') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="pdf, docx, etc.">
+                    <input type="text" name="file_type" required value="{{ old('file_type') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('file_type') border-error-400 @enderror" placeholder="pdf, docx, etc.">
+                    @error('file_type') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div class="md:col-span-2">
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Status</label>

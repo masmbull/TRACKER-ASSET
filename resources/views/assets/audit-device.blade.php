@@ -47,17 +47,26 @@
     </div>
 
     <div class="grid grid-cols-3 gap-4">
+        {{-- These three read old() so a rejected submit keeps what was typed.
+             Without it, hitting a validation rule cleared the serial, hostname
+             and MAC but left Notes alone - the worst mix, because the form
+             looked partly filled and the user could not tell which half was
+             real. All three are capped at 255 server-side, so a long value
+             pasted from a label can legitimately be rejected. --}}
         <div>
             <label class="block text-sm font-medium">Serial Number (from label)</label>
-            <input type="text" name="manual_serial" class="w-full border rounded px-3 py-2" placeholder="{{ $asset->serial_number }}">
+            <input type="text" name="manual_serial" value="{{ old('manual_serial') }}" class="w-full border rounded px-3 py-2 @error('manual_serial') border-red-400 @enderror" placeholder="{{ $asset->serial_number }}">
+            @error('manual_serial') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Hostname</label>
-            <input type="text" name="manual_hostname" class="w-full border rounded px-3 py-2" placeholder="{{ $asset->hostname }}">
+            <input type="text" name="manual_hostname" value="{{ old('manual_hostname') }}" class="w-full border rounded px-3 py-2 @error('manual_hostname') border-red-400 @enderror" placeholder="{{ $asset->hostname }}">
+            @error('manual_hostname') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">MAC Address</label>
-            <input type="text" name="manual_mac" class="w-full border rounded px-3 py-2" placeholder="{{ $asset->mac_address }}">
+            <input type="text" name="manual_mac" value="{{ old('manual_mac') }}" class="w-full border rounded px-3 py-2 @error('manual_mac') border-red-400 @enderror" placeholder="{{ $asset->mac_address }}">
+            @error('manual_mac') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
 

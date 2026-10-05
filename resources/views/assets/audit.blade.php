@@ -70,11 +70,13 @@
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Device Hostname *</label>
-            <input type="text" name="device_hostname" required value="{{ old('device_hostname', $asset->hostname) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_hostname" required value="{{ old('device_hostname', $asset->hostname) }}" class="w-full border rounded px-3 py-2 @error('device_hostname') border-red-400 @enderror">
+            @error('device_hostname') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Device Serial Number *</label>
-            <input type="text" name="device_serial" required value="{{ old('device_serial', $asset->serial_number) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_serial" required value="{{ old('device_serial', $asset->serial_number) }}" class="w-full border rounded px-3 py-2 @error('device_serial') border-red-400 @enderror">
+            @error('device_serial') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
 
