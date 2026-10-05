@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\AgentRelease;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 /**
@@ -161,6 +163,56 @@ class AgentReleaseTrackingTest extends TestCase
     }
 
     /**
+     * Updating one machine must not disturb the rest of the fleet.
+     *
+     * Update All was the only way to move a single laptop onto a new build, so
+     * fixing the machine in front of you meant restarting every agent in the
+     * office. The per-device button has to target exactly one row - a broadcast
+     * hiding behind it would keep the old behaviour while looking like the fix.
+     */
+    public function test_updating_one_device_targets_only_that_device(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $target = $this->makeToken('MITO-0001', '1.0.0');
+        $other = $this->makeToken('MITO-0002', '1.1.0');
+
+        $this->actingAs($admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.updateOne', $target))
+            ->assertRedirect(route('agent.fleet'));
+
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $target->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+
+        $this->assertDatabaseMissing('agent_commands', [
+            'agent_token_id' => $other->id,
+            'command' => 'update',
+        ]);
+    }
+
+    /** The payload must point at the real download route, not a retired script. */
+    public function test_a_per_device_update_carries_the_download_url(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $target = $this->makeToken('MITO-0001', '1.0.0');
+
+        $this->actingAs($admin)->post(route('agent.updateOne', $target));
+
+        $command = AgentCommand::where('agent_token_id', $target->id)
+            ->where('command', 'update')
+            ->firstOrFail();
+
+        $this->assertSame(
+            URL::route('agent.download.latest'),
+            $command->payload['url'] ?? null,
+            'the agent has to be told where to pull the binary from'
+        );
+    }
+
+    /**
      * @return string the assigned device number
      */
     private function registerDevice(string $hardwareId): string
@@ -173,5 +225,19 @@ class AgentReleaseTrackingTest extends TestCase
         $response->assertOk();
 
         return (string) $response->json('device_id');
+    }
+
+    /** An enrolled device carrying a given build, for the fleet-page tests. */
+    private function makeToken(string $deviceId, ?string $version): AgentApiToken
+    {
+        return AgentApiToken::create([
+            'device_id' => $deviceId,
+            'hardware_id' => 'hw-'.strtolower($deviceId),
+            'name' => $deviceId,
+            'token_hash' => hash('sha256', $deviceId),
+            'token_plain' => $deviceId,
+            'agent_version' => $version,
+            'is_active' => true,
+        ]);
     }
 }
