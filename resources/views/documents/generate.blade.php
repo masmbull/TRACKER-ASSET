@@ -93,14 +93,42 @@
 
             <div class="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
                 <h3 class="mb-4 text-theme-base font-semibold text-gray-800 dark:text-white">A. Informasi Yang Menyerahkan</h3>
+                {{-- Prefilled from the register instead of from whoever happens to
+                     be logged in.
+
+                     The sender used to default to Auth::user() - the administrator
+                     generating the document. On a transfer that named the IT
+                     administrator as the person handing the laptop back, which is
+                     not a small error on a form people sign. It now comes from
+                     the assignment history: the person giving it back, or the IT
+                     PIC for a brand new laptop where nobody is returning one. --}}
+                @php
+                    // Mirrors isReturn() in DocumentGenerationService: a BAST or a
+                    // saved transfer means somebody is handing the laptop back, so
+                    // the sender is that person. A brand new FAT is IT handing it
+                    // over. Kept as the same condition rather than a third
+                    // interpretation, or the form and the PDF disagree.
+                    $defaultSenderName = $selectedType === 'BAST' || $transfers->isNotEmpty() || $currentHolder
+                        ? $currentHolder?->user?->name ?? $firstHolder?->user?->name
+                        : $asset->adminItPic?->name ?? $asset->currentUser?->name;
+                    $defaultSenderDepartment = $currentHolder?->user?->department ?? $asset->adminItPic?->department;
+                    $defaultSenderEmail = $currentHolder?->user?->email ?? $asset->adminItPic?->email;
+                @endphp
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Nama Penyerah</label>
-                        <input type="text" name="signatory_menyerahkan" value="{{ old('signatory_menyerahkan', Auth::user()?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <input type="text" name="signatory_menyerahkan" value="{{ old('signatory_menyerahkan', $defaultSenderName ?? Auth::user()?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">NIK / ID Karyawan</label>
-                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id', Auth::user()?->employee_id ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                            {{-- Deliberately not prefilled. This used to default to
+                                 Auth::user()?->employee_id, and users has no
+                                 employee_id column at all - so the field was always
+                                 empty and the expression was decoration. The
+                                 register genuinely has nowhere to read an employee
+                                 number from yet; typing it stays correct until it
+                                 does. --}}
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas Penyerah *</label>
@@ -126,11 +154,11 @@
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Divisi / Jabatan</label>
-                        <input type="text" name="sender_division" value="{{ old('sender_division', Auth::user()?->department ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <input type="text" name="sender_division" value="{{ old('sender_division', $defaultSenderDepartment ?? Auth::user()?->department ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-                        <input type="email" name="sender_email" value="{{ old('sender_email', Auth::user()?->email) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <input type="email" name="sender_email" value="{{ old('sender_email', $defaultSenderEmail ?? Auth::user()?->email) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">No. Telepon</label>

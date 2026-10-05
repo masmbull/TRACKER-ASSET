@@ -70,7 +70,7 @@ class DocumentController extends Controller
     {
         $this->authorize('generateDocument', $asset);
 
-        $asset->load(['category', 'status', 'company', 'location', 'currentUser']);
+        $asset->load(['category', 'status', 'company', 'location', 'currentUser', 'adminItPic']);
 
         $types = (array) config('documents.types', []);
 
@@ -86,6 +86,15 @@ class DocumentController extends Controller
         return view('documents.generate', [
             'asset' => $asset,
             'transfers' => $asset->transfers()->with(['fromUser', 'toUser'])->orderByDesc('id')->get(),
+            // Who the asset went to first and who holds it now, so the form can
+            // name both parties instead of asking somebody to retype them.
+            //
+            // This is the difference between generating a transfer form and
+            // copy-pasting one: the register already knows that laptop A moved
+            // from person A to person B, and every field on the document was
+            // being typed again by hand every time one was needed.
+            'firstHolder' => $asset->firstHolder(),
+            'currentHolder' => $asset->currentHolder(),
             'types' => $types,
             'selectedType' => $selected,
             // Only this type's checklist. A TRANSFER has none, and rendering the
