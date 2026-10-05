@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 /**
@@ -39,7 +40,43 @@ class AgentCommandApiController extends Controller
     {
         $tokenId = (int) $request->attributes->get('agent_token_id');
 
-        $commands = AgentCommand::query()
+        $commands = $this->pendingCommands($tokenId);
+
+        // Optional long-poll: the agent asks to be parked here instead of asking
+        // every ten seconds, and this waits for the first command to appear.
+        //
+        // Opt-in through a query parameter rather than the default, because it
+        // costs a php-fpm worker for as long as it waits. An agent fleet that has
+        // not been counted yet would otherwise park a worker per laptop on a pool
+        // that used to hold five, and the site would go down instead of quiet.
+        // Without ?wait= this returns exactly as before.
+        $wait = (int) $request->integer('wait', 0);
+
+        if ($commands->isEmpty() && $wait > 0) {
+            $deadline = microtime(true) + min($wait, 60);
+
+            do {
+                sleep(1);
+
+                $commands = $this->pendingCommands($tokenId);
+            } while ($commands->isEmpty() && microtime(true) < $deadline);
+        }
+
+        return response()->json(['commands' => $commands]);
+    }
+
+    /**
+     * Commands this device may run right now, including ones it stalled on.
+     *
+     * Split out of inbox() so the long-poll loop re-asks the identical question
+     * rather than a second, subtly different copy of it - a variant that missed
+     * the stall-recovery clause would hand the same dead command out forever.
+     *
+     * @return Collection<int, AgentCommand>
+     */
+    private function pendingCommands(int $tokenId)
+    {
+        return AgentCommand::query()
             // A row the agent picked up and then died on would otherwise be lost
             // forever: it is no longer 'pending', so this query would never hand
             // it out again, and nothing else resets it. A command that has been
@@ -75,8 +112,6 @@ class AgentCommandApiController extends Controller
             })
             ->limit(10)
             ->get(['id', 'command', 'payload']);
-
-        return response()->json(['commands' => $commands]);
     }
 
     /**

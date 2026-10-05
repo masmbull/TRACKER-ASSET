@@ -592,6 +592,26 @@ class AgentFleetController extends Controller
     }
 
     /**
+     * Update one laptop, from the browser.
+     *
+     * Update All was the only way to move a single machine onto a new build,
+     * which meant pushing a change to every device in the office to fix the one
+     * in front of you. This is the same enqueue with a target, and it travels the
+     * same inbox as every other command - the agent has no second path for
+     * being told what to do.
+     *
+     * No version check here on purpose: the fleet page already marks which
+     * devices are behind, and refusing a manual update because the operator
+     * disagrees with the badge would be worse than the badge being wrong.
+     */
+    public function updateOne(AgentApiToken $token)
+    {
+        $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
+
+        return back()->with('success', "Update queued for {$token->name} — it re-pulls the latest binary and restarts.");
+    }
+
+    /**
      * Remove the agent from one machine, from the browser.
      *
      * The server has no access to the user's disk, so this queues an

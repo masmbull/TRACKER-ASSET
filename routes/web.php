@@ -116,6 +116,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/scan/{token}', [AgentFleetController::class, 'scanNow'])->name('agent.scan');
         Route::post('/agent/scan-all', [AgentFleetController::class, 'scanAll'])->name('agent.scanAll');
         Route::post('/agent/update-all', [AgentFleetController::class, 'updateAll'])->name('agent.updateAll');
+        Route::post('/agent/{token}/update', [AgentFleetController::class, 'updateOne'])->name('agent.updateOne');
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
     });

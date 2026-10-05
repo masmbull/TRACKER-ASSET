@@ -207,4 +207,25 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 
 EXPOSE 9000
 
+# php-fpm pool size, raised from the default of 5 workers.
+#
+# The default is fine for a site people visit. It is not fine for a fleet: an
+# agent that holds its inbox request open while it waits for a command occupies
+# a worker for as long as it waits, and 5 is the whole pool. Six laptops online
+# would therefore not slow the dashboard down, they would take the site
+# offline - every page would queue behind the agents and nothing would answer.
+#
+# 40 leaves room for the workers actually serving pages while the fleet is
+# connected. Raised here rather than in an entrypoint so the value is part of the
+# image: an operator tuning a www.conf by hand on the server would be lost the
+# next rebuild, and nothing would say why.
+RUN printf '[www]\n\
+pm = dynamic\n\
+pm.max_children = 40\n\
+pm.start_servers = 4\n\
+pm.min_spare_servers = 4\n\
+pm.max_spare_servers = 8\n\
+pm.max_requests = 500\n' \
+    > /usr/local/etc/php-fpm.d/zz-tracker-pool.conf
+
 CMD ["php-fpm"]

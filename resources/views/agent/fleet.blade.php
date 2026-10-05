@@ -200,6 +200,18 @@
                                         @csrf
                                         <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Scan</button>
                                     </form>
+                                    {{-- Per-device update. Until this existed, moving one
+                                         laptop onto a new build meant Update All, which
+                                         restarts every agent in the office to fix the
+                                         machine in front of you. Shown only when the
+                                         device is actually behind: offering it on a
+                                         current device invites a pointless restart. --}}
+                                    @if($device->isOutdated() === true)
+                                        <form method="POST" action="{{ route('agent.updateOne', $device) }}">
+                                            @csrf
+                                            <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700">Update</button>
+                                        </form>
+                                    @endif
                                 @endif
 
                                 {{-- Removing an agent deletes files on someone else's
