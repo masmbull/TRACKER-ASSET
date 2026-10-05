@@ -11,6 +11,7 @@ use App\Models\Location;
 use App\Models\User;
 use App\Services\DocumentGenerationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -65,6 +66,7 @@ class DocumentPartySourceTest extends TestCase
         $this->itPic = User::factory()->create([
             'role' => 'admin',
             'name' => 'IT Person',
+            'employee_id' => 'EMP-IT',
             'department' => 'IT',
             'email' => 'it@mito.test',
         ]);
@@ -167,19 +169,41 @@ class DocumentPartySourceTest extends TestCase
     }
 
     /**
-     * On a return it is the employee handing it back.
+     * A RETURN names the employee as the sender and IT as the receiver.
      *
-     * This is the case that was actively wrong: the sender defaulted to the
-     * logged-in administrator, so a BAST said IT gave the laptop back.
+     * The case that was actively wrong: the sender defaulted to the
+     * logged-in administrator, so a return said IT gave the laptop back.
+     *
+     * RETURN, not BAST. BAST is "Berita Acara Serah Terima" for a *new* asset -
+     * an issue, like FAT. Reading it as a return is what the first version of
+     * this code did, and it wrote that assumption straight into a passing test,
+     * which is how a wrong rule manages to look verified.
      */
     public function test_a_return_names_the_employee_as_the_sender(): void
     {
         $this->recordHistory();
 
+        $parties = $this->parties('RETURN');
+
+        $this->assertSame('Second Party', $parties['sender']['name'], 'The holder is handing it back.');
+        $this->assertSame('Operations', $parties['sender']['division']);
+        $this->assertSame('IT Person', $parties['receiver']['name'], 'IT takes it back.');
+    }
+
+    /**
+     * A BAST is an issue, not a return - the same as FAT.
+     *
+     * Pinned because getting this backwards is the mistake that motivated the
+     * test above: on a brand new asset BAST has IT handing it to the employee.
+     */
+    public function test_a_bast_is_an_issue_not_a_return(): void
+    {
+        $this->recordHistory();
+
         $parties = $this->parties('BAST');
 
-        $this->assertSame('Second Party', $parties['sender']['name']);
-        $this->assertSame('Operations', $parties['sender']['division']);
+        $this->assertSame('IT Person', $parties['sender']['name']);
+        $this->assertSame('Second Party', $parties['receiver']['name']);
     }
 
     /**
@@ -219,15 +243,97 @@ class DocumentPartySourceTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'name' => 'The Administrator']);
 
         $response = $this->actingAs($admin)
-            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']));
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'RETURN']));
 
         $response->assertOk();
 
-        // Second Party is handing it back; the form is for a BAST.
+        // Second Party is handing it back, so the form is a RETURN. A BAST here
+        // would correctly show the IT PIC instead - they are different documents.
         $response->assertSee('name="signatory_menyerahkan" value="Second Party"', false);
 
         // And critically: not the administrator who is logged in and running it.
         $response->assertDontSee('name="signatory_menyerahkan" value="The Administrator"', false);
+    }
+
+    /**
+     * The employee number follows the person, so nobody retypes it off a payroll sheet.
+     *
+     * The form asked for "NIK / ID Karyawan" on every document for as long as it has
+     * existed and could never fill itself in: it defaulted from
+     * Auth::user()?->employee_id, and there has never been an employee_id column.
+     * So this box was empty every single time, which is the whole reason the document
+     * forms were being filled by hand.
+     */
+    public function test_the_employee_number_comes_from_the_register(): void
+    {
+        $this->first->update(['employee_id' => 'EMP-001']);
+        $this->second->update(['employee_id' => 'EMP-002']);
+
+        $this->recordHistory();
+
+        // A RETURN: the holder hands the laptop back, IT receives it.
+        $parties = $this->parties('RETURN');
+
+        $this->assertSame('EMP-002', $parties['sender']['employee_id']);
+        $this->assertSame('EMP-IT', $parties['receiver']['employee_id']);
+
+        // A fresh issue: IT hands it over, and the number has to follow IT.
+        $fresh = $this->parties('FAT');
+        $this->assertSame('EMP-IT', $fresh['sender']['employee_id']);
+    }
+
+    /**
+     * A typed value still wins, and a person with no number leaves it blank.
+     *
+     * Blank rather than borrowed: putting one person's employee number on another
+     * person's signature block is worse than an empty box.
+     */
+    public function test_a_typed_employee_number_wins_and_a_missing_one_stays_blank(): void
+    {
+        $this->first->update(['employee_id' => 'EMP-001']);
+
+        $payload = app(DocumentGenerationService::class)->buildPayload(
+            $this->asset->fresh(),
+            'BAST',
+            ['sender_employee_id' => 'TYPED-BY-HAND'],
+            null
+        );
+
+        $this->assertSame('TYPED-BY-HAND', $payload['parties']['sender']['employee_id']);
+
+        // Nobody has a number on this asset: no fallback may invent one.
+        User::query()->update(['employee_id' => null]);
+
+        $blank = app(DocumentGenerationService::class)->buildPayload(
+            $this->asset->fresh(),
+            'FAT',
+            [],
+            null
+        );
+
+        $this->assertNull($blank['parties']['sender']['employee_id']);
+        $this->assertNull($blank['parties']['receiver']['employee_id']);
+    }
+
+    /**
+     * The column has to actually exist, or the whole feature is decoration again.
+     *
+     * Asserting against the schema rather than against a model attribute, because a
+     * missing column in Eloquent reads as null - the same as a column that exists and
+     * is empty. Only the schema can tell those apart, which is exactly the confusion
+     * that let the original broken default through.
+     */
+    public function test_the_users_table_really_has_an_employee_id_column(): void
+    {
+        $this->assertTrue(
+            Schema::hasColumn('users', 'employee_id'),
+            'users.employee_id must exist - the document forms read it.'
+        );
+
+        // And it has to be fillable, or saving one silently drops it.
+        $user = User::factory()->create(['role' => 'support', 'employee_id' => 'EMP-999']);
+
+        $this->assertSame('EMP-999', $user->fresh()->employee_id);
     }
 
     public function test_the_form_still_renders_for_an_asset_with_no_history(): void

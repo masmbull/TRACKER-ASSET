@@ -83,6 +83,12 @@ class DocumentController extends Controller
             $selected = 'FAT';
         }
 
+        // One definition of who is signing, shared with the PDF. The view used to
+        // re-derive this itself and the two disagreed the first time the rule
+        // changed - which is how a BAST once arrived pre-filled with the IT PIC
+        // while the service said somebody else was signing it.
+        $parties = app(DocumentGenerationService::class)->partiesFor($asset, $selected, null);
+
         return view('documents.generate', [
             'asset' => $asset,
             'transfers' => $asset->transfers()->with(['fromUser', 'toUser'])->orderByDesc('id')->get(),
@@ -93,8 +99,10 @@ class DocumentController extends Controller
             // copy-pasting one: the register already knows that laptop A moved
             // from person A to person B, and every field on the document was
             // being typed again by hand every time one was needed.
-            'firstHolder' => $asset->firstHolder(),
-            'currentHolder' => $asset->currentHolder(),
+            'senderUser' => $parties['sender'],
+            'senderName' => $parties['sender']?->name ?? Auth::user()?->name,
+            'senderDepartment' => $parties['sender']?->department,
+            'senderEmail' => $parties['sender']?->email,
             'types' => $types,
             'selectedType' => $selected,
             // Only this type's checklist. A TRANSFER has none, and rendering the
