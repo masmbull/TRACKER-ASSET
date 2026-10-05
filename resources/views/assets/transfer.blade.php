@@ -31,15 +31,22 @@
     <form method="POST" action="/assets/{{ $asset->id }}/transfer" class="space-y-6">
         @csrf
 
+        {{-- submitTransfer validates four required fields. The browser catches an
+             empty box, but not a date the user typed wrong, and it certainly does
+             not explain which of four selects was rejected. The layout banner says
+             what is wrong; these say where, so nobody has to match "The to user
+             field is required" against four identical-looking dropdowns. --}}
         <x-card title="Transfer Details">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Transfer Date *</label>
-                    <input type="date" name="transfer_date" required value="{{ old('transfer_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <input type="date" name="transfer_date" required value="{{ old('transfer_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('transfer_date') border-error-400 @enderror">
+                    @error('transfer_date') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Condition</label>
                     <input type="text" name="condition" value="{{ old('condition') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="e.g. Good, Fair, Damaged">
+                    @error('condition') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
             </div>
         </x-card>
@@ -48,7 +55,7 @@
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">From Location *</label>
-                    <select name="from_location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <select name="from_location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('from_location_id') border-error-400 @enderror">
                         <option value="">Select location</option>
                         @foreach($locations as $location)
                             {{-- Defaults to where the asset actually is. Its two
@@ -58,24 +65,27 @@
                             <option value="{{ $location->id }}" {{ old('from_location_id', $asset->location_id) == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                         @endforeach
                     </select>
+                    @error('from_location_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">To Location *</label>
-                    <select name="to_location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <select name="to_location_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('to_location_id') border-error-400 @enderror">
                         <option value="">Select location</option>
                         @foreach($locations as $location)
                             <option value="{{ $location->id }}" {{ old('to_location_id') == $location->id ? 'selected' : '' }}>{{ $location->name }}</option>
                         @endforeach
                     </select>
+                    @error('to_location_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">To User *</label>
-                    <select name="to_user_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <select name="to_user_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 @error('to_user_id') border-error-400 @enderror">
                         <option value="">Select user</option>
                         @foreach($users as $user)
                             <option value="{{ $user->id }}" {{ old('to_user_id') == $user->id ? 'selected' : '' }}>{{ $user->name }} ({{ $user->email }})</option>
                         @endforeach
                     </select>
+                    @error('to_user_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">To Department</label>

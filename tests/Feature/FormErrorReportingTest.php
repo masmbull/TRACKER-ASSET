@@ -206,4 +206,123 @@ class FormErrorReportingTest extends TestCase
             'the asset_id input should be highlighted when the value is taken'
         );
     }
+
+    /**
+     * The transfer form marks all four fields submitTransfer requires.
+     *
+     * Four selects on one page, three of them looking alike, and a banner that
+     * only says which field name failed. "The to user field is required" tells
+     * a person nothing about which of To Location and To User was left blank.
+     */
+    public function test_a_rejected_transfer_marks_the_field_that_failed(): void
+    {
+        $asset = Asset::factory()->create(['location_id' => $this->jakarta->id]);
+        $target = User::factory()->create(['role' => 'viewer']);
+
+        $html = $this->followingRedirects()
+            ->actingAs($this->support)
+            ->from(route('assets.transfer', $asset))
+            ->post(route('assets.transfer.submit', $asset), [
+                'transfer_date' => now()->toDateString(),
+                'from_location_id' => $this->bandung->id,
+                'to_user_id' => $target->id,
+                // to_location_id omitted -> rejected
+            ])
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/name="to_location_id"[^>]*border-error-400/',
+            $html,
+            'the empty destination location should be the one highlighted'
+        );
+
+        // And its siblings stay unmarked: a red border on To User would point
+        // the reader at the field that was filled in correctly.
+        $this->assertDoesNotMatchRegularExpression(
+            '/name="to_user_id"[^>]*border-error-400/',
+            $html,
+            'only the field that actually failed should be highlighted'
+        );
+    }
+
+    /**
+     * The JSON field on the template form, and the message the controller went
+     * out of its way to write.
+     *
+     * TemplateController::jsonComplaint names the offending character, which is
+     * the single most useful sentence this form can produce - and it was being
+     * aimed at the layout banner while the one textarea it refers to showed no
+     * error of its own. A user pasting a template schema and getting a stray
+     * comma had no way to find out which one.
+     */
+    public function test_a_rejected_template_points_at_the_json_field(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $response = $this->followingRedirects()
+            ->actingAs($support)
+            ->from(route('templates.create'))
+            ->post(route('templates.store'), [
+                'name' => 'FAT Copy',
+                'document_type' => 'FAT',
+                'template_content' => '{"asset_id": {"label": "Asset ID",},}', // trailing comma
+            ])
+            ->assertOk();
+
+        $this->assertMatchesRegularExpression(
+            '/name="template_content"[^>]*border-error-400/',
+            $response->getContent(),
+            'the JSON textarea should be highlighted when its content will not parse'
+        );
+
+        // The typed JSON must still be there - the point of hand-writing a
+        // schema is that it is worth keeping while the comma is fixed.
+        // Escaped, because Blade's {{ }} turns every quote into &quot; before
+        // it reaches the HTML; searching for a raw " would find nothing.
+        $response->assertSee('&quot;asset_id&quot;', false)
+            ->assertSee('&quot;Asset ID&quot;', false);
+    }
+
+    /**
+     * The browser-collected audit dropped what the user typed.
+     *
+     * manual_serial, manual_hostname and manual_mac read no old() while the
+     * Notes textarea below them did, so a rejected submit cleared three fields
+     * and kept the fourth - a form that looked partly filled, with no way to
+     * tell which half was real. All three are capped at 255 server-side, so a
+     * long value pasted off a label really can be rejected.
+     */
+    public function test_a_rejected_device_audit_keeps_the_values_typed_from_the_label(): void
+    {
+        $asset = Asset::factory()->create();
+        $technician = User::factory()->create(['role' => 'technician']);
+
+        $longSerial = str_repeat('A', 256); // one character past the max:255 rule
+
+        $html = $this->followingRedirects()
+            ->actingAs($technician)
+            ->from(route('assets.audit.device', $asset))
+            ->post(route('assets.audit.device.submit', $asset), [
+                'manual_serial' => $longSerial,
+                'manual_hostname' => 'MITO-LAPTOP-14',
+                'manual_mac' => 'AA:BB:CC:DD:EE:FF',
+                'notes' => 'Taken from the label under the battery.',
+            ])
+            ->assertOk()
+            ->getContent();
+
+        // The serial is what failed, so it is the one marked...
+        $this->assertMatchesRegularExpression(
+            '/name="manual_serial"[^>]*border-red-400/',
+            $html,
+            'the over-length serial should be highlighted'
+        );
+
+        // ...and the fields that were fine keep their contents, so the user
+        // only has to shorten one box rather than retype the form.
+        $this->assertStringContainsString('MITO-LAPTOP-14', $html);
+        $this->assertStringContainsString('AA:BB:CC:DD:EE:FF', $html);
+        $this->assertStringContainsString('Taken from the label under the battery.', $html);
+    }
 }
