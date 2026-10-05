@@ -33,7 +33,7 @@ public static class Api
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Authenticate(req, token);
 
         using var resp = Http.Send(req);
         var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -62,7 +62,7 @@ public static class Api
                 Content = new StringContent(
                     JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Authenticate(req, token);
 
             using var resp = Http.Send(req);
 
@@ -121,7 +121,7 @@ public static class Api
                 Content = new StringContent(
                     JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
             };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Authenticate(req, token);
 
             using var resp = Http.Send(req);
 
@@ -143,8 +143,52 @@ public static class Api
         }
     }
 
-    /// <summary>One entry of the installed-software list, as the server sees it.</summary>
-    private sealed record SoftwareEntry(string? Name, string? Version, string? Publisher, string? InstalledAt);
+    /// <summary>Version string of the running binary, or null when it cannot be read.</summary>
+/// <remarks>
+/// Sent as X-Agent-Version on every call, so the server always knows which build
+/// is on a given laptop. Without it every device reads "unknown" forever, which
+/// is indistinguishable from a fleet of agents that never reported - an
+/// operator cannot tell a stale build from a silent one.
+///
+/// The full identity (version + git hash) goes in the header. The server reads
+/// the numeric part, which is what decides whether an update is needed.
+/// </remarks>
+internal static string? CurrentBuildIdentity()
+{
+    try
+    {
+        var location = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+
+        return string.IsNullOrWhiteSpace(location) ? null : InstallCheck.ReadBuildIdentity(location);
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+/// <summary>Attach the bearer token and this build's identity to a request.</summary>
+/// <remarks>
+/// Every authenticated call goes through here, so the version cannot be
+/// forgotten on whichever endpoint happened to report first. The server stores it
+/// whenever the header is present and leaves the recorded version alone when it
+/// is not, so an agent built before this still works - it just keeps reading
+/// "unknown" until it is updated, which is the honest thing to show.
+/// </remarks>
+private static void Authenticate(HttpRequestMessage req, string token)
+{
+    Authenticate(req, token);
+
+    var identity = CurrentBuildIdentity();
+
+    if (!string.IsNullOrWhiteSpace(identity))
+    {
+        req.Headers.TryAddWithoutValidation("X-Agent-Version", identity);
+    }
+}
+
+/// <summary>One entry of the installed-software list, as the server sees it.</summary>
+private sealed record SoftwareEntry(string? Name, string? Version, string? Publisher, string? InstalledAt);
 
     public static List<JsonElement>? GetInbox(string url, string token) =>
         GetInbox(url, token, out _);
@@ -159,7 +203,7 @@ public static class Api
         unauthorized = false;
 
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{url}/api/agent/inbox");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Authenticate(req, token);
 
         using var resp = Http.Send(req);
         var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -198,6 +242,20 @@ public static class Api
         try
         {
             var payload = new Dictionary<string, string> { ["device_id"] = deviceId };
+
+            // The server replaces device_id with a readable number (MITO-0001) and
+            // matches on hardware_id instead. An agent built before that still
+            // works - the server falls back to matching device_id - but sending it
+            // means this build is identified by an id it chose itself rather than
+            // by the number it was handed back.
+            payload["hardware_id"] = deviceId;
+
+            var identity = CurrentBuildIdentity();
+
+            if (!string.IsNullOrWhiteSpace(identity))
+            {
+                payload["agent_version"] = identity;
+            }
 
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -254,7 +312,7 @@ public static class Api
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/agent/commands/{commandId}/ack");
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Authenticate(req, token);
             req.Content = new StringContent(
                 JsonSerializer.Serialize(new { status, result }),
                 Encoding.UTF8, "application/json");
@@ -295,7 +353,7 @@ public static class Api
                 Content = new StringContent(
                     JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
             };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Authenticate(req, token);
 
             using var resp = Http.Send(req);
 
@@ -343,7 +401,7 @@ public static class Api
                 Content = new StringContent(
                     JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json")
             };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Authenticate(req, token);
 
             using var resp = Http.Send(req);
 
