@@ -33,6 +33,28 @@ public static class AgentRunner
 
     private const int HeartbeatSeconds = 60;
 
+    /// <summary>
+    /// How long the inbox request is parked waiting for a command.
+    /// </summary>
+    /// <remarks>
+    /// The agent used to ask for commands every 10 seconds and sleep between
+    /// tries, which cost every laptop in the office six requests a minute to be
+    /// told "nothing to do". Parking the request instead makes an idle machine
+    /// genuinely idle - no bytes, no wakeups - while a click in the browser still
+    /// arrives immediately, because the server returns the moment a command is
+    /// queued rather than at the end of an interval.
+    ///
+    /// 55 rather than 60: the server clamps its own wait to 60 s, so a client
+    /// asking for exactly that would race its own timeout, and the failure mode
+    /// of losing that race is an exception every minute on every laptop. Staying
+    /// under the cap means the server always returns first, cleanly.
+    ///
+    /// The cost is one php-fpm worker per parked agent, which is why pm.max_children
+    /// was raised from its default of 5 in the Dockerfile. At the default, six
+    /// laptops online would have taken every worker and taken the site down.
+    /// </remarks>
+    private const int LongPollSeconds = 55;
+
     [DllImport("kernel32.dll")]
     static extern bool AttachConsole(int pid);
 
@@ -395,13 +417,14 @@ public static class AgentRunner
     }
 
     /// <summary>
-    /// Resident mode: registers the exe for autostart (HKCU Run), then polls
-    /// GET /api/agent/inbox every N seconds, executing pending commands and acking them.
+    /// Resident mode: registers the exe for autostart (HKCU Run), then parks on
+    /// GET /api/agent/inbox waiting for a command, executing and acking whatever
+    /// arrives.
     /// </summary>
     static int RunDaemon(string url, string token, string? assetId, int pollSeconds)
     {
         RegisterAutostart(url, token, assetId, pollSeconds);
-        Console.WriteLine($"[OK] Daemon started - polling {url} every {pollSeconds}s.");
+        Console.WriteLine($"[OK] Daemon started - waiting on {url} for commands.");
 
         // Telemetry heartbeat. The inbox only carries commands, so a device that
         // nobody ever clicks "Scan Now" on would keep the same snapshot forever
@@ -417,13 +440,48 @@ public static class AgentRunner
         // the fleet page showing "never fingerprinted" for a day.
         var nextFingerprint = DateTimeOffset.MinValue;
 
-        while (true)
-        {
-            try
+        // Declared outside the try: the retry sleep below has to know whether the
+            // request produced anything, and a local declared inside the block
+            // would not be in scope in the catch that decides to retry.
+            List<JsonElement>? commands = null;
+
+            while (true)
             {
+                try
+                {
+                // Due work is done BEFORE parking, never after waking.
+                //
+                // This block used to sit below the sleep, which was invisible
+                // while the interval was 10 s but is wrong the moment the agent
+                // parks for a minute waiting for a command: the fleet heartbeat
+                // would then be up to a minute late on a page whose whole purpose
+                // is saying whether a laptop is alive. A machine parked on an
+                // open connection has to keep its own clock.
+                if (DateTimeOffset.UtcNow >= nextHeartbeat)
+                {
+                    SendHeartbeat(url, token, assetId);
+
+                    // Advance regardless of success. On failure the retry waits a
+                    // full interval rather than hammering an unreachable server.
+                    nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                }
+
+                if (DateTimeOffset.UtcNow >= nextFingerprint)
+                {
+                    SendFingerprint(url, token);
+
+                    nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+                }
+
                 // `token` is a local copy so a healed credential replaces it for
                 // every later poll in this process.
-                var commands = Api.GetInbox(url, token, out var unauthorized);
+                //
+                // waitSeconds parks the request instead of returning empty and
+                // sleeping. Idle traffic drops from six requests a minute to
+                // none, while a click in the browser still lands within
+                // milliseconds because the server returns the moment a command
+                // is queued rather than at the end of a fixed interval.
+                commands = Api.GetInbox(url, token, LongPollSeconds, out var unauthorized);
                 var healed = false;
 
                 if (unauthorized && !TryHealToken(url, ref token, out healed))
@@ -518,25 +576,14 @@ public static class AgentRunner
                 Console.Error.WriteLine($"[!] Poll error: {ex.Message}");
             }
 
-            Thread.Sleep(TimeSpan.FromSeconds(pollSeconds));
-
-            if (DateTimeOffset.UtcNow >= nextHeartbeat)
+            // Only reached when the inbox request failed or returned without a
+            // command. On the happy path the loop parks inside GetInbox instead
+            // and this sleep never runs - the wait is the server holding the
+            // request, not this thread burning a timer.
+            if (commands is null || commands.Count == 0)
             {
-                SendHeartbeat(url, token, assetId);
-
-                // Advance regardless of success. On failure the retry waits a
-                // full interval rather than hammering an unreachable server from
-                // inside the poll loop.
-                nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                Thread.Sleep(TimeSpan.FromSeconds(pollSeconds));
             }
-
-        if (DateTimeOffset.UtcNow >= nextFingerprint)
-        {
-            SendFingerprint(url, token);
-
-            nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
-        }
-
         }
     }
 
