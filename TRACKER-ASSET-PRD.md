@@ -518,20 +518,36 @@ The resident audit agent is implemented as a lightweight .NET 8 WPF application:
 
 ```text
 agent/TrackerAgent/
-├── TrackerAgent.csproj   # .NET 8 Windows x64 single-file executable
-├── HardwareCollector.cs   # WMI/CIM hardware inspection (CPU, RAM, Disks, MAC, OS, Serial)
-├── Api.cs                # HTTP client for check-in, heartbeat, scan upload, token auth
-├── AutoUpdater.cs        # In-place auto-updater with SHA256 integrity verification
-├── App.xaml / App.xaml.cs # Background daemon, system tray icon, and polling loop
-└── build.bat             # Production compilation script
+├── TrackerAgent.csproj         # .NET 8 Windows x64 single-file executable
+├── App.xaml / App.xaml.cs      # Startup routing: installer window, or headless AgentRunner in daemon mode
+├── AgentRunner.cs              # CLI entry, resident inbox daemon, command execution, autostart
+├── InstallCheck.cs             # Install-state probe: fresh install / in-place update / already installed
+├── InstallerWindow.xaml(.cs)   # First-run UI: progress, failure/retry, version notices
+├── HardwareCollector.cs        # WMI/CIM hardware inspection (CPU, RAM, Disks, MAC, OS, Serial)
+├── FingerprintCollector.cs     # Deep inventory: installed software, security posture, licensing
+├── Api.cs                      # HTTP client for check-in, heartbeat, scan upload, token auth
+├── AutoUpdater.cs              # In-place auto-updater via a hidden batch runner
+├── AgentConfigTrailer.cs       # Reads the server address the download route bakes into the binary
+└── build.bat                   # Production compilation script
 ```
 
 **Auto-Update Mechanism**:
 1. Agent checks for new versions or receives a remote `update` command via fleet management.
-2. Binary is downloaded via `GET /agent/download/{token}` into a staging file (`TrackerAgent.exe.pending`).
-3. SHA256 checksum is validated if provided by the server.
-4. Auto-update helper launches a detached process that replaces `TrackerAgent.exe` once the running instance exits, then restarts the agent.
-5. The C# agent (`agent/TrackerAgent/TrackerAgent.exe`) is the only supported collector. The earlier PowerShell daemon has been retired; its serving endpoints were removed.
+2. Binary is downloaded from the URL the server sent with the command (the download
+   route) into a uniquely-named staging file beside the installed executable —
+   `_new_TrackerAgent_<guid>.exe`. Not a fixed `.pending` name: an update
+   interrupted halfway would otherwise collide with the next attempt on one
+   filename.
+3. The download is size-checked before the swap. A truncated transfer must not
+   replace a working agent with a small stub that starts and does nothing.
+4. A hidden batch runner is spawned. It waits for the running process to release
+   its own executable, moves the staged file into place, restarts the agent with the
+   original command line, and deletes itself.
+5. The command is acked `done` only after that runner has actually been spawned,
+   and `failed` — naming the build still in use — when it could not be. Acking
+   success before attempting anything makes a failed update look complete on the
+   fleet page, which is how a laptop stays on an old build with nothing saying so.
+6. The C# agent (`agent/TrackerAgent/TrackerAgent.exe`) is the only supported collector. The earlier PowerShell daemon has been retired; its serving endpoints were removed.
 
 **Telemetry Heartbeat**:
 
@@ -554,6 +570,58 @@ on a timer.
    heartbeat interval, so exactly one dropped ping is tolerated. A recent inbox
    poll also counts as proof of life, so an agent predating the heartbeat is not
    reported offline during a rollout.
+
+### Decisions Taken During Implementation
+
+Recorded because each one changes what the agent is allowed to do, and a spec
+that still describes the old behaviour is worse than no spec.
+
+**The agent never writes to the register.** A scan from a laptop whose serial is
+not on file is stored as a scan — `asset_audits.asset_id` is nullable and the row
+carries `agent_token_id`, so the device can be found again by the agent that sent
+it rather than by guessing at a serial that WMI may have failed to read. It waits
+on the Live Fleet page until somebody promotes it (`Add to register`). This
+replaced an earlier behaviour where any unregistered laptop became an asset on its
+first scan, with company, category and location taken from whichever row happened
+to be first in the table, and every unreadable column filled with the string `N/A`.
+The register is the record this product exists to keep; it does not fill itself
+with rows nobody entered, and a correct-looking `N/A` cannot be told apart from
+real data.
+
+**A mismatch is reported, never applied.** An audit that disagrees with the
+register stops at a report, because letting a machine rewrite the register would
+let a compromised laptop edit its own record. Accepting it
+(`POST /audit/{audit}/apply-scan`) is a person's decision, and it writes only the
+fields the scan actually reported, so a sensor that failed to answer cannot erase a
+correct value. On a MATCH there is nothing to apply; on INCOMPLETE the missing
+readings are not evidence of anything.
+
+**The agent is idle, not absent.** The daemon holds one request open on
+`GET /api/agent/inbox?wait=55` instead of asking every ten seconds, so an idle
+laptop generates no traffic while a click in the browser still lands immediately —
+the server returns when a command is queued, not at the end of an interval. The
+cost is one php-fpm worker per parked agent, which is why `pm.max_children` is
+raised from its default of 5 in the Dockerfile; at the default, six laptops online
+would have taken every worker and taken the site down.
+
+**Nothing appears on the user's screen.** The installer runs once and then gets out
+of the way: scans, telemetry and updates happen in the resident daemon, and a
+self-update is spawned by a hidden batch runner. This supersedes item 5 of the list
+above ("display result") — the result is *reported*, and the person who acts on it
+works in the browser, not in a dialog on somebody's laptop.
+
+**Bulk update skips what is already current.** "Update All" broadcasts, and each
+agent ignores it when it is already on the release, so a company-wide click does
+not restart machines that already carry the build being pushed. A *targeted* update
+is always delivered: an operator who clicked Update on one machine meant that
+machine.
+
+**Version is a fact, not a claim.** `agent_releases` keeps the release history and
+`agent_api_tokens.agent_version` records what each laptop is running, sent as the
+`X-Agent-Version` header on every agent request. Versions are compared numerically,
+never as strings: `1.10.0` sorts below `1.9.0` alphabetically, and a fleet
+silently stuck on an older build is exactly the failure that table exists to make
+visible. `php artisan agent:release <version> "<notes>"` records a build.
 
 ### Fleet Deployment Constraints (standard users, no UAC)
 
