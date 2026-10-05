@@ -103,16 +103,13 @@
                      the assignment history: the person giving it back, or the IT
                      PIC for a brand new laptop where nobody is returning one. --}}
                 @php
-                    // Mirrors isReturn() in DocumentGenerationService: a BAST or a
-                    // saved transfer means somebody is handing the laptop back, so
-                    // the sender is that person. A brand new FAT is IT handing it
-                    // over. Kept as the same condition rather than a third
-                    // interpretation, or the form and the PDF disagree.
-                    $defaultSenderName = $selectedType === 'BAST' || $transfers->isNotEmpty() || $currentHolder
-                        ? $currentHolder?->user?->name ?? $firstHolder?->user?->name
-                        : $asset->adminItPic?->name ?? $asset->currentUser?->name;
-                    $defaultSenderDepartment = $currentHolder?->user?->department ?? $asset->adminItPic?->department;
-                    $defaultSenderEmail = $currentHolder?->user?->email ?? $asset->adminItPic?->email;
+                    // The sender is resolved in the controller, by the same method
+                    // that fills the PDF. Everything here reads from that one
+                    // answer - re-deriving it in the template is what let the form
+                    // and the document disagree about who was signing.
+                    $defaultSenderName = $senderName;
+                    $defaultSenderDepartment = $senderDepartment;
+                    $defaultSenderEmail = $senderEmail;
                 @endphp
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -121,14 +118,12 @@
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">NIK / ID Karyawan</label>
-                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                            {{-- Deliberately not prefilled. This used to default to
-                                 Auth::user()?->employee_id, and users has no
-                                 employee_id column at all - so the field was always
-                                 empty and the expression was decoration. The
-                                 register genuinely has nowhere to read an employee
-                                 number from yet; typing it stays correct until it
-                                 does. --}}
+                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id', $senderUser?->employee_id ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                            {{-- Prefills from whichever person the sender turned out to be.
+                                 Before users had an employee_id column this defaulted from
+                                 Auth::user()?->employee_id, which was always empty - the
+                                 expression was decoration, and the box was retyped off a
+                                 payroll sheet on every document. --}}
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas Penyerah *</label>

@@ -111,7 +111,7 @@ class DocumentGenerationService
             'company' => $asset->company?->name,
             'location' => $asset->location?->name,
             'current_user' => $asset->currentUser?->name,
-            'parties' => $this->partiesFor($asset, $input, $transfer, $type),
+            'parties' => $this->partiesForPayload($asset, $input, $transfer, $type),
             'transfer' => $transfer ? [
                 'number' => $transfer->transfer_number,
                 'date' => $transfer->transfer_date?->format('Y-m-d'),
@@ -154,52 +154,80 @@ class DocumentGenerationService
      * the sender is normally the asset's own company and the receiver its current
      * holder. An explicit choice from the form always wins.
      */
-    private function partiesFor(Asset $asset, array $input, ?AssetTransfer $transfer, string $type): array
+    /**
+     * Who hands this document over, and who takes it.
+     *
+     * Public, and used by the generate form as well as by buildPayload, because the
+     * form and the PDF must not each decide this separately. They did once: the view
+     * re-implemented the same condition, and when the condition turned out to be
+     * wrong, the form and the generated document disagreed about who was signing.
+     *
+     * The three shapes, from config('documents.types'):
+     *
+     *   issue    - FAT, BAST, ASSIGNMENT. IT hands a laptop to an employee. Nobody
+     *              is giving anything back, so the sender is the IT PIC.
+     *   return   - RETURN. The employee hands it back and IT receives it.
+     *   transfer - TRANSFER, or any document raised from a saved transfer. It moves
+     *              between two named people, and the transfer already knows who.
+     *
+     * @return array{sender: ?User, receiver: ?User}
+     */
+    public function partiesFor(Asset $asset, string $type, ?AssetTransfer $transfer = null): array
     {
+        $itPic = $asset->adminItPic;
+
+        // Read from the assignment history, not from assets.current_user_id. The two
+        // can disagree when a laptop has moved and nobody updated the denormalised
+        // column, and the history is the record the document is a record of.
         $first = $asset->firstHolder();
         $current = $asset->currentHolder();
 
-        // A transfer names its own parties: the laptop is moving from one person
-        // to another, so the first party is whoever is giving it back and the
-        // second is whoever is taking it. Read from the transfer, then from the
-        // history, and only then from the register - so the common case (a
-        // laptop that has moved once) needs no typing at all.
-        $fromUser = $transfer?->fromUser ?? $current?->user ?? $first?->user;
-        $toUser = $transfer?->toUser ?? $asset->currentUser ?? $first?->user;
+        if ($transfer !== null) {
+            return [
+                'sender' => $transfer->fromUser ?? $current?->user ?? $first?->user,
+                'receiver' => $transfer->toUser ?? $asset->currentUser ?? $first?->user,
+            ];
+        }
 
-        // The IT PIC is who hands a new laptop over, and on a return it is also
-        // who receives it - which is why the same person appears on both sides of
-        // a BAST and on opposite sides of a transfer.
-        $itPic = $asset->adminItPic;
+        if ($type === 'RETURN') {
+            return [
+                'sender' => $current?->user ?? $first?->user,
+                'receiver' => $itPic,
+            ];
+        }
 
-        // Is anybody handing something back?
-        //
-        // Keyed on the document type, not on the absence of a transfer record: a
-        // BAST is a return by definition, and generating one with no transfer
-        // saved - which is the common case for "this laptop is going back to IT" -
-        // used to name the IT PIC as the sender, i.e. IT handing a laptop back to
-        // itself on a document two people have to sign.
-        $isReturn = $transfer !== null || $type === 'BAST';
+        return [
+            'sender' => $itPic,
+            'receiver' => $asset->currentUser ?? $first?->user,
+        ];
+    }
+
+    private function partiesForPayload(Asset $asset, array $input, ?AssetTransfer $transfer, string $type): array
+    {
+        ['sender' => $senderUser, 'receiver' => $receiverUser] = $this->partiesFor($asset, $type, $transfer);
+
+        // The transfer's own wording wins where it has one: to_department is the
+        // destination's department as it was written at the time, which beats
+        // whatever the user's profile says today.
+        $division = $transfer?->to_department ?? $receiverUser?->department;
 
         return [
             'sender' => [
-                // The form has no separate "name" field for the parties: the
-                // people are named in the signature block, and a second name box
-                // would be a second thing to keep in step with it.
-                //
-                // For a fresh issue nobody is handing a laptop back, so the
-                // sender is IT. For a transfer it is the person giving it back.
-                'name' => $input['signatory_menyerahkan']
-                    ?? ($isReturn ? $fromUser?->name : $itPic?->name),
-                'employee_id' => $input['sender_employee_id'] ?? null,
+                // The form has no separate "name" field for the parties: the people
+                // are named in the signature block, and a second name box would be a
+                // second thing to keep in step with it. An explicit choice from the
+                // form always wins over the derived value, because the document is
+                // signed by people and a proxy has to be able to say so.
+                'name' => $input['signatory_menyerahkan'] ?? $senderUser?->name,
+                'employee_id' => $input['sender_employee_id'] ?? $senderUser?->employee_id,
                 'entity' => $input['sender_entity'] ?? $asset->company?->name,
-                'division' => $input['sender_division'] ?? ($isReturn ? $fromUser?->department : $itPic?->department),
-                'email' => $input['sender_email'] ?? ($isReturn ? $fromUser?->email : $itPic?->email),
+                'division' => $input['sender_division'] ?? $senderUser?->department,
+                'email' => $input['sender_email'] ?? $senderUser?->email,
                 'phone' => $input['sender_phone'] ?? null,
             ],
             'receiver' => [
-                'name' => $input['signatory_menerima'] ?? $toUser?->name,
-                'employee_id' => $input['receiver_employee_id'] ?? null,
+                'name' => $input['signatory_menerima'] ?? $receiverUser?->name,
+                'employee_id' => $input['receiver_employee_id'] ?? $receiverUser?->employee_id,
                 // The register knows a location but not a legal entity, so only a
                 // transfer can supply one; otherwise the asset's own company is a
                 // better guess than a blank on a signed document. Location is a
@@ -207,8 +235,8 @@ class DocumentGenerationService
                 // into one string.
                 'entity' => $input['receiver_entity'] ?? $transfer?->toLocation?->name ?? $asset->company?->name,
                 'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
-                'division' => $input['receiver_division'] ?? $transfer?->to_department ?? $toUser?->department,
-                'email' => $input['receiver_email'] ?? $toUser?->email,
+                'division' => $input['receiver_division'] ?? $division,
+                'email' => $input['receiver_email'] ?? $receiverUser?->email,
                 'phone' => $input['receiver_phone'] ?? null,
             ],
         ];
