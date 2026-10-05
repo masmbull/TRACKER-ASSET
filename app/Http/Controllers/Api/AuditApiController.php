@@ -8,13 +8,8 @@ use App\Models\AgentApiToken;
 use App\Models\AgentTelemetry;
 use App\Models\Asset;
 use App\Models\AssetAudit;
-use App\Models\AssetCategory;
-use App\Models\AssetStatus;
-use App\Models\Company;
-use App\Models\Location;
 use App\Services\AuditComparisonService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 /**
  * API for the lightweight audit agent (PRD §11 — preferred audit architecture).
@@ -207,7 +202,7 @@ class AuditApiController extends Controller
         $result = $comparison->compare($asset, $actual);
 
         $audit = AssetAudit::create([
-            'asset_id' => $asset->id,
+            'asset_id' => $asset?->id,
             'audit_date' => now(),
             'auditor_id' => null,
             ...$actual,
@@ -276,10 +271,22 @@ class AuditApiController extends Controller
             $token->touch();
         }
 
-        $asset = $this->createUnknownAsset($payload);
-
+        // No asset is created here.
+        //
+        // This used to invent one: any laptop whose serial was not on file
+        // became an Asset with guessed company, category and location, the
+        // moment it scanned. The register - the record the whole product exists
+        // to keep - filled with rows nobody entered and nothing on screen said
+        // they were guesses.
+        //
+        // So a scan from an unknown device is stored as a scan, and waits on the
+        // fleet page holding its hardware readings until somebody promotes it.
+        // The agent's answer changes accordingly: there is nothing to report as
+        // an asset id, and telling it "registered as AST-XXXX" would make a
+        // decision look like it had been made.
         $audit = AssetAudit::create([
-            'asset_id' => $asset->id,
+            'asset_id' => null,
+            'agent_token_id' => request()->attributes->get('agent_token_id'),
             'audit_date' => now(),
             'auditor_id' => null,
             'device_hostname' => $payload['hostname'] ?? null,
@@ -295,7 +302,7 @@ class AuditApiController extends Controller
             'result' => AuditComparisonService::NEW_DEVICE,
             'mismatches' => [],
             'status' => 'submitted',
-            'notes' => 'Auto-registered by audit agent ('.request()->attributes->get('agent_token_name').').',
+            'notes' => 'Waiting on the fleet page — no asset created automatically.',
         ]);
 
         ActivityLog::create([
@@ -303,21 +310,26 @@ class AuditApiController extends Controller
             'action' => 'AUDIT',
             'entity_type' => 'asset_audits',
             'entity_id' => $audit->id,
-            'entity_identifier' => $asset->asset_id,
+            // No asset id to name yet: naming the serial keeps the trail
+            // searchable from the activity log without pretending the row is a
+            // registered asset.
+            'entity_identifier' => $payload['serial_number']
+                ?? $payload['hostname']
+                ?? 'unmatched device',
             'new_value' => json_encode($payload),
             'metadata' => ['result' => AuditComparisonService::NEW_DEVICE, 'via' => 'agent-api'],
             'source' => 'Audit Agent',
         ]);
 
-        // Unknown devices land in Live Fleet too, so a fresh laptop is visible
-        // the moment the zero-config installer finishes.
-        $this->recordTelemetry($asset, $payload);
+        // Telemetry still goes in, with no asset attached. This is what keeps
+        // the laptop visible on the fleet page in the meantime, and what the
+        // promote form is prefilled from.
+        $this->recordTelemetry(null, $payload);
 
         return response()->json([
-            'asset' => $asset->asset_id,
             'result' => AuditComparisonService::NEW_DEVICE,
             'mismatches' => [],
-            'message' => "New device registered as {$asset->asset_id}. Nothing was overwritten.",
+            'message' => 'Device seen for the first time. It is on the fleet page waiting to be added to the register — nothing was overwritten.',
         ], 201);
     }
 
@@ -357,7 +369,7 @@ class AuditApiController extends Controller
      * agent token is refreshed in place so the fleet view always shows the
      * latest battery/disk/RAM/Wi-Fi reading; history stays in asset_audits.
      */
-    private function recordTelemetry(Asset $asset, array $payload): void
+    private function recordTelemetry(?Asset $asset, array $payload): void
     {
         $tokenId = request()->attributes->get('agent_token_id');
         $token = $tokenId ? AgentApiToken::find($tokenId) : null;
@@ -366,7 +378,7 @@ class AuditApiController extends Controller
         $diskTotal = $this->numericOrNull($payload['disk_total_gb'] ?? null);
 
         $attributes = [
-            'asset_id' => $asset->id,
+            'asset_id' => $asset?->id,
             'device_id' => $payload['device_id'] ?? $token?->device_id,
             'hostname' => $payload['hostname'] ?? null,
             'logged_in_user' => $payload['logged_in_user'] ?? null,
@@ -405,36 +417,6 @@ class AuditApiController extends Controller
     private function intOrNull(mixed $value): ?int
     {
         return is_numeric($value) ? (int) round((float) $value) : null;
-    }
-
-    private function createUnknownAsset(array $payload): Asset
-    {
-        $seed = $payload['serial_number'] ?: $payload['hostname'] ?: 'DEVICE';
-        $base = 'AST-'.(Str::upper(Str::slug((string) $seed, '-')) ?: 'DEVICE');
-        $candidate = $base;
-        $suffix = 1;
-
-        while (Asset::where('asset_id', $candidate)->exists()) {
-            $candidate = $base.'-'.(++$suffix);
-        }
-
-        return Asset::create([
-            'asset_id' => $candidate,
-            'company_id' => Company::firstOrFail(['id'])->id,
-            'category_id' => AssetCategory::firstOrFail(['id'])->id,
-            'brand' => $payload['brand'] ?? 'N/A',
-            'model' => $payload['model'] ?? 'N/A',
-            'serial_number' => $payload['serial_number'] ?? 'N/A',
-            'hostname' => $payload['hostname'] ?? 'N/A',
-            'processor' => $payload['processor'] ?? null,
-            'storage' => $payload['storage'] ?? null,
-            'ram' => $payload['ram'] ?? null,
-            'os_version' => $payload['os'] ?? null,
-            'mac_address' => $payload['mac_address'] ?? null,
-            'static_ip' => $payload['ip_address'] ?? null,
-            'location_id' => Location::firstOrFail(['id'])->id,
-            'asset_status_id' => AssetStatus::firstOrFail(['id'])->id,
-        ]);
     }
 
     private function resultMessage(Asset $asset, array $result): string

@@ -93,6 +93,66 @@ class AuditComparisonService
         ];
     }
 
+    /**
+     * Copy the readings from a scan onto the asset it matched.
+     *
+     * An audit reports a difference and stops there, on purpose: the agent is a
+     * reporter, and letting a machine rewrite the register would mean any
+     * compromised laptop could edit its own record. This is the deliberate
+     * second step - somebody reads the mismatch and accepts it.
+     *
+     * Only fields the scan actually reported are written. A sensor that failed
+     * to answer must not be mistaken for a machine that has no RAM: the audit
+     * carries a null there, and writing it would erase a correct value on
+     * evidence that does not exist.
+     *
+     * Returns the attribute names that changed, so the caller can say what
+     * happened instead of a bare "done".
+     *
+     * @param  list<string>  $attributes  Asset columns to consider.
+     * @return list<string>
+     */
+    public function applyToAsset(Asset $asset, array $actual, array $attributes = []): array
+    {
+        $fields = $attributes ?: array_keys(self::COMPARED_FIELDS);
+        $changed = [];
+
+        foreach ($fields as $attribute) {
+            if (! array_key_exists($attribute, self::COMPARED_FIELDS)) {
+                continue;
+            }
+
+            $incoming = $this->clean($actual[self::COMPARED_FIELDS[$attribute]] ?? null);
+            $current = $this->clean($asset->{$attribute} ?? null);
+
+            if ($incoming === null) {
+                continue;
+            }
+
+            if ($current === null) {
+                // Blank on the register, a real value from the machine: filling a
+                // hole rather than correcting an error.
+                $asset->{$attribute} = $incoming;
+                $changed[] = $attribute;
+
+                continue;
+            }
+
+            if ($this->valuesMatch($current, $incoming)) {
+                continue;
+            }
+
+            $asset->{$attribute} = $incoming;
+            $changed[] = $attribute;
+        }
+
+        if ($changed !== []) {
+            $asset->save();
+        }
+
+        return $changed;
+    }
+
     private function clean(mixed $value): ?string
     {
         if (! is_scalar($value)) {

@@ -49,6 +49,15 @@
     @elseif($stats['security_alerts'] > 0)
         <x-badge variant="warning">{{ $stats['security_alerts'] }} findings</x-badge>
     @endif
+    @if($stats['unregistered'] > 0)
+        {{-- The one number that is work waiting on a person rather than on a
+             machine. Placed here rather than in a KPI card because it is the
+             only line on this page that implies an action. --}}
+        <a href="{{ route('agent.fleet', ['unregistered' => 1]) }}"
+           class="inline-flex items-center gap-1 rounded-lg bg-warning-50 px-2 py-1 font-medium text-warning-700 hover:bg-warning-100 dark:bg-warning-500/10 dark:text-warning-300">
+            {{ $stats['unregistered'] }} not on the register
+        </a>
+    @endif
     @if($stats['pending_commands'] > 0)
         <x-badge variant="brand">{{ $stats['pending_commands'] }} queued</x-badge>
     @endif
@@ -76,6 +85,7 @@
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Battery</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disk</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Register</th>
                     <th class="py-2.5 px-3 text-right text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
             </thead>
@@ -185,6 +195,30 @@
                                 </x-badge>
                             @elseif($fp)
                                 <x-badge variant="success">clean</x-badge>
+                            @else
+                                <span class="text-theme-sm text-gray-400">—</span>
+                            @endif
+                        </td>
+                        <td class="py-3 px-3">
+                            {{-- Whether this machine is a row on the register, and if
+                                 not, the way to fix that. Until auto-creation was
+                                 removed a scan made an asset by itself, so every
+                                 device here had one and this column would be
+                                 decoration; now it is the answer to "which
+                                 laptops am I actually tracking?". --}}
+                            @if($telemetry?->asset)
+                                <a href="{{ route('assets.show', $telemetry->asset) }}"
+                                   class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                                    {{ $telemetry->asset->asset_id }}
+                                </a>
+                            @elseif($device->isUsable())
+                                <a href="{{ route('agent.promote', $device) }}"
+                                   class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700">
+                                    Add to register
+                                </a>
+                                <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ $unmatchedScans[$device->id] ?? 'No' }} scan{{ ($unmatchedScans[$device->id] ?? 0) === 1 ? '' : 's' }} waiting
+                                </span>
                             @else
                                 <span class="text-theme-sm text-gray-400">—</span>
                             @endif
@@ -329,6 +363,14 @@
                         <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
                             {{ $t->asset->asset_id }}
                         </a>
+                    @elseif($device->isUsable())
+                        {{-- Also offered in the detail modal: an operator who opened a
+                             device to look at its readings is exactly the person who
+                             then decides whether it belongs on the register. --}}
+                        <a href="{{ route('agent.promote', $device) }}"
+                           class="text-theme-sm font-medium text-warning-600 hover:text-warning-700">
+                            Add to register →
+                        </a>
                     @endif
                     @if($t?->hostname)
                         <span class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $t->hostname }}</span>
@@ -404,12 +446,52 @@
                 </dl>
 
                 @if($audit)
-                    <p class="mt-4 border-t border-gray-100 pt-3 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                        Last audit {{ $audit->result }} · {{ $audit->audit_date?->diffForHumans() }}
-                        @if($fp?->collected_at)
-                            · inventory {{ $fp->collected_at->diffForHumans() }}
+                    {{-- The agent reports a difference and stops there; it never
+                         writes to the register, because a compromised laptop
+                         could otherwise edit its own record. Accepting the scan
+                         is a person's decision, and it is the second half of
+                         "match / no match" that the fleet page was missing.
+
+                         Only offered on MISMATCH. On a MATCH there is nothing to
+                         apply, and on an INCOMPLETE scan the missing sensors are
+                         not evidence of anything. --}}
+                    <div class="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <p class="text-theme-xs text-gray-500 dark:text-gray-400">
+                            Last audit {{ $audit->result }} · {{ $audit->audit_date?->diffForHumans() }}
+                            @if($fp?->collected_at)
+                                · inventory {{ $fp->collected_at->diffForHumans() }}
+                            @endif
+                        </p>
+
+                        @if($audit->result === 'MISMATCH' && $audit->mismatches && $device->isUsable())
+                            @can('update', $audit->asset)
+                                <div class="mt-2 rounded-lg bg-warning-50 p-2.5 dark:bg-warning-500/10">
+                                    <p class="text-theme-xs font-medium text-warning-800 dark:text-warning-300">
+                                        The register disagrees with this machine
+                                    </p>
+                                    <ul class="mt-1 space-y-0.5">
+                                        @foreach($audit->mismatches as $field => $values)
+                                            <li class="text-theme-xs text-warning-700 dark:text-warning-300/90">
+                                                <span class="font-medium">{{ str_replace('_', ' ', $field) }}:</span>
+                                                {{ $values['registered'] }} → {{ $values['actual'] }}
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                    <form method="POST" action="{{ route('audit.apply-scan', $audit) }}" class="mt-2">
+                                        @csrf
+                                        <button type="submit" class="text-theme-xs font-semibold text-warning-700 hover:text-warning-800 dark:text-warning-300">
+                                            Update {{ $audit->asset->asset_id }} from this scan →
+                                        </button>
+                                    </form>
+                                </div>
+                            @else
+                                <p class="mt-2 text-theme-xs text-warning-700 dark:text-warning-300">
+                                    {{ count($audit->mismatches) }} field(s) differ.
+                                    <a href="{{ route('assets.edit', $audit->asset) }}" class="font-medium underline">Edit the asset</a> to correct it.
+                                </p>
+                            @endcan
                         @endif
-                    </p>
+                    </div>
                 @elseif($fp?->collected_at)
                     <p class="mt-4 border-t border-gray-100 pt-3 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
                         Inventory {{ $fp->collected_at->diffForHumans() }}

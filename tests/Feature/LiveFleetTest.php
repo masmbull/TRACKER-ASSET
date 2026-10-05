@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentTelemetry;
+use App\Models\Asset;
 use App\Models\AssetAudit;
 use App\Models\AssetCategory;
 use App\Models\AssetStatus;
@@ -99,14 +100,12 @@ class LiveFleetTest extends TestCase
 
         $telemetry = AgentTelemetry::firstOrFail();
 
-        // Dual ingestion: the unknown device became a Master Asset and the
-        // telemetry snapshot points at it.
-        $this->assertNotNull($telemetry->asset_id);
-        $this->assertDatabaseHas('assets', [
-            'id' => $telemetry->asset_id,
-            'hostname' => 'HOST-LIVE-01',
-            'serial_number' => 'SN-LIVE-01',
-        ]);
+        // Telemetry is stored with no asset attached, because there is no asset
+        // yet: an unknown device is not registered by scanning. It keeps the
+        // laptop visible on the fleet page, and the promote form is prefilled
+        // from the scan rather than from here.
+        $this->assertNull($telemetry->asset_id);
+        $this->assertDatabaseMissing('assets', ['serial_number' => 'SN-LIVE-01']);
 
         $this->assertSame(148.5, (float) $telemetry->disk_free_gb);
         $this->assertSame(476.9, (float) $telemetry->disk_total_gb);
@@ -122,13 +121,18 @@ class LiveFleetTest extends TestCase
             ->postJson('/api/audits', $this->telemetryPayload())
             ->assertCreated();
 
+        // Still NEW DEVICE on the second pass, because the device is still not
+        // on the register: nothing about scanning twice registers it. The 201
+        // used to be a MATCH only because the first scan had silently created an
+        // asset for the machine to match against.
         $this->withHeaders($this->agentHeaders())
             ->postJson('/api/audits', $this->telemetryPayload([
                 'battery_percent' => '17',
                 'battery_health' => '55',
                 'disk_free_gb' => '9.4',
             ]))
-            ->assertOk();
+            ->assertCreated()
+            ->assertJsonPath('result', 'NEW DEVICE');
 
         $this->assertSame(1, AgentTelemetry::count());
 
@@ -137,6 +141,95 @@ class LiveFleetTest extends TestCase
         $this->assertTrue($telemetry->hasLowBattery());
         $this->assertTrue($telemetry->hasWeakBattery());
         $this->assertTrue($telemetry->hasLowDisk());
+    }
+
+    /**
+     * The fleet page must show that a device is not on the register, and offer the
+     * way to put it there.
+     *
+     * Without this the page lists the laptop as healthy and fully detailed while the
+     * register has no row for it, and the gap is only visible by going to Assets and
+     * searching for a serial number nothing told you about.
+     */
+    public function test_fleet_offers_to_add_a_device_that_is_not_on_the_register(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->actingAs($admin)->get(route('agent.fleet'));
+
+        $response->assertOk();
+        $response->assertSee('1 not on the register');
+        $response->assertSee(route('agent.promote', $this->agentToken));
+        $response->assertSee('Add to register');
+        // And counts the scan actually waiting, not "0".
+        $response->assertSee('1 scan waiting');
+    }
+
+    /**
+     * Once promoted, the page must stop asking.
+     *
+     * The count is derived from scans with no asset, so leaving it on screen after a
+     * promotion would mean the fleet page and the register disagree - and an
+     * operator who trusted the badge would promote the same laptop twice.
+     */
+    public function test_fleet_stops_offering_a_device_that_is_on_the_register(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $this->actingAs($admin)->post(route('agent.promote.store', $this->agentToken), [
+            'asset_id' => 'LAPTOP-900',
+            'company_id' => Company::first()->id,
+            'category_id' => AssetCategory::first()->id,
+            'location_id' => Location::first()->id,
+            'asset_status_id' => AssetStatus::first()->id,
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('agent.fleet'));
+
+        $response->assertOk();
+        $response->assertDontSee('not on the register');
+        $response->assertSee('LAPTOP-900');
+        $response->assertDontSee(route('agent.promote', $this->agentToken));
+    }
+
+    /**
+     * The summary link must actually filter, or it is a dead end.
+     */
+    public function test_fleet_can_filter_to_unregistered_devices_only(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        // One device waiting, one already registered.
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $registered = AgentApiToken::create([
+            'name' => 'registered-laptop',
+            'device_id' => 'ZGV2aWNlLTAwMg==',
+            'token_hash' => hash('sha256', 'tat_'.Str::random(48)),
+        ]);
+
+        AgentTelemetry::create([
+            'agent_token_id' => $registered->id,
+            'asset_id' => Asset::factory()->create(['asset_id' => 'LAPTOP-001'])->id,
+            'hostname' => 'HOST-REGISTERED',
+            'reported_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('agent.fleet', ['unregistered' => 1]));
+
+        $response->assertOk();
+        $response->assertSee('HOST-LIVE-01');
+        $response->assertDontSee('HOST-REGISTERED');
     }
 
     public function test_blank_or_junk_readings_do_not_break_the_audit(): void
