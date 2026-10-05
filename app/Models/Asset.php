@@ -68,6 +68,54 @@ class Asset extends Model
         return $this->hasMany(AssetAssignment::class);
     }
 
+    /**
+     * The assignment history, oldest first.
+     *
+     * Ordered by the date and then by id rather than by id alone: two rows can
+     * share an assigned_date when a laptop is registered and transferred on the
+     * same day, and "first" has to be stable between two calls or the same
+     * document would name a different person each time it is generated.
+     */
+    public function assignmentHistory()
+    {
+        return $this->assignments()
+            ->with(['user', 'fromLocation', 'toLocation'])
+            ->orderBy('assigned_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Who the asset was first issued to - the first party on a transfer form.
+     */
+    public function firstHolder(): ?AssetAssignment
+    {
+        return $this->assignmentHistory()->first();
+    }
+
+    /**
+     * Who holds it now - the second party on a transfer form.
+     *
+     * Prefers the open assignment over simply the newest row. An asset whose last
+     * assignment was closed without a replacement has no holder, and the newest
+     * row in that case names somebody who gave it back, which is exactly the
+     * person a "you are receiving this from" field must not offer.
+     */
+    public function currentHolder(): ?AssetAssignment
+    {
+        $history = $this->assignmentHistory();
+
+        // The newest *open* assignment, not the first one.
+        //
+        // "firstWhere" was the obvious reading and it is wrong: when a laptop moves
+        // and the previous row was never closed, several rows are open at once, and
+        // the earliest of them is the person who had it before rather than the one
+        // who has it. Taking the last open row - and falling back to the last row
+        // when nothing is open - gives the same answer whether the transfer closed
+        // its rows properly or not.
+        return $history->where('returned_date', null)->last() ?? $history->last();
+    }
+
     public function audits(): HasMany
     {
         return $this->hasMany(AssetAudit::class);

@@ -111,7 +111,7 @@ class DocumentGenerationService
             'company' => $asset->company?->name,
             'location' => $asset->location?->name,
             'current_user' => $asset->currentUser?->name,
-            'parties' => $this->partiesFor($asset, $input, $transfer),
+            'parties' => $this->partiesFor($asset, $input, $transfer, $type),
             'transfer' => $transfer ? [
                 'number' => $transfer->transfer_number,
                 'date' => $transfer->transfer_date?->format('Y-m-d'),
@@ -154,22 +154,51 @@ class DocumentGenerationService
      * the sender is normally the asset's own company and the receiver its current
      * holder. An explicit choice from the form always wins.
      */
-    private function partiesFor(Asset $asset, array $input, ?AssetTransfer $transfer): array
+    private function partiesFor(Asset $asset, array $input, ?AssetTransfer $transfer, string $type): array
     {
+        $first = $asset->firstHolder();
+        $current = $asset->currentHolder();
+
+        // A transfer names its own parties: the laptop is moving from one person
+        // to another, so the first party is whoever is giving it back and the
+        // second is whoever is taking it. Read from the transfer, then from the
+        // history, and only then from the register - so the common case (a
+        // laptop that has moved once) needs no typing at all.
+        $fromUser = $transfer?->fromUser ?? $current?->user ?? $first?->user;
+        $toUser = $transfer?->toUser ?? $asset->currentUser ?? $first?->user;
+
+        // The IT PIC is who hands a new laptop over, and on a return it is also
+        // who receives it - which is why the same person appears on both sides of
+        // a BAST and on opposite sides of a transfer.
+        $itPic = $asset->adminItPic;
+
+        // Is anybody handing something back?
+        //
+        // Keyed on the document type, not on the absence of a transfer record: a
+        // BAST is a return by definition, and generating one with no transfer
+        // saved - which is the common case for "this laptop is going back to IT" -
+        // used to name the IT PIC as the sender, i.e. IT handing a laptop back to
+        // itself on a document two people have to sign.
+        $isReturn = $transfer !== null || $type === 'BAST';
+
         return [
             'sender' => [
                 // The form has no separate "name" field for the parties: the
                 // people are named in the signature block, and a second name box
                 // would be a second thing to keep in step with it.
-                'name' => $input['signatory_menyerahkan'] ?? $asset->currentUser?->name,
+                //
+                // For a fresh issue nobody is handing a laptop back, so the
+                // sender is IT. For a transfer it is the person giving it back.
+                'name' => $input['signatory_menyerahkan']
+                    ?? ($isReturn ? $fromUser?->name : $itPic?->name),
                 'employee_id' => $input['sender_employee_id'] ?? null,
                 'entity' => $input['sender_entity'] ?? $asset->company?->name,
-                'division' => $input['sender_division'] ?? $asset->currentUser?->department,
-                'email' => $input['sender_email'] ?? $asset->currentUser?->email,
+                'division' => $input['sender_division'] ?? ($isReturn ? $fromUser?->department : $itPic?->department),
+                'email' => $input['sender_email'] ?? ($isReturn ? $fromUser?->email : $itPic?->email),
                 'phone' => $input['sender_phone'] ?? null,
             ],
             'receiver' => [
-                'name' => $input['signatory_menerima'] ?? $transfer?->toUser?->name,
+                'name' => $input['signatory_menerima'] ?? $toUser?->name,
                 'employee_id' => $input['receiver_employee_id'] ?? null,
                 // The register knows a location but not a legal entity, so only a
                 // transfer can supply one; otherwise the asset's own company is a
@@ -178,8 +207,8 @@ class DocumentGenerationService
                 // into one string.
                 'entity' => $input['receiver_entity'] ?? $transfer?->toLocation?->name ?? $asset->company?->name,
                 'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
-                'division' => $input['receiver_division'] ?? $transfer?->to_department,
-                'email' => $input['receiver_email'] ?? null,
+                'division' => $input['receiver_division'] ?? $transfer?->to_department ?? $toUser?->department,
+                'email' => $input['receiver_email'] ?? $toUser?->email,
                 'phone' => $input['receiver_phone'] ?? null,
             ],
         ];
