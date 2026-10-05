@@ -522,8 +522,15 @@ public static class AgentRunner
                         }
                         else if (command == "update")
                         {
-                            Console.WriteLine($"[*] Command #{id} update received. Acknowledging and updating...");
-                            Api.Ack(url, token, id, "done");
+                            Console.WriteLine($"[*] Command #{id} update received. Downloading and swapping...");
+
+                            // Reported before the work, not after. The swap kills
+                            // this process, so anything written afterwards never
+                            // leaves the machine - the fleet page would show the
+                            // download as still sitting at the start of a rollout
+                            // and then find the device gone.
+                            Api.ReportProgress(url, token, id, 5, "Downloading the new version...");
+
                             // The server sends the download URL in the payload; honour it
                             // instead of always rebuilding the path locally.
                             var downloadUrl = cmd.TryGetProperty("payload", out var p) &&
@@ -532,10 +539,32 @@ public static class AgentRunner
                                 ? u.GetString()
                                 : null;
 
+                            // Acked according to what actually happened.
+                            //
+                            // This used to ack "done" before attempting anything,
+                            // which made a failed update indistinguishable from a
+                            // successful one on the fleet page: a laptop that could
+                            // not reach the download URL showed its update as
+                            // complete, stayed on the old build, and nothing said
+                            // otherwise. The only honest moment to settle this row
+                            // is after the call returns.
                             if (AutoUpdater.PerformUpdate(url, token, downloadUrl))
                             {
+                                Api.Ack(url, token, id, "done", new Dictionary<string, string>
+                                {
+                                    ["message"] = "New version downloaded; restarting into it.",
+                                });
+
+                                // The batch runner swaps the binary and starts the
+                                // new one; this process has to be gone before it can.
                                 Environment.Exit(0);
                             }
+
+                            Api.Ack(url, token, id, "failed", new Dictionary<string, string>
+                            {
+                                ["message"] = "The new version could not be downloaded. The agent is still on " +
+                                    (InstallCheck.ReadVersion(InstallCheck.InstalledExe)?.ToString() ?? "the installed build") + ".",
+                            });
                         }
                         else if (command == "uninstall")
                         {

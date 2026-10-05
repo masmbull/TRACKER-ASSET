@@ -4,13 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AgentRelease;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * The long-poll half of "idle unless told" (PRD §11).
+ * The long-poll half of "idle unless told" (PRD Ã‚Â§11).
  *
  * The agent used to ask for commands every ten seconds on every laptop, which
  * meant six requests a minute per machine to be told there was nothing to do.
@@ -163,6 +164,143 @@ class AgentLongPollTest extends TestCase
 
         $response->assertOk();
         $this->assertSame([], $response->json('commands'));
+    }
+
+    /**
+     * A device already on the release must not be handed the broadcast update.
+     *
+     * The cost is not a log line. Handing it out makes the agent pull a ~160 MB
+     * binary and restart itself, so a company-wide click would restart every
+     * laptop in the office - including the ones already carrying the build being
+     * pushed - while the person at the desk is working.
+     */
+    public function test_a_current_agent_does_not_receive_the_broadcast_update(): void
+    {
+        AgentRelease::create(['version' => '3.0.0', 'is_current' => true, 'released_at' => now()]);
+        $this->agent->update(['agent_version' => '3.0.0']);
+
+        AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'update',
+            'payload' => ['url' => 'https://example.test/agent/download'],
+            'status' => 'pending',
+        ]);
+
+        $response = $this->withHeaders($this->headers())->getJson('/api/agent/inbox?wait=1');
+
+        $response->assertOk();
+        $this->assertSame([], $response->json('commands'), 'A current agent must not be told to update.');
+    }
+
+    /**
+     * The whole point of the broadcast: a machine that IS behind still gets it.
+     */
+    public function test_an_outdated_agent_receives_the_broadcast_update(): void
+    {
+        AgentRelease::create(['version' => '3.0.0', 'is_current' => true, 'released_at' => now()]);
+        $this->agent->update(['agent_version' => '2.9.0']);
+
+        AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'update',
+            'payload' => ['url' => 'https://example.test/agent/download'],
+            'status' => 'pending',
+        ]);
+
+        $response = $this->withHeaders($this->headers())->getJson('/api/agent/inbox?wait=1');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('commands'));
+        $this->assertSame('update', $response->json('commands.0.command'));
+    }
+
+    /**
+     * A targeted update is the operator overriding the fleet rule, and must
+     * always be delivered.
+     *
+     * Skipping it would make the per-device button silently do nothing on a
+     * machine that happens to be current - which is exactly when somebody clicks.
+     */
+    public function test_a_targeted_update_is_delivered_even_to_a_current_agent(): void
+    {
+        AgentRelease::create(['version' => '3.0.0', 'is_current' => true, 'released_at' => now()]);
+        $this->agent->update(['agent_version' => '3.0.0']);
+
+        AgentCommand::create([
+            'agent_token_id' => $this->agent->id,
+            'command' => 'update',
+            'payload' => ['url' => 'https://example.test/agent/download'],
+            'status' => 'pending',
+        ]);
+
+        $response = $this->withHeaders($this->headers())->getJson('/api/agent/inbox?wait=1');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('commands'));
+    }
+
+    /**
+     * Skipping an update must not cost the device its other work.
+     *
+     * A variant that emptied the list instead of rejecting one entry would leave
+     * a laptop with a queued scan simply because it was on the current build.
+     */
+    public function test_a_scan_is_still_delivered_to_a_current_agent(): void
+    {
+        AgentRelease::create(['version' => '3.0.0', 'is_current' => true, 'released_at' => now()]);
+        $this->agent->update(['agent_version' => '3.0.0']);
+
+        AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'update',
+            'payload' => ['url' => 'https://example.test/agent/download'],
+            'status' => 'pending',
+        ]);
+
+        AgentCommand::create([
+            'agent_token_id' => null,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $response = $this->withHeaders($this->headers())->getJson('/api/agent/inbox?wait=1');
+
+        $commands = array_column($response->json('commands'), 'command');
+
+        $this->assertContains('scan', $commands, 'Skipping the update must not skip the scan.');
+        $this->assertNotContains('update', $commands);
+    }
+
+    /**
+     * The fleet page has to say how many machines were left alone, or "Update All"
+     * answers a question nobody asked.
+     */
+    public function test_update_all_reports_how_many_devices_were_left_alone(): void
+    {
+        AgentRelease::create(['version' => '3.0.0', 'is_current' => true, 'released_at' => now()]);
+        $this->agent->update(['agent_version' => '3.0.0']);
+
+        AgentApiToken::create([
+            'name' => 'behind-laptop',
+            'device_id' => 'MITO-0011',
+            'token_hash' => hash('sha256', 'tat_'.Str::random(48)),
+            'is_active' => true,
+            'agent_version' => '2.9.0',
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)->from(route('agent.fleet'))->post(route('agent.updateAll'));
+
+        $response->assertRedirect(route('agent.fleet'));
+        $this->assertStringContainsString('1 already on the release', (string) session('success'));
+
+        // The broadcast exists; the per-device filtering happens at hand-out.
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'update',
+            'status' => 'pending',
+            'agent_token_id' => null,
+        ]);
     }
 
     /**
