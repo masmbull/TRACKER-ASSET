@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\AgentDevicePromotionController;
 use App\Http\Controllers\AgentFleetController;
 use App\Http\Controllers\AgentTokenController;
 use App\Http\Controllers\AssetController;
@@ -119,7 +120,27 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/{token}/update', [AgentFleetController::class, 'updateOne'])->name('agent.updateOne');
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
+
+        // Move a device that is not on the register yet into the register.
+        // Inside the manage-agents group rather than under the assets policy on
+        // purpose: promoting a device writes an asset row, so it must not be
+        // reachable by anyone who cannot manage the fleet, and it must not be
+        // reachable by someone who cannot manage agents either.
+        Route::get('/agent/{token}/promote', [AgentDevicePromotionController::class, 'create'])->name('agent.promote');
+        Route::post('/agent/{token}/promote', [AgentDevicePromotionController::class, 'store'])->name('agent.promote.store');
     });
+
+    // Accept a scan's readings onto the asset it was compared against.
+    //
+    // Outside the manage-agents group deliberately. What this writes is the asset
+    // row, and AssetPolicy::update already allows support as well as admin - a
+    // route inside the agents group would quietly take that job away from support.
+    // The authorize() in the controller is the gate that matters, and it is the
+    // asset policy rather than the fleet gate.
+    //
+    // Keyed by the audit, not the token: the decision is about one scan on one
+    // asset, and a device can have many scans over its life.
+    Route::post('/audit/{audit}/apply-scan', [AgentDevicePromotionController::class, 'applyScan'])->name('audit.apply-scan');
 
     // Infrastructure monitor: which backing services are up. Admin-only
     // because the checks expose the database driver, mail host and cache

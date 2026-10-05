@@ -60,6 +60,20 @@ class AgentFleetController extends Controller
             ->unique('asset_id')
             ->keyBy('asset_id');
 
+        // Scans still waiting for a decision, per device.
+        //
+        // Counted rather than derived from "telemetry has no asset", because those
+        // are different questions: a device can have telemetry but no scan (an
+        // agent that reports readings without auditing), and it can have three
+        // scans while waiting. The number next to "Add to register" has to be the
+        // real count of scans to be acted on, or the column is decoration.
+        $unmatchedScans = AssetAudit::query()
+            ->whereNull('asset_id')
+            ->whereNotNull('agent_token_id')
+            ->selectRaw('agent_token_id, count(*) as aggregate')
+            ->groupBy('agent_token_id')
+            ->pluck('aggregate', 'agent_token_id');
+
         $telemetries = $devices->map(fn (AgentApiToken $token) => $token->telemetry)->filter();
 
         // An agent deployed before the heartbeat existed keeps polling the
@@ -80,6 +94,15 @@ class AgentFleetController extends Controller
             'disk_alerts' => $telemetries->filter(fn ($t) => $t->hasLowDisk())->count(),
             'avg_battery_health' => $telemetries->whereNotNull('battery_health')->avg('battery_health'),
             'pending_commands' => AgentCommand::where('status', 'pending')->count(),
+            // Devices seen by an agent that the register does not contain yet.
+            // Counted as devices, not scans: one laptop waiting is one piece of
+            // work, however many times it has checked in since. Read off $devices
+            // rather than $activeDevices, which is only split out further down.
+            'unregistered' => $devices->filter(
+                fn (AgentApiToken $t) => $t->isUsable()
+                    && $t->telemetry !== null
+                    && $t->telemetry->asset_id === null
+            )->count(),
         ];
 
         // Token ids with an uninstall still queued: the button turns into a
@@ -151,6 +174,16 @@ class AgentFleetController extends Controller
         // paginated and the page size is user-selectable.
         $perPage = (int) $request->query('per_page', self::DEFAULT_PAGE_SIZE);
 
+        // "N not on the register" links here with ?unregistered=1, so the count
+        // on the summary line is a filter rather than a dead end. Read before
+        // pagination so the filtered set is what gets sliced, not the whole
+        // fleet with the count describing a subset of it.
+        if ($request->boolean('unregistered')) {
+            $activeDevices = $activeDevices->filter(
+                fn (AgentApiToken $t) => $t->telemetry !== null && $t->telemetry->asset_id === null
+            )->values();
+        }
+
         if (! in_array($perPage, self::PAGE_SIZES, true)) {
             $perPage = self::DEFAULT_PAGE_SIZE;
         }
@@ -201,6 +234,7 @@ class AgentFleetController extends Controller
             'perPage' => $perPage,
             'revokedDevices' => $revokedDevices,
             'latestAudits' => $latestAudits,
+            'unmatchedScans' => $unmatchedScans,
             'stats' => $stats,
             'pendingUninstalls' => $pendingUninstalls,
             'activeOperations' => $activeOperations,
