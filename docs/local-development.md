@@ -69,6 +69,58 @@ Two things the second engine finds that the first cannot:
   the first test and names a company that no longer exists for every test after
   it. `AssetFactory` and the test payloads now resolve the rows they mean.
 
+### On a Linux host with Docker only (no host PHP)
+
+A server such as `/opt/tracker-asset` usually has no `php`, no `createdb`, and a
+bash shell — so the `$env:...` form above fails twice (`command not found`) and
+plain `php artisan test` fails with `Command 'php' not found`. Nothing needs to
+be installed on the host: every command runs inside the container.
+
+```bash
+# SQLite (default engine).
+# Both -e matter: phpunit.xml wants sqlite/:memory:, but a real environment
+# variable beats phpunit.xml, and compose injects DB_DATABASE=tracker_asset
+# into the container - without the override, RefreshDatabase would migrate a
+# stray sqlite FILE named `tracker_asset` into the bind-mounted repo root.
+docker compose exec -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: \
+  app php artisan test
+
+# PostgreSQL — the production engine (PRD §14, §47).
+# Create the test database inside the postgres container (no host client needed;
+# `tracker` is the .env.example default, adjust if your .env says otherwise):
+docker compose exec postgres createdb -U tracker tracker_test
+
+# Only the connection and database need overriding - compose already injects
+# DB_HOST=postgres, DB_PORT, DB_USERNAME and DB_PASSWORD from .env, and real
+# environment variables win over phpunit.xml.
+docker compose exec -e DB_CONNECTION=pgsql -e DB_DATABASE=tracker_test \
+  app php artisan test
+```
+
+Both forms are safe for the seeded development database: the connection is
+decided by the `-e` overrides, and neither points at `tracker_asset`.
+
+If `php artisan test` reports that phpunit is missing, the host `vendor/` was
+installed without dev dependencies — the image itself is deliberately
+`--no-dev`, and the bind mount `.:/var/www/html` makes the host's `vendor/` the
+one that counts. Fix it once:
+
+```bash
+docker compose exec app composer install
+```
+
+Two things this host surfaced:
+
+- **`the attribute 'version' is obsolete`** — an old `docker-compose.yml` that
+  still has a top-level `version:` key. `git pull` (commit `2e4e750` removed it)
+  or delete the line; the warning is harmless either way.
+- **`Excel file not found: /var/www/html/IT Assets.xlsx` while seeding** —
+  expected. `IT Assets.xlsx` is deliberately gitignored (it carries real asset
+  data and must not enter the repository), so a fresh clone does not have it and
+  `ExcelImportSeeder` skips itself. Either copy the file onto the server and
+  re-run `docker compose exec app php artisan db:seed`, or import through the
+  UI at **Assets → Import** — the seeder is a convenience, not a requirement.
+
 ## If your database predates the migration renumbering
 
 Fourteen initial migrations were renamed on 2026-09-30 to remove forward
