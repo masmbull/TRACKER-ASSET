@@ -18,7 +18,16 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
+        <!-- APP_ENV is the one variable a surrounding host can get wrong.
+             docker compose injects APP_ENV=local into the container, and
+             Laravel's env() reads $_SERVER (the real environment) first - so
+             the <env> entry below, even with force, cannot override it:
+             putenv/$_ENV are rewritten, $_SERVER is not. With env() seeing
+             "local", VerifyCsrfToken's runningUnitTests() escape hatch stays
+             off and every POST in the suite fails with 419. <server> writes
+             $_SERVER directly, which is the surface Laravel actually reads. -->
+        <env name="APP_ENV" value="testing" force="true"/>
+        <server name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
