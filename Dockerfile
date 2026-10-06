@@ -95,6 +95,23 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Silence git's "dubious ownership" refusal for the application directory.
+#
+# The container runs as root, and compose bind-mounts the host clone over
+# /var/www/html with the developer's (or server user's) ownership. git >=
+# 2.35.2 refuses to touch a repository owned by someone else, so every git
+# call inside the container - including the one composer makes while resolving
+# the root package, which printed the fatal before the first line of every
+# `composer install` - dies with "detected dubious ownership in repository at
+# '/var/www/html'" and instructions nobody should have to follow twice.
+#
+# Harmless where it appeared (composer installed from the lock file anyway),
+# but it is exactly the warning-noise commit 2e4e750 removed from compose:
+# output that trains people to ignore output. Baked into the image rather than
+# configured in a running container, because a container's /etc/gitconfig is
+# rebuilt away on the next recreate.
+RUN git config --system --add safe.directory /var/www/html
+
 RUN docker-php-ext-install -j"$(nproc)" exif
 RUN docker-php-ext-install -j"$(nproc)" pcntl
 RUN docker-php-ext-install -j"$(nproc)" bcmath
