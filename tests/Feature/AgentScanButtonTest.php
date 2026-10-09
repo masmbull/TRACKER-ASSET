@@ -144,6 +144,80 @@ class AgentScanButtonTest extends TestCase
     }
 
     /**
+     * "Scan All Devices" targets each device instead of broadcasting.
+     *
+     * A broadcast row has no target, so no agent can ever settle it honestly:
+     * the fleet page kept showing "queued" after every machine had already
+     * scanned, and per-device progress and outcome had nowhere to land. One row
+     * per reachable device is what makes the summary count true.
+     */
+    public function test_scan_all_queues_one_targeted_command_per_reachable_device(): void
+    {
+        $first = $this->enrollAgent();
+
+        $second = AgentApiToken::create([
+            'name' => 'field-laptop-2',
+            'device_id' => 'ZGV2aWNlLTAwMg==',
+            'platform' => 'Windows 11',
+            'token_hash' => hash('sha256', $plain = 'tat_'.Str::random(48)),
+            'token_plain' => $plain,
+        ]);
+
+        // Revoked: the middleware refuses its bearer, so a command for it can
+        // never be picked up and must not be queued at all.
+        AgentApiToken::create([
+            'name' => 'retired-laptop',
+            'device_id' => 'ZGV2aWNlLTAwMw==',
+            'platform' => 'Windows 11',
+            'token_hash' => hash('sha256', 'tat_'.Str::random(48)),
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.scanAll'))
+            ->assertRedirect(route('agent.fleet'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $first->id,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $second->id,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $this->assertSame(0, AgentCommand::whereNull('agent_token_id')->count());
+        $this->assertSame(2, AgentCommand::count());
+    }
+
+    /**
+     * A device already waiting for a scan is skipped, so one click does not
+     * hand the same machine two identical scans and light up two pending rows
+     * for work that is already on its way.
+     */
+    public function test_scan_all_skips_a_device_that_is_already_waiting(): void
+    {
+        $token = $this->enrollAgent();
+
+        AgentCommand::create([
+            'agent_token_id' => $token->id,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->from(route('agent.fleet'))
+            ->post(route('agent.scanAll'))
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, AgentCommand::count());
+    }
+
+    /**
      * Removing an agent from the browser (PRD §11). The server cannot touch the
      * user's disk, so the click queues an `uninstall` command; the resident
      * daemon deletes itself on the next poll. The token must survive that poll

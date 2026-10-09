@@ -263,7 +263,16 @@ class ResidentDaemonTest extends TestCase
         $this->assertSame(0, AgentCommand::count());
     }
 
-    public function test_scan_all_broadcasts_to_null()
+    /**
+     * Scan All targets each device instead of broadcasting.
+     *
+     * A broadcast row is one shared command no agent can settle honestly: the
+     * page stayed "queued" after every machine had scanned, and per-device
+     * progress had nowhere to land. Update All still broadcasts because it is
+     * filtered per device at hand-out (see AgentLongPollTest); a scan has no
+     * such filter and has to be addressed to a machine to be acknowledged.
+     */
+    public function test_scan_all_targets_each_device(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
@@ -272,7 +281,7 @@ class ResidentDaemonTest extends TestCase
         $this->assertDatabaseCount('agent_commands', 1);
         $this->assertDatabaseHas('agent_commands', [
             'command' => 'scan',
-            'agent_token_id' => null,
+            'agent_token_id' => $this->apiToken->id,
             'status' => 'pending',
         ]);
     }

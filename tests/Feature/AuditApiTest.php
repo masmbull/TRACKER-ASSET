@@ -171,6 +171,37 @@ class AuditApiTest extends TestCase
             ->assertJsonMissingPath('asset');
     }
 
+    /**
+     * The empty-mismatch answer must stay a JSON array, and it is the client's
+     * job to tolerate that.
+     *
+     * A device that matches, or that nobody has on file yet, sends an empty PHP
+     * array which json_encode writes as `[]` - an *array* - while a populated
+     * mismatch set is an *object*. The agent called EnumerateObject() on it
+     * unconditionally and threw ("The requested operation requires an element of
+     * type 'Object', but the target element has type 'Array'"), which made the
+     * scan Ack as 'failed' on the very first report of every new device. Pinned
+     * here so a future tidy-up of the response shape is a deliberate change and
+     * not a silent break of the agent build in the field.
+     */
+    public function test_empty_mismatches_are_serialised_as_an_array(): void
+    {
+        $response = $this->withHeaders($this->agentHeaders())->postJson('/api/audits', [
+            'serial_number' => $this->asset->serial_number,
+            'hostname' => $this->asset->hostname,
+            'ram' => $this->asset->ram,
+        ]);
+
+        $response->assertOk()->assertJsonPath('result', 'MATCH');
+
+        $this->assertSame([], $response->json('mismatches'), 'Empty mismatch set must decode as an empty array.');
+
+        // The raw body, not just the decoded value: `{}` also decodes to `[]`
+        // through json(), so asserting on the decoded form alone would not catch
+        // the shape actually sent down the wire.
+        $this->assertStringContainsString('"mismatches":[]', $response->getContent());
+    }
+
     public function test_inactive_or_expired_tokens_are_rejected(): void
     {
         AgentApiToken::where('name', 'test-agent')->update(['is_active' => false]);

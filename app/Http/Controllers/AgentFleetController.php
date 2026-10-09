@@ -28,6 +28,17 @@ class AgentFleetController extends Controller
     private const POLL_WINDOW_SECONDS = 90;
 
     /**
+     * How long ago a device was last seen that still counts as pending.
+     *
+     * A queued command and a device that stopped answering are two different
+     * things. Counting every pending scan painted "12 queued" on a fleet where a
+     * single offline laptop had been left something days ago, which made the
+     * number noise - the one thing on this page that is supposed to mean "work is
+     * on its way" said nothing at all.
+     */
+    private const PENDING_WINDOW_MINUTES = 5;
+
+    /**
      * Page sizes offered by the "per page" dropdown.
      *
      * Whitelisted rather than trusted from the query string, so a crafted
@@ -93,7 +104,18 @@ class AgentFleetController extends Controller
             'battery_alerts' => $telemetries->filter(fn ($t) => $t->hasLowBattery() || $t->hasWeakBattery())->count(),
             'disk_alerts' => $telemetries->filter(fn ($t) => $t->hasLowDisk())->count(),
             'avg_battery_health' => $telemetries->whereNotNull('battery_health')->avg('battery_health'),
-            'pending_commands' => AgentCommand::where('status', 'pending')->count(),
+            'pending_commands' => AgentCommand::query()
+                // Deliverable only, and recent only. A pending row aimed at a
+                // revoked token can never be picked up, and one left on a laptop
+                // that has been off for a week is not "queued" in any sense the
+                // operator cares about - it just kept the badge lit forever.
+                ->where('status', 'pending')
+                ->whereNotNull('agent_token_id')
+                ->where('created_at', '>=', now()->subMinutes(self::PENDING_WINDOW_MINUTES))
+                ->whereHas('token', fn ($q) => $q
+                    ->where('is_active', true)
+                    ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now())))
+                ->count(),
             // Devices seen by an agent that the register does not contain yet.
             // Counted as devices, not scans: one laptop waiting is one piece of
             // work, however many times it has checked in since. Read off $devices
@@ -601,13 +623,41 @@ class AgentFleetController extends Controller
     }
 
     /**
-     * Broadcast scan to every active agent at their next poll.
+     * Scan every reachable device.
+     *
+     * One targeted command per device, not a broadcast row.
+     *
+     * A broadcast (agent_token_id null) is a single shared row that no agent can
+     * ever settle honestly: the fleet page kept showing "queued" while every
+     * machine had already scanned, and per-device progress and outcome had
+     * nowhere to land. One row per device makes the page match reality, and it is
+     * what lets the agent acknowledge the scan it was asked for.
      */
     public function scanAll()
     {
-        $this->enqueue(null, 'scan');
+        $pending = AgentCommand::query()
+            ->where('command', 'scan')
+            ->where('status', 'pending')
+            ->whereNotNull('agent_token_id')
+            ->select('agent_token_id');
 
-        return back()->with('success', 'Scan broadcast to all agents — they will pick it up within a few seconds.');
+        $tokens = AgentApiToken::query()
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            // Already waiting for this device to answer: queueing again would
+            // hand it two identical scans and show the page a second pending row
+            // for work that is already on its way.
+            ->whereNotIn('id', $pending)
+            ->get();
+
+        foreach ($tokens as $token) {
+            $this->enqueue($token->id, 'scan', ['source' => 'scan-all']);
+        }
+
+        return back()->with('success', sprintf(
+            'Scan queued for %d device(s) — each agent picks it up within a few seconds.',
+            $tokens->count()
+        ));
     }
 
     /**
