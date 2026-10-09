@@ -14,7 +14,7 @@
         @csrf
         <input type="text" name="code" value="{{ old('code') }}" required autofocus
                placeholder="Scan here…" class="border rounded px-3 py-2 flex-1 font-mono">
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded">Find</button>
+        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Find</button>
     </form>
 
     @error('code')

@@ -5,7 +5,8 @@ $colors = [
     'success' => 'bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-500',
     'error' => 'bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-500',
     'warning' => 'bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-warning-500',
-    'orange' => 'bg-orange-50 text-orange-600',
+    'orange' => 'bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-500',
+    'danger' => 'bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-500',
     'gray' => 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
 ];
 @endphp

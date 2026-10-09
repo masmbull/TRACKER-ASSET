@@ -45,7 +45,7 @@
     </div>
     <div class="bg-white p-6 rounded shadow">
         <p class="text-sm text-gray-500">Retirement Due</p>
-        <p class="text-3xl font-bold text-orange-600">{{ $retirementDue }}</p>
+        <p class="text-3xl font-bold text-gray-700">{{ $retirementDue }}</p>
     </div>
 </div>
 

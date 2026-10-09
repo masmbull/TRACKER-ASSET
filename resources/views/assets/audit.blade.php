@@ -5,9 +5,9 @@
 @section('content')
 <h1 class="text-2xl font-bold mb-6">Audit Asset {{ $asset->asset_id }}</h1>
 
-<div class="mb-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm">
+<div class="mb-4 bg-gray-50 border border-gray-200 rounded p-3 text-sm">
     <strong>Recommended:</strong> open the page on the device itself and use the
-    <a href="{{ route('assets.audit.device', $asset) }}" class="text-blue-600 font-semibold">Device Scan (1 klik)</a>
+    <a href="{{ route('assets.audit.device', $asset) }}" class="text-red-600 font-semibold hover:text-red-700">Device Scan (1 klik)</a>
     — browser auto-collects OS/RAM/CPU/GPU and compares automatically.
 </div>
 
@@ -130,7 +130,7 @@
     </div>
 
     <div class="flex gap-2 pt-4">
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded">Submit Audit</button>
+        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Submit Audit</button>
         <a href="/assets/{{ $asset->id }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
     </div>
 </form>

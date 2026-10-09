@@ -5,7 +5,7 @@
 @section('content')
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold">Users</h1>
-    <a href="{{ route('users.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded">+ Add User</a>
+    <a href="{{ route('users.create') }}" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">+ Add User</a>
 </div>
 
 <form method="GET" action="{{ route('users.index') }}" class="flex gap-2 mb-4">
@@ -110,7 +110,7 @@
                     {{ $user->is_active ? 'Active' : 'Inactive' }}
                 </span>
             </td>
-            <td class="py-3 px-4"><a href="{{ route('users.edit', $user) }}" class="text-yellow-600">Edit</a></td>
+            <td class="py-3 px-4"><a href="{{ route('users.edit', $user) }}" class="text-red-600 hover:text-red-700">Edit</a></td>
         </tr>
         @endforeach
     </tbody>
