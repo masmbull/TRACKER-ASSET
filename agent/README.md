@@ -74,6 +74,7 @@ you just compiled.
 | `--poll` | Daemon poll interval in seconds (default: 10) |
 | `--uninstall` | Remove daemon from Windows autostart |
 | `--update` | Pull the newest `TrackerAgent.exe` from the server and self-swap |
+| `--status` | Print the installed device ID, server URL and install path, then exit |
 
 ### Double-click: install / update / already installed
 

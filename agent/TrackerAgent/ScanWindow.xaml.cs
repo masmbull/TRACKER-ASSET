@@ -1,28 +1,42 @@
-using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace TrackerAgent;
 
 public partial class ScanWindow : Window
 {
-    private readonly DispatcherTimer _timer = new();
-    private int _progress;
-    private string _stepMessage = "";
-    private string _apiUrl = "";
-    private string _token = "";
+    private readonly string _apiUrl;
+    private readonly string _token;
+    private readonly string _deviceId;
 
-    public ScanWindow(string apiUrl, string token)
+    public ScanWindow(string apiUrl, string token, string deviceId)
     {
         InitializeComponent();
         _apiUrl = apiUrl;
-        _token = token;
-        UrlBox.Text = apiUrl;
-        TokenBox.Text = token;
-        UrlBox.IsReadOnly = true;
-        TokenBox.IsReadOnly = true;
+        _token  = token;
+        _deviceId = deviceId;
+
+        UrlBox.Text   = apiUrl;
+        TokenBox.Text = token.Length > 12
+            ? token[..12] + "••••••••"
+            : token;
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd  = new WindowInteropHelper(this).Handle;
+        var value = 1;
+        DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
@@ -30,26 +44,25 @@ public partial class ScanWindow : Window
         ScanButton.IsEnabled = false;
         ConfigPanel.Visibility = Visibility.Collapsed;
         StatusPanel.Visibility = Visibility.Visible;
+        SubtitleText.Text = "Scanning…";
 
-        var success = await Task.Run(() => RunScan());
+        var success = await Task.Run(RunScan);
 
         StatusPanel.Visibility = Visibility.Collapsed;
-        ResultPanel.Visibility = Visibility.Visible;
-        CloseButton.Visibility = Visibility.Visible;
+        ResultPanel.Visibility  = Visibility.Visible;
+        CloseButton.Visibility  = Visibility.Visible;
 
         if (success)
         {
-            ResultIcon.Text = "✅";
-            ResultIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
-            ResultText.Text = "Scan Complete";
-            ResultDetail.Text = "Audit data has been sent to the server successfully.";
+            SubtitleText.Text    = "Scan complete";
+            ResultText.Text      = "Scan Complete";
+            ResultDetail.Text    = "Hardware data sent to server.";
         }
         else
         {
-            ResultIcon.Text = "❌";
-            ResultIcon.Foreground = System.Windows.Media.Brushes.OrangeRed;
-            ResultText.Text = "Scan Failed";
-            ResultDetail.Text = "Could not reach the server. Please check your connection and try again.";
+            SubtitleText.Text    = "Scan failed";
+            ResultText.Text      = "Scan Failed";
+            ResultDetail.Text    = "Could not reach server. Check connection and try again.";
         }
     }
 
@@ -59,17 +72,18 @@ public partial class ScanWindow : Window
     {
         try
         {
-            Step(10, "Collecting hardware info...");
+            Step(10, "Collecting hardware info…");
             var payload = HardwareCollector.Collect();
+            payload["device_id"] = _deviceId;
 
-            Step(40, "Sending audit data...");
+            Step(45, "Sending audit data…");
             var result = Api.Post(_apiUrl, _token, payload);
 
-            Step(80, "Processing response...");
-            Thread.Sleep(300);
+            Step(85, "Processing response…");
+            Thread.Sleep(250);
 
-            Step(100, "Done!");
-            Thread.Sleep(300);
+            Step(100, "Done");
+            Thread.Sleep(200);
             return result is not null;
         }
         catch
@@ -80,16 +94,12 @@ public partial class ScanWindow : Window
 
     private void Step(int percent, string message)
     {
-        _progress = percent;
-        _stepMessage = message;
-
         Dispatcher.BeginInvoke(() =>
         {
-            ProgressBar.Value = _progress;
-            PercentText.Text = $"{_progress}%";
-            StatusText.Text = _stepMessage;
+            ScanProgressFill.Width = percent / 100.0 * 400;
+            PercentText.Text       = $"{percent}%";
+            StatusText.Text        = message;
         });
-
-        Thread.Sleep(150);
+        Thread.Sleep(120);
     }
 }

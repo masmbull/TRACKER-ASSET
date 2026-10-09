@@ -79,6 +79,11 @@ public partial class App : System.Windows.Application
                 return;
             }
 
+            // The tray loop is what keeps this machine on Live Fleet: it polls
+            // the inbox and pushes heartbeats. Showing the status window
+            // instead of the tray left the device silent, because nothing else
+            // in this process talks to the server after startup. The window is
+            // now a "Status" item on the tray menu.
             StartTray(installed);
             return;
         }
@@ -121,12 +126,17 @@ public partial class App : System.Windows.Application
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
         "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
-            or "--self-test-icon" => true,
+            or "--status" or "--self-test-icon" => true,
         _ => false,
     };
 
     private void StartTray(AgentConfig config)
     {
+        // Tray-only app: closing the Status window (or never opening one) must not
+        // end the process. Shutdown happens from the Exit menu and from the
+        // uninstall command, both of which call Shutdown() on purpose.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         // The MITO mark, not SystemIcons.Information: a deployed agent should be
         // recognisable in the notification area at a glance.
         _trayIcon = new NotifyIcon
@@ -142,6 +152,15 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = new ContextMenuStrip()
         };
 
+        _trayIcon.ContextMenuStrip.Items.Add("Status", null, (_, _) =>
+            Dispatcher.Invoke(() =>
+            {
+                var window = new StatusWindow(
+                    InstallCheck.ReadVersion(InstallCheck.InstalledExe)?.ToString() ?? "unknown",
+                    config.ServerUrl, config.DeviceId, config.InstalledAt);
+                window.Show();
+                window.Activate();
+            }));
         _trayIcon.ContextMenuStrip.Items.Add("Scan Now", null, (_, _) => RunScan(config));
         _trayIcon.ContextMenuStrip.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
         _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
@@ -151,15 +170,6 @@ public partial class App : System.Windows.Application
 
     private async Task CommandLoop(AgentConfig config)
     {
-        // The tray app and the --daemon both keep the fleet page alive, and both
-        // must do the same work. This loop used to poll the inbox and nothing
-        // else, so a device left in tray mode — which is exactly what happens
-        // after an auto-update, since the restarted process is relaunched
-        // without the original command-line arguments — stopped refreshing its
-        // telemetry entirely. The fleet page then showed stale battery and disk
-        // readings and eventually reported the laptop offline even though it was
-        // alive and polling. Intervals match AgentRunner so the two paths are
-        // indistinguishable from the server's point of view.
         var nextHeartbeat = DateTimeOffset.MinValue;
         var nextFingerprint = DateTimeOffset.MinValue;
 
@@ -167,7 +177,8 @@ public partial class App : System.Windows.Application
         {
             try
             {
-                var commands = Api.GetInbox(config.ServerUrl, config.Token);
+                var commands = Api.GetInbox(config.ServerUrl, config.Token, AgentRunner.LongPollSeconds, out _);
+
                 if (commands != null)
                 {
                     foreach (var cmd in commands)
@@ -177,7 +188,7 @@ public partial class App : System.Windows.Application
 
                         if (command == "scan")
                         {
-                            RunScan(config);
+                            OpenScanWindow(config);
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
                         }
                         else if (command == "update")
@@ -223,9 +234,14 @@ public partial class App : System.Windows.Application
                     }
                 }
             }
-            catch { }
+            catch (Exception pollEx)
+            {
+                Debug.WriteLine($"CommandLoop poll error: {pollEx.Message}");
+            }
 
-            await Task.Delay(TimeSpan.FromSeconds(15));
+            // Long-poll above already parks for up to 20s; this is the gap after a
+            // command came back early.
+            await Task.Delay(TimeSpan.FromSeconds(5));
 
             // MinValue on both, so a tray app that has just been updated reports
             // immediately instead of looking dead for a full interval.
@@ -290,6 +306,31 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Fingerprint error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Show the scan window. This is where the server's "Scan Now" lands.
+    /// </summary>
+    /// <remarks>
+    /// The command loop runs on a background thread, so the window is created on
+    /// the dispatcher. Show() rather than ShowDialog(): the loop has to keep
+    /// polling while the scan runs.
+    /// </remarks>
+    private void OpenScanWindow(AgentConfig config)
+    {
+        try
+        {
+            _ = Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var scanWindow = new ScanWindow(config.ServerUrl, config.Token, config.DeviceId);
+                scanWindow.Show();  // Non-blocking
+                scanWindow.Activate();  // Bring to front
+            }));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"OpenScanWindow error: {ex.Message}");
         }
     }
 

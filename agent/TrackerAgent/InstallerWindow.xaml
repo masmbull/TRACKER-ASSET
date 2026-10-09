@@ -1,172 +1,94 @@
 <Window x:Class="TrackerAgent.InstallerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="TRACKER-ASSET Audit Agent"
+        Title="TRACKER-ASSET"
         Icon="mito-icon.png"
-        Width="560" Height="470"
-        MinWidth="560" MinHeight="470"
+        Width="520" Height="400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        FontFamily="Segoe UI"
-        Background="#EB1C24"
-        AllowsTransparency="False">
+        FontFamily="Arial"
+        Background="#FFFFFF">
 
     <Window.Resources>
-        <!-- Constant motion across the bar so a long-running step (device
-             registration, first scan) never looks like a frozen window. -->
-        <Storyboard x:Key="ShimmerStoryboard">
-            <DoubleAnimation Storyboard.TargetName="ShimmerTransform"
-                             Storyboard.TargetProperty="X"
-                             From="-200" To="420"
-                             Duration="0:0:1.8"
-                             RepeatBehavior="Forever"/>
-        </Storyboard>
-
-        <!-- WPF's stock button chrome is a hard grey bevel; the installer needs
-             flat rounded pills to match the dark surface. -->
-        <Style x:Key="FlatButton" TargetType="Button">
+        <Style x:Key="BrutalButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Arial Black"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="Black"/>
+            <Setter Property="Foreground" Value="#000000"/>
+            <Setter Property="Background" Value="#FFFF00"/>
+            <Setter Property="BorderBrush" Value="#000000"/>
+            <Setter Property="BorderThickness" Value="4"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="MinWidth" Value="120"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
-                                CornerRadius="8" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" Direction="315" 
+                                                  ShadowDepth="6" BlurRadius="0" Opacity="1"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Opacity" Value="0.88"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bg" Property="Opacity" Value="0.75"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="30,26,30,22">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Border Background="#FFFFFF" BorderBrush="#000000" BorderThickness="5">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="10" BlurRadius="0" Opacity="1"/>
+        </Border.Effect>
+        
+        <Grid Margin="40,32,40,32">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-        <!-- Header: icon badge + wordmark. The 800x200 mito-logo-white.png is
-             almost entirely transparent padding (ink occupies only
-             x336-458 / y70-128), so the 256x256 square icon is the only asset
-             that actually reads at this size. -->
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Header: icon badge + wordmark. The badge is white because the MITO
-                 mark is itself a red square: red-on-red would be invisible. -->
-            <Border Grid.Column="0" Width="46" Height="46" CornerRadius="11"
-                    Background="#FFFFFF" BorderBrush="#FFFFFF" BorderThickness="1">
-                <Image Source="mito-icon.png" Width="34" Height="34" Stretch="Uniform"/>
+            <Border Grid.Row="0" Background="#FF00FF" BorderBrush="#000000" BorderThickness="4" Padding="16,12">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="5" BlurRadius="0" Opacity="1"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="TRACKER-ASSET" FontFamily="Arial Black" FontSize="28" FontWeight="Black" Foreground="#000000"/>
+                    <TextBlock x:Name="SubtitleText" Text="INSTALLING" FontFamily="Arial" FontSize="14" FontWeight="Bold" Foreground="#000000" Margin="0,4,0,0"/>
+                </StackPanel>
             </Border>
 
-            <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="TRACKER-ASSET" FontSize="23" FontWeight="Bold"
-                           Foreground="#FFFFFF"/>
-                <TextBlock Text="Zero-configuration agent install"
-                           FontSize="12.5" Foreground="#FFD6D9" Margin="0,3,0,0"/>
+            <Grid Grid.Row="1" Margin="0,32,0,0">
+                <StackPanel x:Name="StatusPanel" VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusText" Text="STARTING..." FontFamily="Arial Black" FontSize="16" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Center" Margin="0,0,0,24"/>
+                    
+                    <Border Background="#FFFFFF" BorderBrush="#000000" BorderThickness="4" Height="40" ClipToBounds="True">
+                        <Rectangle x:Name="ProgressFill" Fill="#00FF00" Width="0" HorizontalAlignment="Left"/>
+                    </Border>
+                    
+                    <TextBlock x:Name="PercentText" Text="0%" FontFamily="Arial Black" FontSize="20" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Right" Margin="0,16,0,0"/>
+                </StackPanel>
+
+                <StackPanel x:Name="ResultPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Border Width="100" Height="100" Background="#00FF00" BorderBrush="#000000" BorderThickness="5" HorizontalAlignment="Center" Margin="0,0,0,20">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="8" BlurRadius="0" Opacity="1"/>
+                        </Border.Effect>
+                        <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#000000" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    
+                    <TextBlock x:Name="ResultText" Text="DONE" FontFamily="Arial Black" FontSize="24" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                    <TextBlock x:Name="ResultDetail" Text="Agent ready" FontFamily="Arial" FontSize="13" FontWeight="Bold" Foreground="#333333" TextAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="360"/>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,32,0,0">
+                <Button x:Name="RetryButton" Content="RETRY" Visibility="Collapsed" Margin="0,0,12,0" Style="{StaticResource BrutalButton}" Background="#FF00FF" Click="RetryButton_Click"/>
+                <Button x:Name="CloseButton" Content="CLOSE" Visibility="Collapsed" Style="{StaticResource BrutalButton}" Click="CloseButton_Click"/>
             </StackPanel>
         </Grid>
-
-        <Grid Grid.Row="1" Margin="0,24,0,0">
-            <!-- Progress: the only UI while installing (no URL / token input) -->
-            <StackPanel x:Name="StatusPanel" VerticalAlignment="Center">
-                <TextBlock x:Name="StatusText" Text="Starting installation..."
-                           Foreground="#FFFFFF" FontSize="15" Margin="0,0,0,16"
-                           TextWrapping="Wrap" MaxWidth="430"
-                           HorizontalAlignment="Center" TextAlignment="Center"/>
-
-                <Border Background="#33FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1"
-                        CornerRadius="14" ClipToBounds="True" Height="28"
-                        Width="440" HorizontalAlignment="Center">
-                    <Grid>
-                        <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0"
-                                     Background="Transparent" BorderThickness="0" Foreground="#FFFFFF"/>
-                        <Rectangle Width="160" Opacity="0.30" IsHitTestVisible="False">
-                            <Rectangle.Fill>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="#00000000" Offset="0"/>
-                                    <GradientStop Color="#FFFFFFFF" Offset="0.5"/>
-                                    <GradientStop Color="#00000000" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Rectangle.Fill>
-                            <Rectangle.RenderTransform>
-                                <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
-                            </Rectangle.RenderTransform>
-                        </Rectangle>
-                    </Grid>
-                </Border>
-
-                <TextBlock x:Name="PercentText" Text="0%" Foreground="#FFD6D9"
-                           FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"
-                           FontWeight="Medium"/>
-            </StackPanel>
-
-            <!-- Result (hidden until finished). -->
-            <StackPanel x:Name="ResultPanel" Visibility="Collapsed" VerticalAlignment="Center">
-                <Border x:Name="ResultIconBadge" Width="64" Height="64" CornerRadius="32"
-                        Background="#FFFFFF" BorderThickness="1"
-                        HorizontalAlignment="Center">
-                    <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets"
-                               FontSize="29" HorizontalAlignment="Center"
-                               VerticalAlignment="Center" Text="&#xE73E;"/>
-                </Border>
-
-                <TextBlock x:Name="ResultText" FontSize="19" FontWeight="SemiBold"
-                           Foreground="#FFFFFF" HorizontalAlignment="Center"
-                           TextAlignment="Center" TextWrapping="Wrap"
-                           MaxWidth="440" Margin="0,16,0,0"/>
-
-                <!-- The message card scrolls internally (MaxHeight) instead of
-                     letting the whole card scroll: a long failure message
-                     then never pushes the icon/title out of the window. -->
-                <Border Background="#33FFFFFF" BorderBrush="#59FFFFFF" BorderThickness="1"
-                        CornerRadius="10" Padding="16,12" MaxWidth="440" MaxHeight="152"
-                        HorizontalAlignment="Center" Margin="0,12,0,0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
-                        <TextBlock x:Name="ResultDetail" FontSize="12.5" Foreground="#FFE9EA"
-                                   HorizontalAlignment="Center" TextAlignment="Center"
-                                   TextWrapping="Wrap" LineHeight="19"/>
-                    </ScrollViewer>
-                </Border>
-            </StackPanel>
-        </Grid>
-
-        <!-- Buttons appear only when the user has to do something -->
-        <Grid Grid.Row="2" Margin="0,20,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <Button x:Name="RetryButton" Grid.Column="1" Content="Retry"
-                    Height="40" MinWidth="112" Visibility="Collapsed"
-                    Style="{StaticResource FlatButton}" Background="#FFFFFF"
-                    Foreground="#EB1C24"
-                    Click="RetryButton_Click"/>
-            <Button x:Name="CloseButton" Grid.Column="2" Content="Close"
-                    Height="40" MinWidth="104" Margin="10,0,0,0" Visibility="Collapsed"
-                    Style="{StaticResource FlatButton}" Background="#33FFFFFF"
-                    Foreground="#FFFFFF"
-                    Click="CloseButton_Click"/>
-        </Grid>
-    </Grid>
+    </Border>
 </Window>

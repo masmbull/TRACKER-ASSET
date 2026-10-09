@@ -53,7 +53,7 @@ public static class AgentRunner
     /// was raised from its default of 5 in the Dockerfile. At the default, six
     /// laptops online would have taken every worker and taken the site down.
     /// </remarks>
-    private const int LongPollSeconds = 55;
+    internal const int LongPollSeconds = 55;
 
     [DllImport("kernel32.dll")]
     static extern bool AttachConsole(int pid);
@@ -167,6 +167,11 @@ public static class AgentRunner
             Console.WriteLine($"OK: tray icon {icon.Width}x{icon.Height} loaded from the embedded mark.");
 
             return 0;
+        }
+
+        if (args.Any(a => a.Equals("--status", StringComparison.OrdinalIgnoreCase)))
+        {
+            return PrintStatus();
         }
 
         if (update)
@@ -441,9 +446,9 @@ public static class AgentRunner
         var nextFingerprint = DateTimeOffset.MinValue;
 
         // Declared outside the try: the retry sleep below has to know whether the
-            // request produced anything, and a local declared inside the block
-            // would not be in scope in the catch that decides to retry.
-            List<JsonElement>? commands = null;
+        // request produced anything, and a local declared inside the block
+        // would not be in scope in the catch that decides to retry.
+        List<JsonElement>? commands = null;
 
             while (true)
             {
@@ -803,6 +808,44 @@ public static class AgentRunner
     /// simply acked the command as done while every file stayed put.
     /// </remarks>
     public static void SelfRemove() => Uninstall();
+
+    private static int PrintStatus()
+    {
+        var installDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TRACKER");
+        var configPath = Path.Combine(installDir, "config.json");
+
+        try
+        {
+            if (!File.Exists(configPath))
+            {
+                Console.WriteLine("Status: Not installed");
+                return 1;
+            }
+
+            var json = File.ReadAllText(configPath);
+            using (var doc = System.Text.Json.JsonDocument.Parse(json))
+            {
+                var root = doc.RootElement;
+                var deviceId = root.GetProperty("device_id").GetString() ?? "unknown";
+                var serverUrl = root.GetProperty("server_url").GetString() ?? "unknown";
+                var installedAt = root.GetProperty("installed_at").GetString() ?? "unknown";
+
+                Console.WriteLine($"Status: Installed");
+                Console.WriteLine($"Device ID: {deviceId}");
+                Console.WriteLine($"Server: {serverUrl}");
+                Console.WriteLine($"Installed: {installedAt}");
+                Console.WriteLine($"Install Path: {installDir}");
+                return 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X] Error reading status: {ex.Message}");
+            return 1;
+        }
+    }
 
     static void Uninstall()
     {
