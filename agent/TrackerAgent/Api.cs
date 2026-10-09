@@ -55,8 +55,19 @@ public static class Api
     /// interrupt command handling. A full audit on this path would write an
     /// asset_audits row every minute.
     /// </remarks>
-    public static bool Heartbeat(string url, string token, Dictionary<string, string> payload)
+    public static bool Heartbeat(string url, string token, Dictionary<string, string> payload) =>
+        Heartbeat(url, token, payload, out _);
+
+    /// <param name="needsFullScan">
+    /// True when the server answered 202: it has no telemetry row for this device,
+    /// so a heartbeat alone can never make the machine appear on Live Fleet. The
+    /// caller has to run a full scan instead of pinging again.
+    /// </param>
+    public static bool Heartbeat(
+        string url, string token, Dictionary<string, string> payload, out bool needsFullScan)
     {
+        needsFullScan = false;
+
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/agent/heartbeat")
@@ -70,6 +81,16 @@ public static class Api
 
             if (resp.IsSuccessStatusCode)
             {
+                // 202 is the server saying "no snapshot yet, run a full scan".
+                //
+                // Both codes are success, and that is the trap: a device whose
+                // only snapshot is missing - installed while the API was down, or
+                // minted by a server whose database was reset - answered 202 to
+                // every heartbeat, looked "sent" in the log, and stayed invisible
+                // on Live Fleet forever because nothing ever queued the scan the
+                // server was asking for.
+                needsFullScan = resp.StatusCode == HttpStatusCode.Accepted;
+
                 return true;
             }
 
@@ -160,6 +181,16 @@ internal static string? CurrentBuildIdentity()
     try
     {
         var location = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+
+        // Single-file publishes have no assembly path on disk: their entry
+        // assembly Location is empty (IL3000), so the version has to come out of
+        // the running image instead. Without this fallback a deployed agent
+        // reports no version at all and its Tokens-page row reads "unknown" no
+        // matter which build is actually on the machine.
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            location = Environment.ProcessPath;
+        }
 
         return string.IsNullOrWhiteSpace(location) ? null : InstallCheck.ReadBuildIdentity(location);
     }
@@ -327,6 +358,51 @@ private sealed record SoftwareEntry(string? Name, string? Version, string? Publi
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Settle the scan the server asked for with its 202 heartbeat answer.
+    /// </summary>
+    /// <remarks>
+    /// The server refuses to invent a telemetry snapshot, so the pending `scan`
+    /// opened when this device registered is completed against the data the
+    /// caller has just posted. Without it that row sits pending forever and Live
+    /// Fleet keeps offering "Scan Now" on a machine that has already scanned.
+    ///
+    /// Targeted commands only. A broadcast (agent_token_id null) belongs to every
+    /// device, and settling it from a heartbeat path would report the whole fleet
+    /// as scanned the moment one laptop first reported.
+    /// </remarks>
+    public static void AckPendingHeartbeat(string url, string token)
+    {
+        try
+        {
+            var inbox = GetInbox(url, token);
+
+            if (inbox is null)
+            {
+                return;
+            }
+
+            foreach (var cmd in inbox)
+            {
+                var targeted = cmd.TryGetProperty("agent_token_id", out var owner) &&
+                    owner.ValueKind == JsonValueKind.Number;
+
+                if (targeted && cmd.GetProperty("command").GetString() == "scan")
+                {
+                    Ack(url, token, cmd.GetProperty("id").GetInt64(), "done",
+                        new Dictionary<string, string>
+                        {
+                            ["message"] = "This device had no fleet snapshot yet, so the requested full scan was run.",
+                        });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Could not settle the requested scan: {ex.Message}");
         }
     }
 

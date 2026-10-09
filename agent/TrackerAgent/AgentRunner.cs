@@ -135,13 +135,23 @@ public static class AgentRunner
             }
         }
 
-        // No terminal to write to (the autostart case) behaves exactly like --quiet.
-        // The poll loop logs on every failure, and with no console those writes
-        // either go nowhere or throw on Console.ForegroundColor.
+        // Silence when there is no terminal to write to (the autostart case), then
+        // mirror whatever the loop prints into agent.log. Autostart runs with
+        // --quiet and no console at all, so before this the only record of a
+        // daemon that 401ed on every poll - or died at startup, as the
+        // 0xc00000fd build did - was a Windows Error Reporting entry nobody reads.
+        // A silent agent and a broken one looked exactly alike.
+        //
+        // Order matters: MirrorConsole wraps the *current* writers, so silencing
+        // first means the file still gets every line while the terminal gets
+        // none. Mirroring first would wrap the real console and the log would
+        // then be handed to TextWriter.Null by SilenceConsole.
         if (quiet || !interactive)
         {
             SilenceConsole();
         }
+
+        AgentLog.MirrorConsole();
 
         if (uninstall)
         {
@@ -179,6 +189,32 @@ public static class AgentRunner
             serverUrl = serverUrl.TrimEnd('/');
             bool updated = AutoUpdater.PerformUpdate(serverUrl, token);
             return updated ? 0 : 1;
+        }
+
+        // Last resort before giving up: the credential the installer already put
+        // on this machine. The daemon used to read a token from the command line
+        // or the environment only, so any launch that did not repeat the original
+        // arguments exited with "No token provided." while a perfectly good
+        // token sat in config.json. Autostart is exactly that case after a server
+        // database reset: it replays the old, now dead, token from the Run key.
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            token = TryReadStoredToken() ?? string.Empty;
+        }
+
+        // Still nothing (a first run with no installer config): mint one. Same
+        // endpoint the installer uses, minus the UI, and persisted so the next
+        // launch has something to fall back to.
+        if (string.IsNullOrWhiteSpace(token) && TryReadDeviceId() is { Length: > 0 } deviceId)
+        {
+            var issued = Api.Register(serverUrl.TrimEnd('/'), deviceId, Environment.MachineName)
+                ?? Api.Register(ResolveDefaultServerUrl(), deviceId, Environment.MachineName);
+
+            if (!string.IsNullOrWhiteSpace(issued))
+            {
+                token = issued;
+                PersistToken(issued);
+            }
         }
 
         if (string.IsNullOrWhiteSpace(token))
@@ -261,6 +297,66 @@ public static class AgentRunner
 
             return doc.RootElement.TryGetProperty("device_id", out var id) && id.ValueKind == JsonValueKind.String
                 ? id.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Credential the installer (or a previous heal) already stored on this
+    /// machine: HKCU registry first, then config.json.
+    /// </summary>
+    static string? TryReadStoredToken()
+    {
+        try
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker"))
+            {
+                if (key?.GetValue("Token") is string fromRegistry && !string.IsNullOrWhiteSpace(fromRegistry))
+                {
+                    return fromRegistry;
+                }
+            }
+        }
+        catch
+        {
+            // Fall through to config.json.
+        }
+
+        return ReadTokenFromConfig(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TRACKER",
+            "config.json"));
+    }
+
+
+    /// <summary>
+    /// The token out of an installer-written config.json, or null when the file
+    /// is missing, unreadable, or carries no string "token".
+    /// </summary>
+    /// <remarks>
+    /// Split out from the lookup above so the parse - the half that regressed,
+    /// since on a wiped server the daemon had no other credential left - is
+    /// exercisable without reading HKCU or the real config.json. See
+    /// agent/TrackerAgent.Tests.
+    /// </remarks>
+    internal static string? ReadTokenFromConfig(string configPath)
+    {
+        try
+        {
+            if (!File.Exists(configPath))
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+
+            return doc.RootElement.TryGetProperty("token", out var token) && token.ValueKind == JsonValueKind.String
+                ? token.GetString()
                 : null;
         }
         catch
@@ -682,9 +778,21 @@ public static class AgentRunner
                 payload["device_id"] = deviceId;
             }
 
-            if (Api.Heartbeat(url, token, payload))
+            if (Api.Heartbeat(url, token, payload, out var needsFullScan))
             {
                 Console.WriteLine("[OK] Telemetry heartbeat sent.");
+
+                // 202: no snapshot exists on the server for this device, so no
+                // heartbeat will ever make it visible on Live Fleet. Run the full
+                // scan the server is asking for, in place. The daemon never
+                // returns to the installer, and an unactioned 202 is exactly what
+                // left a freshly enrolled machine invisible while its log claimed
+                // every heartbeat was sent.
+                if (needsFullScan)
+                {
+                    Console.WriteLine("[*] No fleet snapshot on the server yet; running the requested full scan.");
+                    RunOnce(url, token, assetId);
+                }
             }
             else
             {
@@ -697,38 +805,86 @@ public static class AgentRunner
         }
     }
 
-    static void PrintResult(JsonElement r)
-    {
-        var result = r.TryGetProperty("result", out var rv) ? rv.GetString() ?? "UNKNOWN" : "UNKNOWN";
-        var asset = r.TryGetProperty("asset", out var av) && av.ValueKind != JsonValueKind.Null ? av.GetString() : "N/A";
-
-        Console.ForegroundColor = result switch
+    internal static void PrintResult(JsonElement r) =>
+        ConsoleSafe(color =>
         {
-            "MATCH" => ConsoleColor.Green,
-            "MISMATCH" => ConsoleColor.Yellow,
-            _ => ConsoleColor.Magenta
-        };
-        Console.WriteLine($"\n[RESULT] {result}  (asset: {asset})");
+            var result = r.TryGetProperty("result", out var rv) ? rv.GetString() ?? "UNKNOWN" : "UNKNOWN";
+            var asset = r.TryGetProperty("asset", out var av) && av.ValueKind != JsonValueKind.Null ? av.GetString() : "N/A";
 
-        if (r.TryGetProperty("mismatches", out var mm) && mm.EnumerateObject().Any())
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("[!] Mismatches:");
-            foreach (var m in mm.EnumerateObject())
+            if (color) Console.ForegroundColor = result switch
             {
-                var val = m.Value;
-                var reg = val.TryGetProperty("registered", out var rv2) ? rv2.GetString() : "?";
-                var act = val.TryGetProperty("actual", out var av2) ? av2.GetString() : "?";
-                Console.WriteLine($"    {m.Name}: registered \"{reg}\" vs actual \"{act}\"");
+                "MATCH" => ConsoleColor.Green,
+                "MISMATCH" => ConsoleColor.Yellow,
+                _ => ConsoleColor.Magenta
+            };
+            Console.WriteLine($"\n[RESULT] {result}  (asset: {asset})");
+
+            // Object or array. The server serialises an empty PHP array as `[]`, so a
+            // device with nothing to report (NEW DEVICE / MATCH) answers with a JSON
+            // *array* where a populated mismatch set is an *object*. Calling
+            // EnumerateObject() unconditionally threw on the empty case, which made
+            // RunOnce return 1 and acked the scan as "failed" - the very first scan
+            // of every new device, and the reason a freshly promoted asset looked
+            // like a broken agent.
+            if (r.TryGetProperty("mismatches", out var mm) &&
+                ((mm.ValueKind == JsonValueKind.Object && mm.EnumerateObject().Any()) ||
+                 (mm.ValueKind == JsonValueKind.Array && mm.GetArrayLength() > 0)))
+            {
+                if (color) Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("[!] Mismatches:");
+
+                if (mm.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var m in mm.EnumerateObject())
+                    {
+                        var val = m.Value;
+                        var reg = val.TryGetProperty("registered", out var rv2) ? rv2.GetString() : "?";
+                        var act = val.TryGetProperty("actual", out var av2) ? av2.GetString() : "?";
+                        Console.WriteLine($"    {m.Name}: registered \"{reg}\" vs actual \"{act}\"");
+                    }
+                }
+                else
+                {
+                    foreach (var m in mm.EnumerateArray())
+                    {
+                        Console.WriteLine($"    {m}");
+                    }
+                }
             }
+
+            if (r.TryGetProperty("message", out var msg))
+            {
+                if (color) Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine(msg.GetString());
+            }
+
+            if (color) Console.ResetColor();
+        });
+
+    /// <summary>
+    /// Runs <paramref name="write"/> with a flag saying whether the console can
+    /// take colours at all.
+    /// </summary>
+    /// <remarks>
+    /// Touching <see cref="Console.ForegroundColor"/> under a redirected or
+    /// absent stdout throws IOException - the autostart case - so the flag is
+    /// probed once and every colour call is guarded by it. Printing itself never
+    /// depends on the colours, so redirected output still gets every line.
+    /// </remarks>
+    internal static void ConsoleSafe(Action<bool> write)
+    {
+        bool color;
+        try
+        {
+            _ = Console.ForegroundColor;
+            color = true;
+        }
+        catch (IOException)
+        {
+            color = false;
         }
 
-        if (r.TryGetProperty("message", out var msg))
-        {
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(msg.GetString());
-        }
-        Console.ResetColor();
+        write(color);
     }
 
     static void RegisterAutostart(string url, string token, string? assetId, int pollSeconds)

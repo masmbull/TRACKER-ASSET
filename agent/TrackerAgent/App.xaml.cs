@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,6 +16,18 @@ public partial class App : System.Windows.Application
     private NotifyIcon _trayIcon = null!;
     private string _installDir = "";
     private string _configPath = "";
+
+    /// <summary>
+    /// Guards the heartbeat-triggered full scan.
+    /// </summary>
+    /// <remarks>
+    /// A scan takes minutes (the first deep inventory runs a Windows Update
+    /// search), and the heartbeat keeps firing every 60 seconds. With no guard,
+    /// a device that needs one scan collected one more per minute - which is
+    /// exactly how this machine ended up with ten pending scans queued against
+    /// one token while the tray claimed it was reporting normally.
+    /// </remarks>
+    private static readonly SemaphoreSlim ScanGate = new(1, 1);
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -46,6 +60,12 @@ public partial class App : System.Windows.Application
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "TRACKER");
         _configPath = Path.Combine(_installDir, "config.json");
+
+        // The tray runs with no console either, so it logs to the same
+        // agent.log the daemon uses. Without it the only symptom of a tray that
+        // never reached the server was a fleet page quietly showing the device
+        // offline - nothing on the machine said why.
+        AgentLog.Write($"Tray started (build {InstallCheck.ReadBuildIdentity(Environment.ProcessPath) ?? "unknown"}).");
 
         var installed = ReadInstalledConfig();
 
@@ -173,11 +193,44 @@ public partial class App : System.Windows.Application
         var nextHeartbeat = DateTimeOffset.MinValue;
         var nextFingerprint = DateTimeOffset.MinValue;
 
+        // config is a local record copy, not the readonly field: a rejected
+        // token is healed into it below and every later poll and ack in this
+        // process uses the new credential. The tray used to poll with
+        // config.Token forever and had no heal path at all, so a rotated or
+        // re-registered token left the device silent on Live Fleet until the
+        // whole application was restarted.
         while (true)
         {
             try
             {
-                var commands = Api.GetInbox(config.ServerUrl, config.Token, AgentRunner.LongPollSeconds, out _);
+                var commands = Api.GetInbox(config.ServerUrl, config.Token, AgentRunner.LongPollSeconds, out var unauthorized);
+
+                if (unauthorized)
+                {
+                    // Same self-heal as the CLI daemon: ask for a fresh token
+                    // rather than staying 401 on a machine nobody can reach.
+                    var issues = RegisterDevice(config.ServerUrl, config.Token);
+                    var issued = issues.TryGetValue("token", out var value) ? value : null;
+
+                    if (!string.IsNullOrWhiteSpace(issued))
+                    {
+                        config = config with { Token = issued };
+
+                        // Report against the address this device actually
+                        // enrolled on: the installer writes server_url into
+                        // config.json and the registry, and a machine moved to a
+                        // different server would go back to the old one on the
+                        // next launch otherwise.
+                        if (issues.TryGetValue("server_url", out var reported) &&
+                            !string.IsNullOrWhiteSpace(reported))
+                        {
+                            config = config with { ServerUrl = reported.TrimEnd('/') };
+                        }
+
+                        SaveConfig(config.ServerUrl, config.Token);
+                        AgentLog.Write("Token was rejected - re-registered and obtained a new one.");
+                    }
+                }
 
                 if (commands != null)
                 {
@@ -236,7 +289,37 @@ public partial class App : System.Windows.Application
             }
             catch (Exception pollEx)
             {
-                Debug.WriteLine($"CommandLoop poll error: {pollEx.Message}");
+                AgentLog.Write($"CommandLoop poll error: {pollEx.Message}");
+            }
+
+            // The server answered the heartbeat with 202 "run a full scan": this
+            // device has no telemetry row, so Live Fleet has nothing to show for
+            // it. Do the scan the server asked for instead of pinging again a
+            // minute later and getting the same answer.
+            if (PendingHeartbeat)
+            {
+                PendingHeartbeat = false;
+
+                // Never two scans at once. A scan takes minutes and the
+                // heartbeat fires every 60 seconds, so without the gate a device
+                // that needs one scan collected one more per minute - how this
+                // machine ended up with ten of them queued against its one token.
+                if (ScanGate.Wait(0))
+                {
+                    try
+                    {
+                        // Settle the scan the server opened when this device
+                        // registered, before doing the work: the row is the page's
+                        // "queued" badge and it would otherwise stay lit forever.
+                        Api.AckPendingHeartbeat(config.ServerUrl, config.Token);
+                        RunScan(config);
+                        nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                    }
+                    finally
+                    {
+                        ScanGate.Release();
+                    }
+                }
             }
 
             // Long-poll above already parks for up to 20s; this is the gap after a
@@ -280,18 +363,17 @@ public partial class App : System.Windows.Application
             var payload = HardwareCollector.Collect();
             payload["device_id"] = config.DeviceId;
 
-            if (!Api.Heartbeat(config.ServerUrl, config.Token, payload))
-            {
-                // Deliberately silent. A transient failure is not worth a tray
-                // balloon every 60 seconds; the server marks the device offline
-                // on its own if it really has stopped reporting.
-                Debug.WriteLine("Heartbeat rejected or unreachable.");
-            }
+            Api.Heartbeat(config.ServerUrl, config.Token, payload, out var needsFullScan);
+
+            // 202: the server has no snapshot of this device at all, so another
+            // heartbeat would get the same answer. The poll loop runs the scan
+            // the server asked for instead.
+            PendingHeartbeat |= needsFullScan;
         }
         catch (Exception ex)
-        {
-            Debug.WriteLine($"Heartbeat error: {ex.Message}");
-        }
+            {
+                AgentLog.Write($"Heartbeat error: {ex.Message}");
+            }
     }
 
     private void RunFingerprint(AgentConfig config)
@@ -305,7 +387,163 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Fingerprint error: {ex.Message}");
+            AgentLog.Write($"Fingerprint error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Set by the heartbeat when the server answers 202, i.e. this device has no
+    /// telemetry snapshot yet and a full scan is the only thing that creates one.
+    /// The loop acts on it below rather than collecting hardware twice.
+    /// </summary>
+    private bool PendingHeartbeat;
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    /// <summary>
+    /// Ask the server for a fresh credential and the address to report to.
+    /// </summary>
+    /// <remarks>
+    /// Added for the tray alone. The CLI daemon heals 401s through
+    /// AgentRunner.TryHealToken, but the tray had no heal path at all: a token
+    /// that was neither empty nor valid - revoked on the Tokens page and then
+    /// restored, or minted by a server whose database was reset - left the
+    /// device permanently offline. The reply is read with the same snake_case
+    /// keys the installer uses, so nothing downstream changes.
+    /// </remarks>
+    private static Dictionary<string, string> RegisterDevice(string serverUrl, string token)
+    {
+        var issues = new Dictionary<string, string>();
+
+        try
+        {
+            var payload = new Dictionary<string, string>();
+
+            // Read from config.json rather than the in-memory field: the
+            // registration endpoint matches on the hardware id this machine
+            // generated, so a restarted tray must send the same one or it mints
+            // a second device row for the same laptop.
+            var deviceId = ReadConfigValue("device_id");
+
+            if (!string.IsNullOrWhiteSpace(deviceId))
+            {
+                payload["device_id"] = deviceId!;
+                payload["hardware_id"] = deviceId!;
+            }
+
+            var identity = InstallCheck.ReadBuildIdentity(Environment.ProcessPath);
+
+            if (!string.IsNullOrWhiteSpace(identity))
+            {
+                payload["agent_version"] = identity;
+            }
+
+            payload["name"] = Environment.MachineName;
+            payload["platform"] = Environment.OSVersion.ToString();
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, $"{serverUrl.TrimEnd('/')}/api/agent/register")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+            }
+
+            using var response = Http.Send(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                AgentLog.Write($"[!] Re-register rejected: HTTP {(int)response.StatusCode}");
+                return issues;
+            }
+
+            using var body = JsonDocument.Parse(
+                response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+
+            foreach (var key in new[] { "token", "device_id" })
+            {
+                if (body.RootElement.TryGetProperty(key, out var value) &&
+                    value.ValueKind == JsonValueKind.String)
+                {
+                    issues[key] = value.GetString() ?? string.Empty;
+                }
+            }
+
+            issues["server_url"] = serverUrl.TrimEnd('/');
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Re-register error: {ex.Message}");
+        }
+
+        return issues;
+    }
+
+    /// <summary>
+    /// Mirror a healed token into config.json and the HKCU registry, so the next
+    /// launch starts with the same working credential. Best-effort: a failure
+    /// here only costs the heal, never the running tray.
+    /// </summary>
+    private static void SaveConfig(string serverUrl, string token)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER");
+
+            Directory.CreateDirectory(dir);
+
+            File.WriteAllText(
+                Path.Combine(dir, "config.json"),
+                JsonSerializer.Serialize(
+                    new Dictionary<string, string>
+                    {
+                        ["device_id"] = ReadConfigValue("device_id") ?? string.Empty,
+                        ["token"] = token,
+                        ["server_url"] = serverUrl,
+                        ["installed_at"] = ReadConfigValue("installed_at")
+                            ?? DateTimeOffset.Now.ToString("o"),
+                    },
+                    new JsonSerializerOptions { WriteIndented = true }));
+
+            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker");
+            key?.SetValue("ServerUrl", serverUrl);
+            key?.SetValue("Token", token);
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not persist the healed credential: {ex.Message}");
+        }
+    }
+
+    /// <summary>One string field out of config.json, or null when it is missing.</summary>
+    private static string? ReadConfigValue(string name)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER", "config.json");
+
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+
+            return doc.RootElement.TryGetProperty(name, out var value)
+                ? value.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -330,7 +568,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"OpenScanWindow error: {ex.Message}");
+            AgentLog.Write($"OpenScanWindow error: {ex.Message}");
         }
     }
 

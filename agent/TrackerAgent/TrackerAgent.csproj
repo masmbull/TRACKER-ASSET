@@ -9,22 +9,38 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-    <!-- Bumped for the extended inventory release: 15 new readings (Secure Boot,
-         BitLocker strength, autologon, screen lock, Guest account, Defender
-         detail, patch/CVE state, BIOS, chassis, architecture) plus the six
-         hardware fields the probes were silently dropping.
+    <!-- Bumped for the fleet reconnect release. Defects that all looked like
+         "the exe does not connect": the installed build stack-overflowed on
+         startup, the tray had no token self-heal (so a revoked-then-restored
+         token left the device permanently offline), the 202 "run a full scan"
+         answer to a heartbeat was treated as success (so a device with no
+         telemetry snapshot never appeared on Live Fleet at all), and the CLI
+         daemon ignored the credential already stored by the installer, so a
+         launch that did not repeat the original token argument exited with "No
+         token provided." while a usable token sat in config.json.
 
          The bump is not cosmetic. The install check compares the clicked build
          against the installed one and refuses to run when they match, so a fix
          shipped under an unchanged version number can never be installed - the
          machine answers "Aplikasi Sudah Pernah Diinstall" and the new binary
          simply never lands. That is exactly what happened here. -->
-    <Version>1.2.0</Version>
+    <Version>1.3.1</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
     <ApplicationIcon>tracker-agent.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- The token lookup and the scan-result printer are internal, not public
+       API. The offline harness in agent/TrackerAgent.Tests links against them
+       directly, which is the point: the two defects it pins (a daemon that
+       ignored the stored token, and a scan of an empty mismatch set that threw
+       before it could ack) lived in exactly those helpers. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>TrackerAgent.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <Resource Include="mito-logo-white.png" />
