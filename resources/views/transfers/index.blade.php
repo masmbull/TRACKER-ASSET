@@ -58,7 +58,7 @@
             <td class="py-3 px-4">{{ $transfer->transfer_number }}</td>
             <td class="py-3 px-4">{{ $transfer->transfer_date?->format('Y-m-d') }}</td>
             <td class="py-3 px-4">
-                <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-blue-600">
+                <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-red-600 hover:text-red-700">
                     {{ $transfer->asset?->asset_id }}
                 </a>
                 <span class="text-xs text-gray-500 block">{{ $transfer->asset?->brand }} {{ $transfer->asset?->model }}</span>
@@ -76,7 +76,7 @@
                 @if($transfer->status === 'approved')
                     <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-700">Approved</span>
                 @elseif($transfer->status === 'pending')
-                    <span class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700">Pending</span>
+                    <span class="px-2 py-1 text-xs rounded bg-gray-100 text-gray-700">Pending</span>
                 @elseif($transfer->status === 'rejected')
                     <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700">Rejected</span>
                 @else
@@ -84,7 +84,7 @@
                 @endif
             </td>
             <td class="py-3 px-4">
-                <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-blue-600 text-sm">View Asset</a>
+                <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-red-600 text-sm hover:text-red-700">View Asset</a>
             </td>
         </tr>
         @endforeach

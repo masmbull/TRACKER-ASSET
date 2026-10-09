@@ -22,7 +22,7 @@
             </div>
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <p class="text-theme-xs text-gray-500 dark:text-gray-400">Duplicate</p>
-                <p class="text-title-sm font-bold text-orange-600">{{ $analysis['summary']['duplicate'] }}</p>
+                <p class="text-title-sm font-bold text-gray-700">{{ $analysis['summary']['duplicate'] }}</p>
             </div>
         </div>
 
@@ -61,7 +61,7 @@
                                             'valid' => 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300',
                                             'warning' => 'bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300',
                                             'error' => 'bg-error-100 text-error-700 dark:bg-error-500/10 dark:text-error-300',
-                                            'duplicate' => 'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300',
+                                            'duplicate' => 'bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-300',
                                         ][$row['status']] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
                                     @endphp
                                     <span class="rounded px-2 py-1 text-theme-xs font-medium {{ $badge }}">{{ $row['status'] }}</span>

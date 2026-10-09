@@ -57,7 +57,7 @@
             </td>
             <td class="py-3 px-4 text-xs text-gray-500">{{ $asset->retire_date?->format('Y-m-d') }}</td>
             <td class="py-3 px-4">
-                <a href="{{ route('assets.show', $asset) }}" class="text-blue-600">View</a>
+                <a href="{{ route('assets.show', $asset) }}" class="text-red-600 hover:text-red-700">View</a>
             </td>
         </tr>
         @endforeach

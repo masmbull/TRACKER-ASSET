@@ -12,7 +12,7 @@
         </p>
     </div>
     <div class="flex gap-2">
-        <a href="{{ route('ike-bast.inspection.print', $session) }}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded">Print</a>
+        <a href="{{ route('ike-bast.inspection.print', $session) }}" target="_blank" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Print</a>
         @if($session->asset)
             <a href="{{ route('assets.show', $session->asset) }}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Back to Asset</a>
         @endif

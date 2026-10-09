@@ -49,7 +49,7 @@
     <tbody>
         @foreach($sessions as $session)
         <tr class="border-b hover:bg-gray-50">
-            <td class="py-3 px-4"><a href="{{ route('ike-bast.inspection.show', $session) }}" class="text-blue-600">{{ $session->session_number }}</a></td>
+            <td class="py-3 px-4"><a href="{{ route('ike-bast.inspection.show', $session) }}" class="text-red-600 hover:text-red-700">{{ $session->session_number }}</a></td>
             <td class="py-3 px-4">{{ $session->kind }}</td>
             <td class="py-3 px-4">{{ $session->asset?->asset_id }}</td>
             <td class="py-3 px-4">{{ $session->lines_count }}</td>

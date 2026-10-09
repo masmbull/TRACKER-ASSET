@@ -86,7 +86,7 @@
     </div>
 
     <div class="flex gap-2 pt-4">
-        <button type="submit" class="bg-orange-600 text-white px-6 py-2 rounded">Add Repair</button>
+        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Add Repair</button>
         <a href="/assets/{{ $asset->id }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
     </div>
 </form>

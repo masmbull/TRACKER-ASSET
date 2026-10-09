@@ -132,7 +132,7 @@
     </div>
 
     <div class="flex gap-2 pt-4">
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded">Save Inspection</button>
+        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Save Inspection</button>
         <a href="{{ route('assets.show', $asset) }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
     </div>
 </form>

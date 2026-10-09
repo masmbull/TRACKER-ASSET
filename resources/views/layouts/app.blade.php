@@ -128,9 +128,8 @@
             <div class="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear">
                 @foreach($navGroups as $groupName => $items)
                     <nav class="mb-6">
-                        <h3 class="mb-4 text-xs font-semibold leading-5 text-gray-400 uppercase dark:text-gray-500">
-                            <span class="menu-group-title" :class="sidebarToggle ? 'xl:hidden' : ''">{{ $groupName }}</span>
-                            <span :class="sidebarToggle ? 'lg:block hidden' : 'hidden'" class="text-center">⋯</span>
+                        <h3 class="mb-4 text-xs font-semibold leading-5 text-gray-400 uppercase dark:text-gray-500" :class="sidebarExpanded ? '' : 'text-center'">
+                            <span :class="sidebarExpanded ? '' : 'hidden'">{{ $groupName }}</span>
                         </h3>
                         <ul class="flex flex-col gap-1">
                             @foreach($items as $item)
@@ -146,7 +145,7 @@
                                            @click="selectedMenu = '{{ $item['route'] }}'"
                                            class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                             <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none">{!! $item['icon'] !!}</svg>
-                                            <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">{{ $item['label'] }}</span>
+                                            <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">{{ $item['label'] }}</span>
                                         </a>
                                     </li>
                                 @endif
@@ -157,9 +156,8 @@
 
                 @if(Gate::allows('manage-master-data'))
                     <nav class="mb-6">
-                        <h3 class="mb-4 text-xs font-semibold leading-5 text-gray-400 uppercase dark:text-gray-500">
-                            <span class="menu-group-title" :class="sidebarToggle ? 'xl:hidden' : ''">MASTER DATA</span>
-                            <span :class="sidebarToggle ? 'lg:block hidden' : 'hidden'" class="text-center">⋯</span>
+                        <h3 class="mb-4 text-xs font-semibold leading-5 text-gray-400 uppercase dark:text-gray-500" :class="sidebarExpanded ? '' : 'text-center'">
+                            <span :class="sidebarExpanded ? '' : 'hidden'">MASTER DATA</span>
                         </h3>
                         <ul class="flex flex-col gap-1">
                             @foreach($masterItems as $item)
@@ -169,7 +167,7 @@
                                        @click="selectedMenu = 'master.{{ $item['type'] }}'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="2" fill="currentColor"/><circle cx="16" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="16" r="2" fill="currentColor"/><circle cx="16" cy="16" r="2" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">{{ $item['label'] }}</span>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">{{ $item['label'] }}</span>
                                     </a>
                                 </li>
                             @endforeach
@@ -180,7 +178,7 @@
                                        @click="selectedMenu = 'users.index'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 3.5C7.30558 3.5 3.5 7.30558 3.5 12C3.5 14.1526 4.3002 16.1184 5.61936 17.616C6.17279 15.3096 8.24852 13.5955 10.7246 13.5955H13.2746C15.7509 13.5955 17.8268 15.31 18.38 17.6167C19.6996 16.119 20.5 14.153 20.5 12C20.5 7.30558 16.6944 3.5 12 3.5ZM17.0246 18.8566V18.8455C17.0246 16.7744 15.3457 15.0955 13.2746 15.0955H10.7246C8.65354 15.0955 6.97461 16.7744 6.97461 18.8455V18.856C8.38223 19.8895 10.1198 20.5 12 20.5C13.8798 20.5 15.6171 19.8898 17.0246 18.8566ZM2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12ZM11.9991 7.25C10.8847 7.25 9.98126 8.15342 9.98126 9.26784C9.98126 10.3823 10.8847 11.2857 11.9991 11.2857C13.1135 11.2857 14.0169 10.3823 14.0169 9.26784C14.0169 8.15342 13.1135 7.25 11.9991 7.25ZM8.48126 9.26784C8.48126 7.32499 10.0563 5.75 11.9991 5.75C13.9419 5.75 15.5169 7.32499 15.5169 9.26784C15.5169 11.2107 13.9419 12.7857 11.9991 12.7857C10.0563 12.7857 8.48126 11.2107 8.48126 9.26784Z" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Users</span>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Users</span>
                                     </a>
                                 </li>
                             @endif
@@ -191,7 +189,7 @@
                                        @click="selectedMenu = 'agent.index'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM4.5 12C4.5 7.85786 7.85786 4.5 12 4.5C16.1421 4.5 19.5 7.85786 19.5 12C19.5 16.1421 16.1421 19.5 12 19.5C7.85786 19.5 4.5 16.1421 4.5 12ZM12 7C8.13401 7 5 10.134 5 14C5 14.2761 5.22386 14.5 5.5 14.5H18.5C18.7761 14.5 19 14.2761 19 14C19 10.134 15.866 7 12 7Z" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Audit Agents</span>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Audit Agents</span>
                                     </a>
                                 </li>
                                 @php $isActive = $route === 'agent.fleet'; @endphp
@@ -200,7 +198,7 @@
                                        @click="selectedMenu = 'agent.fleet'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 5.5C4 4.25736 5.00736 3.25 6.25 3.25H9.25C10.4926 3.25 11.5 4.25736 11.5 5.5V8.5C11.5 9.74264 10.4926 10.75 9.25 10.75H6.25C5.00736 10.75 4 9.74264 4 8.5V5.5ZM6.25 4.75C5.83579 4.75 5.5 5.08579 5.5 5.5V8.5C5.5 8.91421 5.83579 9.25 6.25 9.25H9.25C9.66421 9.25 10 8.91421 10 8.5V5.5C10 5.08579 9.66421 4.75 9.25 4.75H6.25ZM4 15.5C4 14.2574 5.00736 13.25 6.25 13.25H9.25C10.4926 13.25 11.5 14.2574 11.5 15.5V18.5C11.5 19.7426 10.4926 20.75 9.25 20.75H6.25C5.00736 20.75 4 19.7426 4 18.5V15.5ZM6.25 14.75C5.83579 14.75 5.5 15.0858 5.5 15.5V18.5C5.5 18.9142 5.83579 19.25 6.25 19.25H9.25C9.66421 19.25 10 18.9142 10 18.5V15.5C10 15.0858 9.66421 14.75 9.25 14.75H6.25ZM12.5 6.25C12.5 5.83579 12.8358 5.5 13.25 5.5H20C20.4142 5.5 20.75 5.83579 20.75 6.25C20.75 6.66421 20.4142 7 20 7H13.25C12.8358 7 12.5 6.66421 12.5 6.25ZM12.5 12C12.5 11.5858 12.8358 11.25 13.25 11.25H20C20.4142 11.25 20.75 11.5858 20.75 12C20.75 12.4142 20.4142 12.75 20 12.75H13.25C12.8358 12.75 12.5 12.4142 12.5 12ZM12.5 17.75C12.5 17.3358 12.8358 17 13.25 17H20C20.4142 17 20.75 17.3358 20.75 17.75C20.75 18.1642 20.4142 18.5 20 18.5H13.25C12.8358 18.5 12.5 18.1642 12.5 17.75ZM4.25 12C4.25 11.5858 4.58579 11.25 5 11.25H11C11.4142 11.25 11.75 11.5858 11.75 12C11.75 12.4142 11.4142 12.75 11 12.75H5C4.58579 12.75 4.25 12.4142 4.25 12Z" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Live Fleet</span>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Live Fleet</span>
                                     </a>
                                 </li>
                             @endif
@@ -213,7 +211,7 @@
                                         {{-- A heartbeat trace: this page is about whether
                                              the backing services are alive. --}}
                                         <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M2.5 12h4l2.5-6 4 13 2.5-7h6" stroke="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarToggle ? 'xl:hidden' : ''">Services</span>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Services</span>
                                     </a>
                                 </li>
                             @endif

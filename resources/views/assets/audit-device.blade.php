@@ -16,7 +16,7 @@
         <div><span class="text-gray-500">Registered OS / RAM / IP:</span> {{ $asset->os_version }} · {{ $asset->ram }} · {{ $asset->static_ip }}</div>
     </div>
 
-    <button type="button" onclick="scanDevice()" class="bg-blue-600 hover:bg-blue-700 text-white text-lg px-8 py-3 rounded shadow">
+    <button type="button" onclick="scanDevice()" class="bg-red-600 hover:bg-red-700 text-white text-lg px-8 py-3 rounded shadow">
         Scan Device (1 klik)
     </button>
     <span id="scan-status" class="ml-3 text-sm text-green-600 font-semibold"></span>
@@ -41,7 +41,7 @@
     <input type="hidden" name="browser_storage" id="browser_storage">
     <input type="hidden" name="browser_gpu" id="browser_gpu">
 
-    <div class="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
+    <div class="bg-gray-50 border border-gray-200 rounded p-3 text-sm">
         Browser sandbox <strong>cannot</strong> read serial / hostname / MAC. Type them from the
         device label if you verify them physically — leave empty to skip (they will not be compared).
     </div>
@@ -131,9 +131,9 @@
                 const hit = token && actual.toLowerCase().indexOf(token.toLowerCase()) >= 0;
                 badge = hit
                     ? '<span class="text-green-600 font-semibold">match</span>'
-                    : '<span class="text-yellow-700 font-semibold">differs</span>';
+                    : '<span class="text-gray-700 font-semibold">differs</span>';
             } else if (actual) {
-                badge = '<span class="text-blue-600">collected</span>';
+                badge = '<span class="text-gray-600">collected</span>';
             }
             return '<tr class="border-b">'
                 + '<td class="py-1 px-2">' + name + '</td>'
