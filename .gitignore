@@ -37,6 +37,11 @@ storage/*.ps1
 agent/TrackerAgent/bin/
 agent/TrackerAgent/obj/
 agent/TrackerAgent.exe
+# Dev scratch, never shipped. delete_tokens.php wipes agent_api_tokens with no
+# WHERE clause -- keep it off the repo so nobody runs it against prod.
+anti-slop/
+opencode.json
+delete_tokens.php
 # Single-file publish output: ~160 MB per build, never committed.
 agent/publish/
 server.php
