@@ -8,7 +8,9 @@ namespace TrackerAgent;
 
 public static class Api
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(60) };
+    // Has to outlive the server's long-poll cap (60s), or every parked request is
+    // cancelled client-side and the long-poll degenerates into a slow poll.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(90) };
 
     /// <summary>
     /// camelCase everywhere.
@@ -177,7 +179,7 @@ internal static string? CurrentBuildIdentity()
 /// </remarks>
 private static void Authenticate(HttpRequestMessage req, string token)
 {
-    Authenticate(req, token);
+    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
     var identity = CurrentBuildIdentity();
 
@@ -207,35 +209,56 @@ private sealed record SoftwareEntry(string? Name, string? Version, string? Publi
     {
         unauthorized = false;
 
-        // The wait has to outlive the server's own cap or the client gives up
-        // first and the long-poll is just a slow poll. The server clamps to 60s.
-        var endpoint = waitSeconds > 0
-            ? $"{url}/api/agent/inbox?wait={Math.Clamp(waitSeconds, 1, 60)}"
-            : $"{url}/api/agent/inbox";
-
-        using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
-        Authenticate(req, token);
-
-        using var resp = Http.Send(req);
-        var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-
-        if (resp.StatusCode == HttpStatusCode.Unauthorized)
+        try
         {
-            unauthorized = true;
+            var endpoint = waitSeconds > 0
+                ? $"{url}/api/agent/inbox?wait={Math.Clamp(waitSeconds, 1, 60)}"
+                : $"{url}/api/agent/inbox";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            Authenticate(req, token);
+
+            // Must outlast the server-side wait (clamped to 60s there) or every
+            // parked long-poll is cancelled here instead of answered, turning
+            // the long-poll into a slow plain poll.
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(65));
+
+            HttpResponseMessage resp = Http.Send(req, cts.Token);
+
+            using (resp)
+            {
+                var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+                if (resp.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    unauthorized = true;
+                    return null;
+                }
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("commands", out var cmds) && cmds.GetArrayLength() > 0)
+                {
+                    return cmds.EnumerateArray().Select(c => c.Clone()).ToList();
+                }
+
+                return null;
+            }
+        }
+        catch (System.Threading.Tasks.TaskCanceledException)
+        {
+            // Idle long-poll expiring is the normal path, not an error.
             return null;
         }
-
-        if (!resp.IsSuccessStatusCode) return null;
-
-        using var doc = JsonDocument.Parse(body);
-        if (doc.RootElement.TryGetProperty("commands", out var cmds) && cmds.GetArrayLength() > 0)
+        catch (Exception ex)
         {
-            // Clone: the JsonDocument is disposed when this method returns, so the
-            // elements must own their own copy of the backing data.
-            return cmds.EnumerateArray().Select(c => c.Clone()).ToList();
+            Console.WriteLine($"[API] Error: {ex.GetType().Name}: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 
     /// <summary>

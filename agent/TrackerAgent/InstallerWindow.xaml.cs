@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Management;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -76,16 +78,19 @@ public partial class InstallerWindow : Window
         switch (mode)
         {
             case InstallerMode.AlreadyInstalled:
+                SubtitleText.Text = "Already installed";
                 ShowAlreadyInstalled();
                 break;
 
             case InstallerMode.Update:
+                SubtitleText.Text = "Updating agent...";
                 StartProgressAnimation();
                 BeginShimmer();
                 _ = AutoUpdateAsync();
                 break;
 
             default:
+                SubtitleText.Text = "Installing...";
                 StartProgressAnimation();
                 BeginShimmer();
                 _ = AutoInstallAsync();
@@ -104,22 +109,18 @@ public partial class InstallerWindow : Window
         _progressTimer.Tick += (_, _) =>
         {
             var remaining = _targetProgress - _displayedProgress;
-
             _displayedProgress = remaining <= 1
                 ? _targetProgress
                 : _displayedProgress + Math.Max(1, (int)Math.Ceiling(remaining * 0.18));
 
-            ProgressBar.Value = _displayedProgress;
+            ProgressFill.Width = (int)(_displayedProgress / 100.0 * 400);
             PercentText.Text = $"{_displayedProgress}%";
         };
         _progressTimer.Start();
     }
 
-    private void BeginShimmer() =>
-        ((Storyboard)FindResource("ShimmerStoryboard")).Begin(this, true);
-
-    private void EndShimmer() =>
-        ((Storyboard)FindResource("ShimmerStoryboard")).Stop(this);
+    private void BeginShimmer() { }
+    private void EndShimmer() { }
 
     /// <summary>Thread-safe progress report (called from the worker thread).</summary>
     private void Report(int percent, string message)
@@ -133,18 +134,29 @@ public partial class InstallerWindow : Window
 
     private async Task AutoInstallAsync()
     {
-        Report(2, "Looking for the TRACKER-ASSET server...");
+        Report(2, "Looking for server...");
 
-        var serverUrl = await Task.Run(DiscoverServerUrl);
+        var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30)); // 30 second overall timeout
+
+        var completedTask = await Task.WhenAny(serverDiscoveryTask, timeoutTask);
+
+        if (completedTask == timeoutTask)
+        {
+            ShowFailure("Server discovery timed out. Check network connection or provide server URL manually.");
+            return;
+        }
+
+        var serverUrl = await serverDiscoveryTask;
 
         if (serverUrl is null)
         {
-            ShowFailure("No TRACKER-ASSET server answered. Start the server (or download this agent from it) and press Retry.");
+            ShowFailure("No TRACKER-ASSET server found. Ensure server is running or download from it.");
             return;
         }
 
         _serverUrl = serverUrl;
-        Report(12, $"Server found: {serverUrl}");
+        Report(12, $"Server found");
 
         var installed = await Task.Run(() => RunInstall(serverUrl));
 
@@ -154,7 +166,7 @@ public partial class InstallerWindow : Window
         }
         else
         {
-            ShowFailure(_lastError.Length > 0 ? _lastError : "The installer could not finish.");
+            ShowFailure(_lastError.Length > 0 ? _lastError : "Installation failed.");
         }
     }
 
@@ -310,7 +322,8 @@ public partial class InstallerWindow : Window
                 "Configuring autostart...");
 
             Report(86, "Starting the background agent...");
-            StartDetached(destExe, $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+            // Tray process is launched from OnClosed after this window exits,
+            // so the file lock on the installed exe is fully released first.
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
                 "Starting the background agent...");
 
@@ -321,7 +334,8 @@ public partial class InstallerWindow : Window
             Report(94, "Running the first hardware scan...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
                 "Running the first hardware scan...");
-            StartDetached(destExe, $"--url \"{serverUrl}\" --token \"{token}\"");
+            // Launch in daemon mode for reliable background operation
+            StartDetached(destExe, $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 5");
 
             Report(100, "Installation complete");
             Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
@@ -335,7 +349,17 @@ public partial class InstallerWindow : Window
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
+            // Better error messages for common failure modes
+            string friendlyMessage = ex switch
+            {
+                System.IO.IOException => "File operation failed. Check disk space and permissions.",
+                System.Net.Http.HttpRequestException => "Cannot reach server. Check network connection.",
+                System.Reflection.TargetInvocationException => "Installation script error. Contact support.",
+                System.UnauthorizedAccessException => "Permission denied. Run as Administrator.",
+                _ => ex.Message
+            };
+
+            _lastError = friendlyMessage;
             Debug.WriteLine($"Install error: {ex}");
 
             // Reported with whatever token was obtained, if any. A failed install
@@ -344,8 +368,8 @@ public partial class InstallerWindow : Window
             if (!string.IsNullOrWhiteSpace(_installTokenForReporting))
             {
                 Api.ReportInstallProgress(serverUrl, _installTokenForReporting, "install", "failed", 0,
-                    $"Installation failed: {ex.Message}",
-                    new Dictionary<string, string> { ["message"] = ex.Message });
+                    $"Installation failed: {friendlyMessage}",
+                    new Dictionary<string, string> { ["message"] = ex.GetType().Name, ["detail"] = ex.Message });
             }
 
             return false;
@@ -434,25 +458,32 @@ public partial class InstallerWindow : Window
             using var key = Registry.CurrentUser.CreateSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Run");
 
+            // Launch in daemon mode (headless, proven stable) instead of tray
+            // Daemon mode runs the same polling loop but without WPF UI blocking
             key?.SetValue("MitoAuditTracker",
-                $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
+                $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 5");
         }
         catch { }
     }
 
-    /// <summary>Starts an agent process without showing a console window.</summary>
+    /// <summary>Starts an agent process detached from this one.</summary>
+    /// <param name="exePath">Full path to TrackerAgent.exe.</param>
+    /// <param name="arguments">CLI arguments, or empty string for tray/GUI mode.</param>
     private static void StartDetached(string exePath, string arguments)
     {
         try
         {
-            Process.Start(new ProcessStartInfo
+            var psi = new ProcessStartInfo
             {
-                FileName = exePath,
-                Arguments = arguments,
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                CreateNoWindow = true,
-            });
+                FileName         = exePath,
+                UseShellExecute  = false,
+                CreateNoWindow   = false,
+            };
+
+            if (!string.IsNullOrWhiteSpace(arguments))
+                psi.Arguments = arguments;
+
+            Process.Start(psi);
         }
         catch { }
     }
@@ -485,7 +516,7 @@ public partial class InstallerWindow : Window
     /// </summary>
     private async Task AutoUpdateAsync()
     {
-        Report(2, $"Update {_installedVersion} to {_newVersion}: preparing...");
+        Report(2, $"Preparing update...");
 
         var updated = await Task.Run(RunUpdate);
 
@@ -495,7 +526,7 @@ public partial class InstallerWindow : Window
         }
         else
         {
-            ShowFailure(_lastError.Length > 0 ? _lastError : "The update could not finish.");
+            ShowFailure(_lastError.Length > 0 ? _lastError : "Update failed.");
         }
     }
 
@@ -702,12 +733,12 @@ public partial class InstallerWindow : Window
         CloseButton.Visibility = Visibility.Visible;
 
         SetResult(
-            GlyphOk,
-            "Aplikasi Sudah Pernah Diinstall",
-            $"Versi {_installedVersion} sudah terpasang di mesin ini.\n\n" +
+            GlyphInfo,
+            "Already Installed",
+            $"Version {_installedVersion} is already running on this machine.\n\n" +
             $"{_installedExe}\n\n" +
-            "Tidak ada yang perlu dilakukan. Jalankan installer versi lebih baru untuk memperbarui.",
-            SuccessBrush);
+            "To update, download and run a newer version of the agent.",
+            InfoBrush);
     }
 
     /// <summary>Swap finished: report the version jump, then auto-close.</summary>
@@ -716,17 +747,15 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
-            EndShimmer();
 
+            SubtitleText.Text = "Update complete";
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
 
             SetResult(
                 GlyphOk,
-                "Pembaruan Selesai",
-                $"Versi {_installedVersion} → {_newVersion}\n\n" +
-                $"Dipasang ke {_installDir}\n\n" +
-                "Agent latar sudah dijalankan ulang — perangkat tetap melapor.",
+                "Update Complete",
+                $"Agent updated successfully.\n\nDevice keeps reporting.",
                 SuccessBrush);
 
             _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
@@ -739,29 +768,26 @@ public partial class InstallerWindow : Window
         });
     }
 
-    private void ShowSuccess()
+        private void ShowSuccess()
     {
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
-            EndShimmer();
 
+            SubtitleText.Text = "Installation complete";
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             SetResult(
                 GlyphOk,
-                "Installation complete",
-                $"Agent installed to {_installDir}\n\n" +
-                $"Connected to {_serverUrl}\n\n" +
-                "This laptop is now on Live Fleet. If it is not on the register yet, an " +
-                "administrator adds it from the fleet page — nothing was registered automatically.",
+                "Installation Complete",
+                $"Agent installed to {_installDir}\n\nConnected to {_serverUrl}\n\nDevice is now visible on Live Fleet.",
                 SuccessBrush);
 
-            // Nothing to click on success: close the window after a moment.
-            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
+            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2);
             _autoCloseTimer.Tick += (_, _) =>
             {
                 _autoCloseTimer.Stop();
+                Debug.WriteLine("[INSTALL] OnClosed: launching tray daemon");
                 Close();
             };
             _autoCloseTimer.Start();
@@ -773,8 +799,8 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
-            EndShimmer();
 
+            SubtitleText.Text = _mode == InstallerMode.Update ? "Update failed" : "Installation failed";
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Visible;
@@ -782,56 +808,33 @@ public partial class InstallerWindow : Window
 
             SetResult(
                 GlyphError,
-                _mode == InstallerMode.Update ? "Update failed" : "Installation failed",
+                _mode == InstallerMode.Update ? "Update Failed" : "Installation Failed",
                 message,
                 ErrorBrush);
         });
     }
 
     /// <summary>Segoe MDL2 glyphs used by the result badge.</summary>
-    private const string GlyphOk = "\uE73E";   // Accept (check)
-    private const string GlyphError = "\uE783"; // Error (cross in circle)
+    private const string GlyphOk = "\uE73E";    // Accept (check mark)
+    private const string GlyphError = "\uE783"; // Error (circle cross)
+    private const string GlyphInfo = "\uE946";  // Info
 
-    // Chosen to stay legible on the brand-red window: the previous light greens and
-// pinks disappeared into #EB1C24.
-private static readonly System.Windows.Media.Brush SuccessBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x04, 0x7A, 0x3D));
+    private static readonly System.Windows.Media.Brush SuccessBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x22, 0xC5, 0x5E)); // green-500
     private static readonly System.Windows.Media.Brush ErrorBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB3, 0x0F, 0x16));
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xEF, 0x44, 0x44)); // red-500
+    private static readonly System.Windows.Media.Brush InfoBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4F, 0x8E, 0xF7)); // blue
 
     /// <summary>
-    /// Fills the result card in one place. The badge is filled with a
-    /// low-alpha tint of the accent (via <see cref="SetBadgeTint"/>) so the
-    /// ring, the wash behind it and the glyph always agree on colour.
+    /// Fills the result card in one place.
     /// </summary>
     private void SetResult(string glyph, string title, string detail, System.Windows.Media.Brush accent)
     {
         ResultIcon.Text = glyph;
         ResultIcon.Foreground = accent;
-        SetBadgeTint(accent);
         ResultText.Text = title;
         ResultDetail.Text = detail;
-    }
-
-    /// <summary>
-    /// Paints the result badge. The window is now the brand red, so the badge is
-    /// solid white and the accent colour is used for the glyph and the ring.
-    /// </summary>
-    /// <remarks>
-    /// The old version tinted the badge with a low-alpha wash of the accent,
-    /// which was correct on the dark navy surface. On #EB1C24 a translucent red
-    /// error badge disappeared into the background, so the fill is now opaque
-    /// white and the accent only tints the ring.
-    /// </remarks>
-    private void SetBadgeTint(System.Windows.Media.Brush accent)
-    {
-        var rgb = accent is SolidColorBrush solid
-            ? solid.Color
-            : System.Windows.Media.Colors.White;
-
-        ResultIconBadge.Background = new SolidColorBrush(System.Windows.Media.Colors.White);
-        ResultIconBadge.BorderBrush = new SolidColorBrush(
-            System.Windows.Media.Color.FromArgb((byte)0xCC, rgb.R, rgb.G, rgb.B));
     }
 
     private async void RetryButton_Click(object sender, RoutedEventArgs e)
@@ -843,7 +846,7 @@ private static readonly System.Windows.Media.Brush SuccessBrush =
 
         _targetProgress = 0;
         _displayedProgress = 0;
-        ProgressBar.Value = 0;
+        ProgressFill.Width = 0;
         PercentText.Text = "0%";
 
         _progressTimer.Start();
@@ -860,4 +863,44 @@ private static readonly System.Windows.Media.Brush SuccessBrush =
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void WindowCloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+            DragMove();
+    }
+
+    // ── Dark title bar (Windows 11) ──────────────────────────────────────────
+    // Tells DWM to render the caption buttons and title bar in dark mode so
+    // the white chrome doesn't clash with the #0F1117 window background.
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd  = new WindowInteropHelper(this).Handle;
+        var value = 1; // DWMWA_USE_IMMERSIVE_DARK_MODE
+        DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
+    }
+
+    /// <summary>
+    /// After a successful install, launch the installed exe in tray mode once
+    /// this installer window is fully closed and its file lock released.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+
+        if (_mode == InstallerMode.Install && _installDir.Length > 0)
+        {
+            var installedExe = System.IO.Path.Combine(_installDir, "TrackerAgent.exe");
+            if (System.IO.File.Exists(installedExe))
+            {
+                StartDetached(installedExe, string.Empty);
+            }
+        }
+    }
 }

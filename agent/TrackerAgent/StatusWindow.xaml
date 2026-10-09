@@ -1,0 +1,122 @@
+<Window x:Class="TrackerAgent.StatusWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TRACKER-ASSET STATUS"
+        Icon="mito-icon.png"
+        Width="520" Height="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        FontFamily="Arial Black"
+        Background="#FFFFFF">
+
+    <Window.Resources>
+        <Style x:Key="BrutalButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Arial Black"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Black"/>
+            <Setter Property="Foreground" Value="#000000"/>
+            <Setter Property="BorderBrush" Value="#000000"/>
+            <Setter Property="BorderThickness" Value="4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                SnapsToDevicePixels="True">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" ShadowDepth="6" Direction="315" BlurRadius="0" Opacity="1"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#FFFFFF" BorderBrush="#000000" BorderThickness="5">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" ShadowDepth="10" Direction="315" BlurRadius="0" Opacity="1"/>
+        </Border.Effect>
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" Background="#FF00FF" BorderBrush="#000000" BorderThickness="4" Padding="16,12">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" ShadowDepth="5" Direction="315" BlurRadius="0" Opacity="1"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="TRACKER-ASSET" FontSize="22" FontWeight="Black" Foreground="#000000"/>
+                    <TextBlock x:Name="VersionText" Text="AGENT v1.2.0" FontSize="13" Foreground="#000000" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Info -->
+            <Border Grid.Row="1" Background="#00FFFF" BorderBrush="#000000" BorderThickness="4" Padding="20" Margin="0,20,0,0">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" ShadowDepth="6" Direction="315" BlurRadius="0" Opacity="1"/>
+                </Border.Effect>
+                <StackPanel>
+                    <!-- Server -->
+                    <Border Background="#FFFF00" BorderBrush="#000000" BorderThickness="3" Padding="12,8" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="SERVER" FontSize="10" Foreground="#000000" FontWeight="Black"/>
+                            <TextBlock x:Name="ServerText" Text="http://127.0.0.1:8000" FontSize="12" Foreground="#000000" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Device ID -->
+                    <Border Background="#00FF00" BorderBrush="#000000" BorderThickness="3" Padding="12,8" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="DEVICE ID" FontSize="10" Foreground="#000000" FontWeight="Black"/>
+                            <TextBlock x:Name="DeviceIdText" Text="xxxxxxxx…" FontSize="11" FontFamily="Courier New" Foreground="#000000" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Status -->
+                    <Border Background="#FF00FF" BorderBrush="#000000" BorderThickness="3" Padding="12,8" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="STATUS" FontSize="10" Foreground="#000000" FontWeight="Black"/>
+                            <TextBlock x:Name="StatusText" Text="RUNNING" FontSize="12" Foreground="#000000" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Installed -->
+                    <Border Background="#FFFF00" BorderBrush="#000000" BorderThickness="3" Padding="12,8" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="INSTALLED" FontSize="10" Foreground="#000000" FontWeight="Black"/>
+                            <TextBlock x:Name="InstalledText" Text="2026-10-05 17:39" FontSize="12" Foreground="#000000" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Path -->
+                    <Border Background="#00FF00" BorderBrush="#000000" BorderThickness="3" Padding="12,8">
+                        <StackPanel>
+                            <TextBlock Text="PATH" FontSize="10" Foreground="#000000" FontWeight="Black"/>
+                            <TextBlock x:Name="PathText" Text="C:\Users\...\TRACKER" FontSize="10" Foreground="#000000" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Close Button -->
+            <Button Grid.Row="2" x:Name="CloseBtn" Content="CLOSE"
+                    Margin="0,20,0,0"
+                    Style="{StaticResource BrutalButton}"
+                    Background="#FF00FF"
+                    Click="CloseButton_Click"
+                    HorizontalAlignment="Center" MinWidth="160"/>
+        </Grid>
+    </Border>
+</Window>
