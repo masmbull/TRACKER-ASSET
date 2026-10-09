@@ -14,6 +14,8 @@ namespace TrackerAgent;
 public partial class App : System.Windows.Application
 {
     private NotifyIcon _trayIcon = null!;
+    private Mutex? _trayMutex;
+    private bool _ownsTrayMutex;
     private string _installDir = "";
     private string _configPath = "";
 
@@ -152,6 +154,25 @@ public partial class App : System.Windows.Application
 
     private void StartTray(AgentConfig config)
     {
+        try
+        {
+            _trayMutex = new Mutex(true, @"Local\MITO.TRACKER-ASSET.Tray", out _ownsTrayMutex);
+
+            if (!_ownsTrayMutex)
+            {
+                _trayMutex.Dispose();
+                _trayMutex = null;
+                Shutdown();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not enforce single tray instance: {ex.Message}");
+        }
+
+        RegisterTrayAutostart();
+
         // Tray-only app: closing the Status window (or never opening one) must not
         // end the process. Shutdown happens from the Exit menu and from the
         // uninstall command, both of which call Shutdown() on purpose.
@@ -183,9 +204,23 @@ public partial class App : System.Windows.Application
             }));
         _trayIcon.ContextMenuStrip.Items.Add("Scan Now", null, (_, _) => RunScan(config));
         _trayIcon.ContextMenuStrip.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
-        _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
 
         _ = Task.Run(() => CommandLoop(config));
+    }
+
+    private static void RegisterTrayAutostart()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run");
+            key?.SetValue("MitoAuditTracker",
+                InstallCheck.BuildTrayAutostartCommand(InstallCheck.InstalledExe));
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not register tray autostart: {ex.Message}");
+        }
     }
 
     private async Task CommandLoop(AgentConfig config)
@@ -624,6 +659,19 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+
+        if (_ownsTrayMutex)
+        {
+            try
+            {
+                _trayMutex?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+            }
+        }
+
+        _trayMutex?.Dispose();
         base.OnExit(e);
     }
 

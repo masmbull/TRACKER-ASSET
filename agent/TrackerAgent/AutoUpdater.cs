@@ -9,6 +9,78 @@ public static class AutoUpdater
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(2) };
 
+    public static bool CheckForUpdate(string serverUrl, string token, out string message)
+    {
+        message = "No update available.";
+        string? tempPath = null;
+
+        try
+        {
+            var currentExe = Environment.ProcessPath
+                ?? Path.Combine(AppContext.BaseDirectory, "TrackerAgent.exe");
+
+            if (!File.Exists(currentExe))
+            {
+                message = "The current agent executable could not be located.";
+                return false;
+            }
+
+            var currentDir = Path.GetDirectoryName(currentExe)!;
+            tempPath = Path.Combine(currentDir, $"_check_TrackerAgent_{Guid.NewGuid():N}.exe");
+            var downloadUrl = $"{serverUrl.TrimEnd('/')}/agent/download";
+
+            using (var req = new HttpRequestMessage(HttpMethod.Get, downloadUrl))
+            {
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                }
+
+                using var resp = Http.Send(req, HttpCompletionOption.ResponseHeadersRead);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    message = $"The update server rejected the check (HTTP {(int)resp.StatusCode}).";
+                    return false;
+                }
+
+                using var stream = resp.Content.ReadAsStream();
+                using var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                stream.CopyTo(fs);
+            }
+
+            var currentIdentity = InstallCheck.ReadBuildIdentity(currentExe);
+            var latestIdentity = InstallCheck.ReadBuildIdentity(tempPath);
+
+            if (string.IsNullOrWhiteSpace(latestIdentity))
+            {
+                message = "The downloaded update file is invalid or unreadable.";
+                return false;
+            }
+
+            if (InstallCheck.IsSameBuild(currentIdentity, latestIdentity))
+            {
+                message = "No update is available for this device.";
+                return false;
+            }
+
+            message = $"Update available: {InstallCheck.ReadVersion(tempPath)?.ToString() ?? latestIdentity}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = $"Could not contact the update server. {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(tempPath) && File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); }
+                catch { }
+            }
+        }
+    }
+
     /// <summary>
     /// Checks and executes self-update from the server's /agent/download endpoint.
     /// Spawns a background helper script, replaces the executable, and restarts.
@@ -72,13 +144,8 @@ public static class AutoUpdater
 
             Console.WriteLine($"[OK] Downloaded new version ({fi.Length / 1024 / 1024:N1} MB). Preparing swap...");
 
-            // Pass the original command line args to restart identically
-            var args = Environment.GetCommandLineArgs();
-            var forwardArgs = args.Length > 1
-                ? string.Join(" ", args.Skip(1).Select(a => a.Contains(' ') ? $"\"{a}\"" : a))
-                : "";
-
-            // Create batch script that waits for current process to exit, swaps exe, and restarts it
+            // Restart without CLI flags so installed config launches the tray
+            // and repairs the Run key instead of reviving a headless daemon.
             var scriptContent = $@"@echo off
 timeout /t 2 /nobreak >nul
 :loop
@@ -88,7 +155,7 @@ if exist ""{currentExe}"" (
     goto loop
 )
 move /y ""{tempNewExe}"" ""{currentExe}"" >nul
-start """" ""{currentExe}"" {forwardArgs}
+start """" ""{currentExe}""
 del /f /q ""%~f0"" >nul 2>&1
 ";
             File.WriteAllText(updateScript, scriptContent, System.Text.Encoding.ASCII);
