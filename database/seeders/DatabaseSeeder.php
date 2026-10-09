@@ -15,7 +15,10 @@ class DatabaseSeeder extends Seeder
             StatusSeeder::class,
             UserSeeder::class,
             DocumentTemplateSeeder::class,
-            ExcelImportSeeder::class,
         ]);
+
+        // ponytail: ExcelImportSeeder deliberately unwired — it re-imports the demo
+        // sheet (IT Assets.xlsx), so a fresh install was never actually empty.
+        // Run `php artisan db:seed --class=ExcelImportSeeder` when demo assets are wanted.
     }
 }
