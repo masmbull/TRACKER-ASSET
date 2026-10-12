@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,8 +29,10 @@ class InternalScriptCommandController extends Controller
         }
 
         $validated = $request->validate([
-            'target' => ['required', Rule::in(['all', 'device'])],
+            'target' => ['required', Rule::in(['all', 'device', 'devices'])],
             'agent_token_id' => ['nullable', 'required_if:target,device', 'integer', 'exists:agent_api_tokens,id'],
+            'agent_token_ids' => ['nullable', 'required_if:target,devices', 'array'],
+            'agent_token_ids.*' => ['integer', 'exists:agent_api_tokens,id'],
             'script_name' => ['required', 'string', 'max:255'],
             'script_type' => ['required', Rule::in(['powershell', 'cmd', 'batch', 'ps1', 'bat', 'exe'])],
             'script_body' => ['required', 'string'],
@@ -42,35 +45,50 @@ class InternalScriptCommandController extends Controller
             'source' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $tokenId = $validated['target'] === 'device'
-            ? (int) $validated['agent_token_id']
-            : null;
+        $targetIds = match ($validated['target']) {
+            'all' => [null],
+            'device' => [(int) $validated['agent_token_id']],
+            'devices' => array_map('intval', $validated['agent_token_ids'] ?? []),
+            default => [null],
+        };
 
-        $command = AgentCommand::create([
-            'agent_token_id' => $tokenId,
-            'command' => 'script',
-            'payload' => [
-                'script_name' => $validated['script_name'],
-                'script_type' => $validated['script_type'],
-                'script_body' => $validated['script_body'],
-                'working_directory' => $validated['working_directory'] ?? null,
-                'run_as' => $validated['run_as'] ?? 'current-user',
-                'timeout_seconds' => $validated['timeout_seconds'] ?? 300,
-                'sha256' => $validated['sha256'] ?? null,
-                'trigger' => $validated['trigger'] ?? 'once',
-                'notes' => $validated['notes'] ?? null,
-                'source' => $validated['source'] ?? 'internal-api',
-            ],
-            'status' => 'pending',
-        ]);
+        $commandIds = [];
+        foreach ($targetIds as $targetTokenId) {
+            $command = AgentCommand::create([
+                'agent_token_id' => $targetTokenId,
+                'command' => 'script',
+                'payload' => [
+                    'script_name' => $validated['script_name'],
+                    'script_type' => $validated['script_type'],
+                    'script_body' => $validated['script_body'],
+                    'working_directory' => $validated['working_directory'] ?? null,
+                    'run_as' => $validated['run_as'] ?? 'current-user',
+                    'timeout_seconds' => $validated['timeout_seconds'] ?? 300,
+                    'sha256' => $validated['sha256'] ?? null,
+                    'trigger' => $validated['trigger'] ?? 'once',
+                    'notes' => $validated['notes'] ?? null,
+                    'source' => $validated['source'] ?? 'internal-api',
+                ],
+                'status' => 'pending',
+            ]);
+
+            $commandIds[] = $command->id;
+        }
+
+        $targetLabel = match ($validated['target']) {
+            'all' => 'all devices',
+            'device' => AgentApiToken::findOrFail((int) $validated['agent_token_id'])->name,
+            'devices' => count($targetIds).' devices',
+            default => 'selected devices',
+        };
 
         return response()->json([
             'ok' => true,
             'target' => $validated['target'],
-            'command_id' => $command->id,
-            'message' => $validated['target'] === 'device'
-                ? 'Script queued for the selected device.'
-                : 'Script queued for all devices.',
+            'command_ids' => $commandIds,
+            'message' => $validated['target'] === 'all'
+                ? 'Script queued for all devices.'
+                : "Script queued for {$targetLabel}.",
         ], 202);
     }
 }

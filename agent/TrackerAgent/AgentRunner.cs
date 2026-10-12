@@ -4,6 +4,7 @@ using System.Management;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -478,6 +479,26 @@ public static class AgentRunner
             var scriptPath = Path.Combine(safeDirectory, normalizedName);
 
             File.WriteAllText(scriptPath, scriptBody);
+
+            if (payload.TryGetProperty("sha256", out var hashValue) && hashValue.ValueKind == JsonValueKind.String)
+            {
+                var expectedHash = (hashValue.GetString() ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(expectedHash))
+                {
+                    using var stream = File.OpenRead(scriptPath);
+                    using var sha256 = SHA256.Create();
+                    var actualHash = Convert.ToHexString(sha256.ComputeHash(stream));
+                    if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                        {
+                            ["message"] = "SHA-256 mismatch. The script payload was modified before execution.",
+                        });
+
+                        return 1;
+                    }
+                }
+            }
 
             if (scriptType == "exe")
             {

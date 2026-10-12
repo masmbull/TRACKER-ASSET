@@ -707,8 +707,10 @@ class AgentFleetController extends Controller
         $this->authorize('manage-agents');
 
         $validated = $request->validate([
-            'target' => ['required', 'in:all,device'],
+            'target' => ['required', 'in:all,device,devices'],
             'agent_token_id' => ['nullable', 'required_if:target,device', 'exists:agent_api_tokens,id'],
+            'agent_token_ids' => ['nullable', 'required_if:target,devices', 'array'],
+            'agent_token_ids.*' => ['integer', 'exists:agent_api_tokens,id'],
             'script_name' => ['required', 'string', 'max:255'],
             'script_type' => ['required', 'in:powershell,cmd,batch,ps1,bat,exe'],
             'script_body' => ['required', 'string'],
@@ -720,9 +722,12 @@ class AgentFleetController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $tokenId = $validated['target'] === 'device'
-            ? (int) $validated['agent_token_id']
-            : null;
+        $targetIds = match ($validated['target']) {
+            'all' => [null],
+            'device' => [(int) $validated['agent_token_id']],
+            'devices' => array_map('intval', $validated['agent_token_ids'] ?? []),
+            default => [null],
+        };
 
         $payload = [
             'script_name' => $validated['script_name'],
@@ -737,16 +742,23 @@ class AgentFleetController extends Controller
             'created_by' => $request->user()?->name ?? 'system',
         ];
 
-        $target = $tokenId === null ? 'all devices' : AgentApiToken::findOrFail($tokenId)->name;
+        foreach ($targetIds as $targetTokenId) {
+            AgentCommand::create([
+                'agent_token_id' => $targetTokenId,
+                'command' => 'script',
+                'payload' => $payload,
+                'status' => 'pending',
+            ]);
+        }
 
-        AgentCommand::create([
-            'agent_token_id' => $tokenId,
-            'command' => 'script',
-            'payload' => $payload,
-            'status' => 'pending',
-        ]);
+        $targetLabel = match ($validated['target']) {
+            'all' => 'all devices',
+            'device' => AgentApiToken::findOrFail((int) $validated['agent_token_id'])->name,
+            'devices' => count($targetIds).' devices',
+            default => 'selected devices',
+        };
 
-        return back()->with('success', "Script queued for {$target}. The next poll will fetch and execute it.");
+        return back()->with('success', "Script queued for {$targetLabel}. The next poll will fetch and execute it.");
     }
 
     /**

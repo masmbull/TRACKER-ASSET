@@ -125,6 +125,7 @@
                 <select name="target" x-model="target" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     <option value="all">All laptops</option>
                     <option value="device">Specific laptop</option>
+                    <option value="devices">Multiple laptops</option>
                 </select>
             </div>
 
@@ -132,6 +133,17 @@
                 <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Laptop</label>
                 <select name="agent_token_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     <option value="">Select device</option>
+                    @foreach($tokens as $token)
+                        @if($token->isUsable())
+                            <option value="{{ $token->id }}">{{ $token->name }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
+
+            <div x-show="target === 'devices'" class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Selected laptops</label>
+                <select name="agent_token_ids[]" multiple size="8" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     @foreach($tokens as $token)
                         @if($token->isUsable())
                             <option value="{{ $token->id }}">{{ $token->name }}</option>
