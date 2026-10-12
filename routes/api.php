@@ -42,3 +42,5 @@ Route::middleware(AuthenticateAuditAgent::class)->group(function () {
     Route::post('/agent/commands/{command}/progress', [AgentCommandApiController::class, 'progress']);
     Route::post('/agent/install-progress', [AgentCommandApiController::class, 'installProgress']);
 });
+
+Route::middleware('throttle:20,1')->post('/internal/agent/commands/script', [\App\Http\Controllers\Api\InternalScriptCommandController::class, 'dispatch']);

@@ -14,8 +14,8 @@
     @error('vendor') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
 </div>
 <div>
-    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Purchase year</label>
-    <input type="number" name="purchase_year" value="{{ old('purchase_year') }}" min="1900" max="{{ date('Y') + 2 }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Purchase year *</label>
+    <input type="number" name="purchase_year" id="purchase_year" value="{{ old('purchase_year') }}" min="1900" max="{{ date('Y') + 2 }}" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
     @error('purchase_year') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
 </div>
 <div>

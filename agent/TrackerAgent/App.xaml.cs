@@ -280,8 +280,17 @@ public partial class App : System.Windows.Application
                             // local tray window. Run the actual full inventory in the
                             // background and settle the command only after the agent has
                             // posted both the audit and the fingerprint payload.
-                            RunScan(config);
-                            Api.Ack(config.ServerUrl, config.Token, id, "done");
+                            var result = RunScan(config);
+                            nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                            nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+                            Api.Ack(config.ServerUrl, config.Token, id,
+                                result == 0 ? "done" : "failed",
+                                new Dictionary<string, string>
+                                {
+                                    ["message"] = result == 0
+                                        ? "Audit and deep inventory completed."
+                                        : "The full scan failed. Check the agent log and retry.",
+                                });
                         }
                         else if (command == "update")
                         {
@@ -319,6 +328,13 @@ public partial class App : System.Windows.Application
                             AgentRunner.SelfRemove();
                             return;
                         }
+                        else if (command == "script")
+                        {
+                            AgentLog.Write($"Script command #{id} received. Executing...");
+                            Api.ReportProgress(config.ServerUrl, config.Token, id, 10, "Preparing script...");
+                            var scriptExitCode = AgentRunner.RunScriptCommand(config.ServerUrl, config.Token, id, cmd);
+                            AgentLog.Write($"Script command #{id} finished with exit code {scriptExitCode}.");
+                        }
                         else
                         {
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
@@ -350,8 +366,11 @@ public partial class App : System.Windows.Application
                         // Settle the scan the server opened when this device
                         // registered, before doing the work: the row is the page's
                         // "queued" badge and it would otherwise stay lit forever.
-                        Api.AckPendingHeartbeat(config.ServerUrl, config.Token);
-                        RunScan(config);
+                        var result = RunScan(config);
+                        nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                        nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+                        Api.AckPendingHeartbeat(
+                            config.ServerUrl, config.Token, result == 0 ? "done" : "failed");
                         nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
                     }
                     finally
@@ -622,16 +641,17 @@ public partial class App : System.Windows.Application
     /// did not already have, and one saying "Scan failed." popped up with no
     /// indication of what failed or where to look.
     /// </remarks>
-    private void RunScan(AgentConfig config)
+    private int RunScan(AgentConfig config)
     {
         try
         {
-            AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId);
+            return AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId);
         }
         catch
         {
             // Swallowed on purpose. The server marks the device offline when it
             // stops reporting, which is the visible signal.
+            return 1;
         }
     }
 

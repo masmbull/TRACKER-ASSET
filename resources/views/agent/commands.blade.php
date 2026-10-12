@@ -13,9 +13,10 @@
                 <x-button type="submit" variant="secondary" size="sm">Scan All Laptops</x-button>
             </form>
             <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')">Update All Agents</x-button>
+            <x-button type="button" variant="success" size="sm" @click="$dispatch('open-modal', 'push-script-modal')">Push Script</x-button>
             <form method="POST" action="{{ route('agent.sweep') }}" data-modal-action>
                 @csrf
-                <x-button type="submit" variant="success" size="sm">Sweep Now</x-button>
+                <x-button type="submit" variant="secondary" size="sm">Sweep Now</x-button>
             </form>
         </div>
     </x-slot:actions>
@@ -108,5 +109,99 @@
             <x-button type="submit" variant="primary">Update agents</x-button>
         </form>
     </div>
+</x-modal>
+
+<x-modal id="push-script-modal" title="Push script to devices" maxWidth="2xl">
+    <form method="POST" action="{{ route('agent.commands.script') }}" class="space-y-5" x-data="{
+        target: 'all',
+        scriptType: 'powershell',
+        sample: 'Write-Host \"Starting deployment...\"; Start-Sleep -Seconds 5; Write-Host \"Done\";'
+    }">
+        @csrf
+
+        <div class="grid gap-4 md:grid-cols-2">
+            <div class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Target</label>
+                <select name="target" x-model="target" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="all">All laptops</option>
+                    <option value="device">Specific laptop</option>
+                </select>
+            </div>
+
+            <div x-show="target === 'device'" class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Laptop</label>
+                <select name="agent_token_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="">Select device</option>
+                    @foreach($tokens as $token)
+                        @if($token->isUsable())
+                            <option value="{{ $token->id }}">{{ $token->name }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Script file name</label>
+                <input type="text" name="script_name" value="setup-agent-task.ps1" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="e.g. install-app.ps1">
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Script type</label>
+                <select name="script_type" x-model="scriptType" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="powershell">PowerShell (.ps1)</option>
+                    <option value="cmd">CMD (.cmd)</option>
+                    <option value="bat">Batch (.bat)</option>
+                    <option value="exe">Executable</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Run as</label>
+                <select name="run_as" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="current-user">Current user</option>
+                    <option value="admin">Administrator</option>
+                    <option value="system">System</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Timeout (seconds)</label>
+                <input type="number" name="timeout_seconds" value="300" min="10" max="3600" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+            </div>
+
+            <div>
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">SHA-256</label>
+                <input type="text" name="sha256" value="" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="Optional: verify payload integrity">
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Working directory</label>
+                <input type="text" name="working_directory" value="C:\\Temp\\Scripts" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="C:\Temp\Scripts">
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Trigger</label>
+                <select name="trigger" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="once">Run once</option>
+                    <option value="reboot">Run at next reboot</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Script body</label>
+                <textarea name="script_body" x-model="sample" rows="10" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="Write-Host \"Deploying...\"">Write-Host "Deploying..."; Start-Sleep -Seconds 5; Write-Host "Done";</textarea>
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                <textarea name="notes" rows="3" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="Optional: why this script is being pushed, when to run it, or instructions for the operator."></textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3">
+            <button type="button" @click="$dispatch('close-modal', 'push-script-modal')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+            <x-button type="submit" variant="primary">Queue script</x-button>
+        </div>
+    </form>
 </x-modal>
 @endsection

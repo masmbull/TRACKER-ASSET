@@ -72,12 +72,7 @@
             $navGroups = [
                 'MENU' => [
                     ['route' => 'dashboard', 'label' => 'Dashboard', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V8.99998C3.25 10.2426 4.25736 11.25 5.5 11.25H9C10.2426 11.25 11.25 10.2426 11.25 8.99998V5.5C11.25 4.25736 10.2426 3.25 9 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H9C9.41421 4.75 9.75 5.08579 9.75 5.5V8.99998C9.75 9.41419 9.41421 9.74998 9 9.74998H5.5C5.08579 9.74998 4.75 9.41419 4.75 8.99998V5.5ZM5.5 12.75C4.25736 12.75 3.25 13.7574 3.25 15V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H9C10.2426 20.75 11.25 19.7427 11.25 18.5V15C11.25 13.7574 10.2426 12.75 9 12.75H5.5ZM4.75 15C4.75 14.5858 5.08579 14.25 5.5 14.25H9C9.41421 14.25 9.75 14.5858 9.75 15V18.5C9.75 18.9142 9.41421 19.25 9 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V15ZM12.75 5.5C12.75 4.25736 13.7574 3.25 15 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V8.99998C20.75 10.2426 19.7426 11.25 18.5 11.25H15C13.7574 11.25 12.75 10.2426 12.75 8.99998V5.5ZM15 4.75C14.5858 4.75 14.25 5.08579 14.25 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5C5.08579 4.75 4.75 5.08579 4.75 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5ZM19.25 10.0833H15.416V13.9165H19.25V10.0833ZM13.916 10.0833L10.083 10.0833V13.9165L13.916 13.9165V10.0833ZM8.58301 10.0833H4.75V13.9165H8.58301V10.0833ZM4.75 18.5V15.4165H8.58301V19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5ZM10.083 19.25V15.4165L13.916 15.4165V19.25H10.083ZM15.416 19.25V15.4165H19.25V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15.416Z" fill="currentColor"/>'],
-                    ['route' => 'assets.retired', 'label' => 'Retired', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25C6.61522 2.25 2.25 6.61522 2.25 12C2.25 17.3848 6.61522 21.75 12 21.75C17.3848 21.75 21.75 17.3848 21.75 12C21.75 6.61522 17.3848 2.25 12 2.25ZM3.75 12C3.75 7.44365 7.44365 3.75 12 3.75C16.5563 3.75 20.25 7.44365 20.25 12C20.25 16.5563 16.5563 20.25 12 20.25C7.44365 20.25 3.75 16.5563 3.75 12ZM12.75 7.25C12.75 6.83579 12.4142 6.5 12 6.5C11.5858 6.5 11.25 6.83579 11.25 7.25V12C11.25 12.4142 11.5858 12.75 12 12.75C12.4142 12.75 12.75 12.4142 12.75 12V7.25Z" fill="currentColor"/>'],
-                    // Adding an asset is the most common action in the app and had no
-                    // navigation entry at all: the route existed, and the only way in
-                    // was a button on the asset list page.
-                    ['route' => 'assets.qr.sheet', 'label' => 'QR Labels', 'gate' => 'viewAny', 'model' => App\Models\Asset::class, 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M3.75 4.5a.75.75 0 0 1 .75-.75h9.19l5.56 5.56a.75.75 0 0 1 .22.53v9.41a.75.75 0 0 1-.75.75h-14.25a.75.75 0 0 1-.75-.75V4.5Zm11.44 1.5H4.5v13.5h15V10.5h-3.56a.75.75 0 0 1-.53-.22L14 6.19V6Z" fill="currentColor"/>'],
-                    ['route' => 'assets.create', 'label' => 'Add Asset', 'gate' => 'create', 'model' => App\Models\Asset::class, 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v8.25h8.25a.75.75 0 0 1 0 1.5h-8.25v8.25a.75.75 0 0 1-1.5 0v-8.25H2.75a.75.75 0 0 1 0-1.5h8.25V3a.75.75 0 0 1 .75-.75Z" fill="currentColor"/>'],
+                    ['route' => 'assets.index', 'label' => 'Assets', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M5.25 4.5A2.25 2.25 0 0 0 3 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25h13.5A2.25 2.25 0 0 0 21 17.25V6.75a2.25 2.25 0 0 0-2.25-2.25H5.25Zm.75 3h12v1.5H6V7.5Zm0 4.5h7.5v1.5H6V12Zm0 4.5h4.5V18H6v-1.5Z" fill="currentColor"/>'],
                 ],
                 'MANAGEMENT' => [
                     ['route' => 'transfers.index', 'label' => 'Transfers', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12.9895 3.53033C13.2824 3.23744 13.7573 3.23744 14.0502 3.53033L20.0502 9.53033C20.3431 9.82322 20.3431 10.2981 20.0502 10.591L14.0502 16.591C13.7573 16.8839 13.2824 16.8839 12.9895 16.591C12.6966 16.2981 12.6966 15.8232 12.9895 15.5303L17.4593 11.0607H4.75C4.33579 11.0607 4 10.7249 4 10.3107C4 9.89646 4.33579 9.56067 4.75 9.56067H17.4593L12.9895 5.091C12.6966 4.79811 12.6966 4.32322 12.9895 3.53033ZM20.0502 3.53033C20.3431 3.82322 20.3431 4.29808 20.0502 4.59097L14.0502 10.591C13.7573 10.8839 13.2824 10.8839 12.9895 10.591C12.6966 10.2981 12.6966 9.82322 12.9895 9.53033L18.9895 3.53033C19.2824 3.23744 19.7573 3.23744 20.0502 3.53033Z" fill="currentColor"/>'],
@@ -103,7 +98,7 @@
         @php
             $navGroups['MANAGEMENT'] = array_values(array_filter(
                 $navGroups['MANAGEMENT'],
-                fn (array $item): bool => $item['route'] !== 'barcode.form'
+                fn (array $item): bool => ! in_array($item['route'], ['assets.import', 'barcode.form'], true)
             ));
         @endphp
 
@@ -118,22 +113,22 @@
             <!-- Sidebar Header -->
             <div class="sidebar-header flex items-center justify-between gap-2 pt-8 pb-7">
                 <a href="/" class="flex items-center justify-center gap-2 overflow-hidden">
-                    <span class="logo" :class="sidebarExpanded ? '' : 'hidden'">
+                    <span class="logo" x-show="sidebarExpanded">
                         <div class="flex items-center gap-2">
                             <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg flex-shrink-0">
                             <span class="text-lg font-bold text-gray-800 dark:text-white whitespace-nowrap">TRACKER-ASSET</span>
                         </div>
                     </span>
-                    <div class="logo-icon" :class="sidebarExpanded ? 'hidden' : 'block'">
+                    <div class="logo-icon" x-show="!sidebarExpanded" x-cloak>
                         <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg">
                     </div>
                 </a>
-                <button data-sidebar-toggle
+                <button type="button" data-sidebar-toggle
                     @click="sidebarExpanded = !sidebarExpanded"
                     :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-                    class="hidden xl:flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-white/10 transition-colors flex-shrink-0">
-                    <svg :class="sidebarExpanded ? '' : 'hidden'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
-                    <svg :class="sidebarExpanded ? 'hidden' : ''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                    :title="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+                    class="hidden xl:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-white">
+                    <span x-text="sidebarExpanded ? '«' : '»'" class="text-lg font-bold leading-none" aria-hidden="true"></span>
                 </button>
             </div>
 
@@ -170,21 +165,28 @@
                 @if(Gate::allows('manage-master-data'))
                     <nav class="mb-6">
                         <h3 class="mb-4 text-xs font-semibold leading-5 text-gray-400 uppercase dark:text-gray-500" :class="sidebarExpanded ? '' : 'text-center'">
-                            <span :class="sidebarExpanded ? '' : 'hidden'">MASTER DATA</span>
+                            <span :class="sidebarExpanded ? '' : 'hidden'">ADMINISTRATION</span>
                         </h3>
                         <ul class="flex flex-col gap-1">
-                            @foreach($masterItems as $item)
-                                @php $isActive = $isSection('master.*') && request('type') === $item['type']; @endphp
+                            @php $isActive = $isSection('master.*'); @endphp
+                            <li>
+                                <a href="{{ route('master.index', 'companies') }}"
+                                   @click="selectedMenu = 'master.index'"
+                                   class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
+                                    <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="2" fill="currentColor"/><circle cx="16" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="16" r="2" fill="currentColor"/><circle cx="16" cy="16" r="2" fill="currentColor"/></svg>
+                                    <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Master Data</span>
+                                </a>
+                            </li>
+                            @if(Gate::allows('manage-users'))
+                                @php $isActive = $route === 'users.access'; @endphp
                                 <li>
-                                    <a href="{{ route('master.index', $item['type']) }}"
-                                       @click="selectedMenu = 'master.{{ $item['type'] }}'"
+                                    <a href="{{ route('users.access') }}"
+                                       @click="selectedMenu = 'users.access'"
                                        class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
-                                        <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="2" fill="currentColor"/><circle cx="16" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="16" r="2" fill="currentColor"/><circle cx="16" cy="16" r="2" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">{{ $item['label'] }}</span>
+                                        <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3.75a4.25 4.25 0 1 0 0 8.5 4.25 4.25 0 0 0 0-8.5ZM4.5 20.25c.7-3.25 3.48-5.5 7.5-5.5s6.8 2.25 7.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M18 4.5v4m-2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                                        <span class="menu-item-text" :class="sidebarExpanded ? '' : 'hidden'">Access Control</span>
                                     </a>
                                 </li>
-                            @endforeach
-                            @if(Gate::allows('manage-users'))
                                 @php $isActive = $isSection('users.*'); @endphp
                                 <li>
                                     <a href="{{ route('users.index') }}"
@@ -252,6 +254,25 @@
 
                     <div class="flex w-full items-center justify-end gap-4 px-4 py-3 xl:px-0">
                         <div class="flex items-center gap-2">
+                            <div class="relative" x-data="{ quickActionsOpen: false }" @click.outside="quickActionsOpen = false">
+                                <button type="button" @click="quickActionsOpen = !quickActionsOpen"
+                                        :aria-expanded="quickActionsOpen"
+                                        class="inline-flex h-11 items-center gap-2 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                                    <span class="hidden sm:inline">Quick actions</span>
+                                </button>
+                                <div x-cloak x-show="quickActionsOpen" x-transition
+                                     class="absolute right-0 z-[100000] mt-2 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900">
+                                    @can('create', App\Models\Asset::class)
+                                        <a href="{{ route('assets.create') }}" class="block rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Add Asset</a>
+                                    @endcan
+                                    @can('viewAny', App\Models\Asset::class)
+                                        <a href="{{ route('assets.qr.sheet') }}" class="block rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">QR Labels</a>
+                                    @endcan
+                                    <a href="{{ route('assets.import') }}" class="block rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Import Excel</a>
+                                </div>
+                            </div>
+
                             <!-- Dark Mode Toggle -->
                             <button type="button" @click.prevent="darkMode = !darkMode"
                                     :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"

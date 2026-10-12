@@ -114,6 +114,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/fleet/refresh', [AgentFleetController::class, 'refresh'])->name('agent.fleet.refresh');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
+        Route::post('/agent/commands/script', [AgentFleetController::class, 'pushScript'])->name('agent.commands.script');
         // Deep inventory detail for one device. Declared before the token-scoped
         // POST routes so "fingerprint" can never be read as a token id.
         Route::get('/agent/{token}/fingerprint', [AgentFleetController::class, 'fingerprint'])->name('agent.fingerprint');
@@ -164,6 +165,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->name('master.destroy');
 
         Route::middleware('can:manage-users')->group(function () {
+            Route::get('/users/access', [UserController::class, 'access'])->name('users.access');
+            Route::put('/users/{user}/access', [UserController::class, 'updateAccess'])->name('users.access.update');
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
             Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
             Route::post('/users', [UserController::class, 'store'])->name('users.store');

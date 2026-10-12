@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\View\View;
 
 /**
  * Local user directory management (Entra/Graph is the production source, PRD §39).
@@ -101,6 +103,54 @@ class UserController extends Controller
         $this->log('UPDATE', $user);
 
         return redirect()->route('users.index')->with('success', 'User updated.');
+    }
+
+    public function access(Request $request): View
+    {
+        $users = User::query()
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = '%'.trim((string) $request->input('search')).'%';
+
+                $query->where(fn ($query) => $query
+                    ->where('name', 'like', $search)
+                    ->orWhere('email', 'like', $search)
+                    ->orWhere('department', 'like', $search));
+            })
+            ->orderBy('name')
+            ->paginate(12)
+            ->withQueryString();
+
+        $selectedUser = $request->filled('user')
+            ? User::findOrFail($request->integer('user'))
+            : $users->first();
+
+        return view('users.access', [
+            'users' => $users,
+            'selectedUser' => $selectedUser,
+            'permissionGroups' => User::PERMISSION_GROUPS,
+        ]);
+    }
+
+    public function updateAccess(Request $request, User $user): RedirectResponse
+    {
+        abort_if($user->isAdmin(), 422, 'Administrator access is always unrestricted.');
+
+        $validated = $request->validate([
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['nullable', Rule::in(['allow', 'deny', 'inherit'])],
+        ]);
+
+        $permissions = collect($validated['permissions'] ?? [])
+            ->only(array_keys(array_merge(...array_values(User::PERMISSION_GROUPS))))
+            ->filter(fn (string $state): bool => $state !== 'inherit')
+            ->map(fn (string $state): bool => $state === 'allow')
+            ->all();
+
+        $user->update(['permission_overrides' => $permissions]);
+        $this->log('UPDATE ACCESS', $user);
+
+        return redirect()->route('users.access', ['user' => $user->id])
+            ->with('success', "Access for {$user->name} updated.");
     }
 
     private function log(string $action, User $user): void
