@@ -3,27 +3,29 @@
      likely to gain a field next, and editing a 200-line form to add one input is
      how the two copies start disagreeing. --}}
 <div>
-    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Asset ID *</label>
-    <input type="text" name="asset_id" required value="{{ old('asset_id') }}" placeholder="e.g. LAPTOP-014"
-           class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-    @error('asset_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
+    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Generated asset code</label>
+    <input type="hidden" name="asset_id" id="generated_asset_id" value="{{ old('asset_id') }}">
+    <div id="generated_asset_code" class="w-full rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5 text-theme-sm font-medium text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
+        {{ old('asset_id') ?: 'Will be generated automatically after selection' }}
+    </div>
+    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Code uses entity + item type + purchase year, for example MSI-LAP-2026-0001.</p>
 </div>
 <div>
     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Company *</label>
-    <select name="company_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+    <select name="company_id" id="company_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
         <option value="">Select company</option>
         @foreach($companies as $company)
-            <option value="{{ $company->id }}" {{ (string) old('company_id') === (string) $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
+            <option value="{{ $company->id }}" data-company-code="{{ $company->code }}" {{ (string) old('company_id') === (string) $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
         @endforeach
     </select>
     @error('company_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror
 </div>
 <div>
     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Category *</label>
-    <select name="category_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+    <select name="category_id" id="category_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
         <option value="">Select category</option>
         @foreach($categories as $category)
-            <option value="{{ $category->id }}" {{ (string) old('category_id') === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
+            <option value="{{ $category->id }}" data-category-name="{{ $category->name }}" {{ (string) old('category_id') === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
         @endforeach
     </select>
     @error('category_id') <p class="mt-1 text-theme-xs text-error-500">{{ $message }}</p> @enderror

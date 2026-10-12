@@ -223,6 +223,8 @@ class AuditApiController extends Controller
             'source' => 'Audit Agent',
         ]);
 
+        $updatedFields = $this->syncRegisteredHardware($asset, $payload, $actual, $audit, $comparison);
+
         // Dual write (PRD §11): the audit feeds Master Assets, the telemetry
         // snapshot feeds the Live Fleet view.
         $this->recordTelemetry($asset, $payload);
@@ -231,8 +233,60 @@ class AuditApiController extends Controller
             'asset' => $asset->asset_id,
             'result' => $result['result'],
             'mismatches' => $result['mismatches'],
+            'updated_fields' => $updatedFields,
             'message' => $this->resultMessage($asset, $result),
         ]);
+    }
+
+    /**
+     * Refresh hardware values only when one exact serial uniquely identifies the
+     * registered asset. Unknown devices and ambiguous duplicate serials remain
+     * reports for an operator to review rather than writes to the register.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, string|null>  $actual
+     * @return list<string>
+     */
+    private function syncRegisteredHardware(
+        Asset $asset,
+        array $payload,
+        array $actual,
+        AssetAudit $audit,
+        AuditComparisonService $comparison,
+    ): array {
+        $serial = trim((string) ($payload['serial_number'] ?? ''));
+
+        if ($serial === '' || $asset->serial_number !== $serial) {
+            return [];
+        }
+
+        if (Asset::query()->where('serial_number', $serial)->count() !== 1) {
+            return [];
+        }
+
+        $previous = array_intersect_key(
+            $asset->getAttributes(),
+            array_flip(array_keys(AuditComparisonService::COMPARED_FIELDS)),
+        );
+        $changed = $comparison->applyToAsset($asset, $actual);
+
+        if ($changed === []) {
+            return [];
+        }
+
+        ActivityLog::create([
+            'actor_id' => null,
+            'action' => 'UPDATE',
+            'entity_type' => 'assets',
+            'entity_id' => $asset->id,
+            'entity_identifier' => $asset->asset_id,
+            'old_value' => json_encode(array_intersect_key($previous, array_flip($changed))),
+            'new_value' => json_encode(array_intersect_key($asset->getAttributes(), array_flip($changed))),
+            'source' => 'Audit Agent',
+            'metadata' => ['automatic_scan_sync' => true, 'audit_id' => $audit->id],
+        ]);
+
+        return $changed;
     }
 
     /**

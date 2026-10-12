@@ -11,6 +11,7 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\AssetCodeGenerator;
 use App\Services\AuditComparisonService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -69,20 +70,24 @@ class AgentDevicePromotionController extends Controller
         $this->authorize('create', Asset::class);
 
         $validated = $request->validate([
-            'asset_id' => 'required|string|max:255|unique:assets,asset_id',
             'company_id' => 'required|exists:companies,id',
             'category_id' => 'required|exists:asset_categories,id',
             'location_id' => 'required|exists:locations,id',
             'asset_status_id' => 'required|exists:asset_statuses,id',
             'current_user_id' => 'nullable|exists:users,id',
             'admin_it_pic' => 'nullable|exists:users,id',
-            'purchase_year' => 'nullable|integer|min:1900|max:'.(date('Y') + 2),
+            'purchase_year' => 'required|integer|min:1900|max:'.(date('Y') + 2),
             'vendor' => 'nullable|string|max:255',
             'purchase_price' => 'nullable|numeric|min:0',
             'useful_life_years' => 'nullable|integer|min:0|max:50',
             'warranty_until' => 'nullable|date',
             'deploy_date' => 'nullable|date',
         ]);
+
+        $company = Company::findOrFail($validated['company_id']);
+        $category = AssetCategory::findOrFail($validated['category_id']);
+        $validated['asset_id'] = app(AssetCodeGenerator::class)
+            ->next($company, $category, (int) $validated['purchase_year']);
 
         $asset = DB::transaction(function () use ($validated, $token) {
             $asset = Asset::create(array_merge($this->hardwareDefaults($token), $validated));

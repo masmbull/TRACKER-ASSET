@@ -185,24 +185,85 @@ class LiveFleetTest extends TestCase
             ->assertCreated();
 
         $this->actingAs($admin)->post(route('agent.promote.store', $this->agentToken), [
-            'asset_id' => 'LAPTOP-900',
             'company_id' => Company::first()->id,
             'category_id' => AssetCategory::first()->id,
             'location_id' => Location::first()->id,
             'asset_status_id' => AssetStatus::first()->id,
+            'purchase_year' => 2026,
         ]);
 
         $response = $this->actingAs($admin)->get(route('agent.fleet'));
 
         $response->assertOk();
         $response->assertDontSee('not on the register');
-        $response->assertSee('LAPTOP-900');
+        $response->assertSee('TC-LAP-2026-0001');
         $response->assertDontSee(route('agent.promote', $this->agentToken));
     }
 
     /**
      * The summary link must actually filter, or it is a dead end.
      */
+    public function test_admin_can_queue_script_push_to_all_devices(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_name' => 'install-demo.ps1',
+            'script_type' => 'powershell',
+            'script_body' => 'Write-Host "hello"',
+            'working_directory' => 'C:\\Temp\\Scripts',
+            'run_as' => 'admin',
+            'timeout_seconds' => 180,
+            'trigger' => 'once',
+            'notes' => 'Deploy demo script to all devices',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => null,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_internal_script_api_can_enqueue_a_targeted_command(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'device',
+                'agent_token_id' => $this->agentToken->id,
+                'script_name' => 'install-demo.ps1',
+                'script_type' => 'powershell',
+                'script_body' => 'Write-Host "hello"',
+                'working_directory' => 'C:\\Temp\\Scripts',
+                'run_as' => 'admin',
+                'timeout_seconds' => 180,
+                'trigger' => 'once',
+                'notes' => 'Deploy demo script to one device',
+            ]);
+
+        $response->assertStatus(202)
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('target', 'device');
+
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $this->agentToken->id,
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_fleet_can_filter_to_unregistered_devices_only(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -283,13 +344,23 @@ class LiveFleetTest extends TestCase
             ->assertSee('412')
             ->assertSee('Wi-Fi')
             ->assertSee('MITO-OFFICE')
-            ->assertSee('refreshFleet', false)
-            ->assertSee('setInterval(refreshFleet, 60000)', false)
+            ->assertDontSee('refreshFleet', false)
+            ->assertDontSee('setInterval', false)
             ->assertDontSee('window.location.reload', false)
             ->assertSee('Switch to dark mode', false)
             ->assertSee('Switch to light mode', false)
             ->assertSee('ajax-action-modal', false)
             ->assertSee('data-modal-action', false);
+    }
+
+    public function test_live_fleet_page_does_not_auto_refresh(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)->get(route('agent.fleet'));
+
+        $response->assertOk();
+        $response->assertDontSee('setInterval(refreshFleet', false);
     }
 
     public function test_live_fleet_refresh_returns_current_device_state_as_json(): void

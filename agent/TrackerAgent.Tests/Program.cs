@@ -170,6 +170,12 @@ internal static class Program
         Check("audit is sent before the deep fingerprint",
             server.Requests[0].Contains("/api/audits", StringComparison.Ordinal) &&
             server.Requests[1].Contains("/api/agent/fingerprint", StringComparison.Ordinal));
+
+        using var fingerprintFailureServer = new RecordingHttpServer(failFingerprint: true);
+        var failedRc = AgentRunner.RunFullScan(fingerprintFailureServer.Url, "token-123", "asset-999");
+
+        Check("rejected fingerprint makes the full scan fail", failedRc != 0);
+        Check("failed full scan still attempts both report endpoints", fingerprintFailureServer.Requests.Count == 2);
     }
 
     /// <summary>
@@ -215,9 +221,11 @@ internal static class Program
         private readonly HttpListener _listener = new();
         private readonly List<string> _requests = new();
         private readonly Task _acceptLoop;
+        private readonly bool _failFingerprint;
 
-        public RecordingHttpServer()
+        public RecordingHttpServer(bool failFingerprint = false)
         {
+            _failFingerprint = failFingerprint;
             var port = GetFreePort();
             Url = $"http://localhost:{port}/";
             _listener.Prefixes.Add(Url);
@@ -236,9 +244,11 @@ internal static class Program
                 try
                 {
                     var context = await _listener.GetContextAsync();
-                    _requests.Add(context.Request.Url?.AbsolutePath ?? string.Empty);
+                    var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+                    _requests.Add(path);
 
-                    context.Response.StatusCode = 200;
+                    context.Response.StatusCode = _failFingerprint &&
+                        path.EndsWith("agent/fingerprint", StringComparison.Ordinal) ? 500 : 200;
                     context.Response.ContentType = "application/json";
                     var body = "{\"ok\":true}\n";
                     var bytes = System.Text.Encoding.UTF8.GetBytes(body);

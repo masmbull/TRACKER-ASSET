@@ -67,4 +67,8 @@ return [
     */
     'probe_health_endpoint' => env('SERVICES_PROBE_HEALTH_ENDPOINT', true),
 
+    'internal' => [
+        'script_token' => env('INTERNAL_SCRIPT_TOKEN'),
+    ],
+
 ];

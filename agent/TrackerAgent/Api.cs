@@ -374,7 +374,7 @@ private sealed record SoftwareEntry(string? Name, string? Version, string? Publi
     /// device, and settling it from a heartbeat path would report the whole fleet
     /// as scanned the moment one laptop first reported.
     /// </remarks>
-    public static void AckPendingHeartbeat(string url, string token)
+    public static void AckPendingHeartbeat(string url, string token, string status)
     {
         try
         {
@@ -392,10 +392,12 @@ private sealed record SoftwareEntry(string? Name, string? Version, string? Publi
 
                 if (targeted && cmd.GetProperty("command").GetString() == "scan")
                 {
-                    Ack(url, token, cmd.GetProperty("id").GetInt64(), "done",
+                    Ack(url, token, cmd.GetProperty("id").GetInt64(), status,
                         new Dictionary<string, string>
                         {
-                            ["message"] = "This device had no fleet snapshot yet, so the requested full scan was run.",
+                            ["message"] = status == "done"
+                                ? "This device had no fleet snapshot yet, and the requested full scan completed."
+                                : "The initial full scan did not complete. Check the agent log and retry the scan.",
                         });
                 }
             }

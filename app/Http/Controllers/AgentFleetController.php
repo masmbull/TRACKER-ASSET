@@ -121,7 +121,43 @@ class AgentFleetController extends Controller
     public function index(Request $request)
     {
         $devices = AgentApiToken::query()
-            ->with(['telemetry.asset', 'fingerprint'])
+            ->select([
+                'id', 'name', 'is_active', 'expires_at', 'last_used_at',
+                'device_id', 'agent_version',
+            ])
+            ->with([
+                'telemetry' => fn ($query) => $query->select(array_map(
+                    fn (string $column): string => $query->getModel()->qualifyColumn($column),
+                    [
+                        'id', 'agent_token_id', 'asset_id', 'hostname', 'logged_in_user',
+                        'os', 'ip_address', 'battery_percent', 'battery_health',
+                        'battery_cycle_count', 'disk_free_gb', 'disk_total_gb',
+                        'disk_free_percent', 'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
+                        'network_type', 'network_adapter', 'network_speed', 'uptime_hours',
+                        'reported_at',
+                    ],
+                )),
+                'fingerprint' => fn ($query) => $query->select(array_map(
+                    fn (string $column): string => $query->getModel()->qualifyColumn($column),
+                    [
+                        'id', 'agent_token_id', 'asset_id', 'device_model', 'cpu_cores',
+                        'cpu_architecture', 'monitor', 'screen_resolution', 'chassis_type',
+                        'bios_version', 'bios_date', 'disk_type', 'smart_health',
+                        'smart_predicted_failure', 'windows_edition', 'activation_status',
+                        'license_channel', 'domain', 'antivirus_product', 'antivirus_enabled',
+                        'antivirus_signature_age_days', 'firewall_enabled', 'firewall_profiles_off',
+                        'uac_enabled', 'secure_boot_enabled', 'tpm_present', 'bitlocker_status',
+                        'bitlocker_method', 'rdp_enabled', 'auto_logon_enabled',
+                        'screen_lock_enabled', 'lock_timeout_minutes', 'guest_account_enabled',
+                        'defender_realtime_enabled', 'defender_last_scan_days', 'pending_reboot',
+                        'last_hotfix_installed_at', 'hotfix_count', 'windows_updates_pending',
+                        'security_updates_pending', 'updates_failed', 'updates_succeeded',
+                        'last_security_update_at', 'security_updates_installed',
+                        'local_admin_count', 'software_count', 'startup_count', 'ram_modules',
+                        'ram_slots', 'collected_at',
+                    ],
+                )),
+            ])
             ->orderBy('name')
             ->get();
 
@@ -664,6 +700,53 @@ class AgentFleetController extends Controller
         $tokens = AgentApiToken::orderBy('name')->get();
 
         return view('agent.commands', compact('commands', 'tokens'));
+    }
+
+    public function pushScript(Request $request)
+    {
+        $this->authorize('manage-agents');
+
+        $validated = $request->validate([
+            'target' => ['required', 'in:all,device'],
+            'agent_token_id' => ['nullable', 'required_if:target,device', 'exists:agent_api_tokens,id'],
+            'script_name' => ['required', 'string', 'max:255'],
+            'script_type' => ['required', 'in:powershell,cmd,batch,ps1,bat,exe'],
+            'script_body' => ['required', 'string'],
+            'working_directory' => ['nullable', 'string', 'max:255'],
+            'run_as' => ['nullable', 'in:current-user,admin,system'],
+            'timeout_seconds' => ['nullable', 'integer', 'min:10', 'max:3600'],
+            'sha256' => ['nullable', 'string', 'max:128'],
+            'trigger' => ['nullable', 'in:once,reboot'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $tokenId = $validated['target'] === 'device'
+            ? (int) $validated['agent_token_id']
+            : null;
+
+        $payload = [
+            'script_name' => $validated['script_name'],
+            'script_type' => $validated['script_type'],
+            'script_body' => $validated['script_body'],
+            'working_directory' => $validated['working_directory'] ?? null,
+            'run_as' => $validated['run_as'] ?? 'current-user',
+            'timeout_seconds' => $validated['timeout_seconds'] ?? 300,
+            'sha256' => $validated['sha256'] ?? null,
+            'trigger' => $validated['trigger'] ?? 'once',
+            'notes' => $validated['notes'] ?? null,
+            'created_by' => $request->user()?->name ?? 'system',
+        ];
+
+        $target = $tokenId === null ? 'all devices' : AgentApiToken::findOrFail($tokenId)->name;
+
+        AgentCommand::create([
+            'agent_token_id' => $tokenId,
+            'command' => 'script',
+            'payload' => $payload,
+            'status' => 'pending',
+        ]);
+
+        return back()->with('success', "Script queued for {$target}. The next poll will fetch and execute it.");
     }
 
     /**

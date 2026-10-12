@@ -27,7 +27,7 @@
         </p>
     </div>
 
-    <form method="POST" action="{{ route('agent.promote.store', $token) }}" class="space-y-6">
+    <form method="POST" action="{{ route('agent.promote.store', $token) }}" class="space-y-6" id="asset-registration-form">
         @csrf
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -89,4 +89,49 @@
         </div>
     </form>
 </div>
+
+<script>
+    (function () {
+        const form = document.getElementById('asset-registration-form');
+        if (!form) return;
+
+        const companySelect = document.getElementById('company_id');
+        const categorySelect = document.getElementById('category_id');
+        const yearInput = document.getElementById('purchase_year');
+        const preview = document.getElementById('generated_asset_code');
+        const hiddenInput = document.getElementById('generated_asset_id');
+
+        const categoryShort = {
+            laptop: 'LAP',
+            pc: 'PC',
+            desktop: 'PC',
+            server: 'SRV',
+            printer: 'PRN',
+            monitor: 'MON',
+            network: 'NET',
+            cctv: 'CCTV',
+            ups: 'UPS',
+            storage: 'STO',
+            other: 'OTH',
+        };
+
+        const updatePreview = () => {
+            const company = companySelect?.selectedOptions?.[0]?.dataset?.companyCode || '';
+            const categoryName = categorySelect?.selectedOptions?.[0]?.dataset?.categoryName || '';
+            const year = yearInput?.value?.trim() || '';
+            const shortCode = categoryName ? (categoryShort[String(categoryName).trim().toLowerCase()] || String(categoryName).trim().slice(0, 4).toUpperCase()) : 'GEN';
+
+            const code = company && year && shortCode ? `${company}-${shortCode}-${year}-0001` : 'Will be generated automatically after selection';
+            if (preview) preview.textContent = code;
+            if (hiddenInput) hiddenInput.value = code === 'Will be generated automatically after selection' ? '' : code;
+        };
+
+        [companySelect, categorySelect, yearInput].forEach((element) => {
+            element?.addEventListener('input', updatePreview);
+            element?.addEventListener('change', updatePreview);
+        });
+
+        updatePreview();
+    })();
+</script>
 @endsection

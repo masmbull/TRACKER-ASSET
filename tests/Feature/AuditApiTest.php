@@ -100,6 +100,78 @@ class AuditApiTest extends TestCase
         $this->assertSame('8 GB', $response->json('mismatches.ram.registered'));
     }
 
+    public function test_scan_updates_hardware_for_a_unique_serial_without_changing_asset_management_fields(): void
+    {
+        $asset = Asset::factory()->create([
+            'serial_number' => 'SN-AUTO-SYNC-01',
+            'hostname' => 'OLD-HOST',
+            'ram' => '8 GB',
+            'storage' => '256 GB SSD',
+            'purchase_year' => 2021,
+            'purchase_price' => 12000000,
+        ]);
+        $locationId = $asset->location_id;
+        $statusId = $asset->asset_status_id;
+        $companyId = $asset->company_id;
+        $categoryId = $asset->category_id;
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', [
+                'serial_number' => 'SN-AUTO-SYNC-01',
+                'hostname' => 'NEW-HOST',
+                'ram' => '16 GB',
+                'storage' => '512 GB NVMe',
+                'os' => 'Windows 11 Pro',
+            ])
+            ->assertOk()
+            ->assertJsonPath('result', 'MISMATCH');
+
+        $asset->refresh();
+
+        $this->assertSame('SN-AUTO-SYNC-01', $asset->serial_number);
+        $this->assertSame('NEW-HOST', $asset->hostname);
+        $this->assertSame('16 GB', $asset->ram);
+        $this->assertSame('512 GB NVMe', $asset->storage);
+        $this->assertSame('Windows 11 Pro', $asset->os_version);
+        $this->assertSame(2021, $asset->purchase_year);
+        $this->assertSame('12000000.00', $asset->purchase_price);
+        $this->assertSame($locationId, $asset->location_id);
+        $this->assertSame($statusId, $asset->asset_status_id);
+        $this->assertSame($companyId, $asset->company_id);
+        $this->assertSame($categoryId, $asset->category_id);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'UPDATE',
+            'entity_type' => 'assets',
+            'entity_identifier' => $asset->asset_id,
+            'source' => 'Audit Agent',
+        ]);
+    }
+
+    public function test_scan_does_not_auto_update_when_serial_is_duplicated(): void
+    {
+        $first = Asset::factory()->create([
+            'serial_number' => 'SN-DUPLICATE-01',
+            'hostname' => 'FIRST-HOST',
+        ]);
+        Asset::factory()->create(['serial_number' => 'SN-DUPLICATE-01']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', [
+                'serial_number' => 'SN-DUPLICATE-01',
+                'hostname' => 'OBSERVED-HOST',
+            ])
+            ->assertOk();
+
+        $this->assertSame('FIRST-HOST', $first->fresh()->hostname);
+        $this->assertDatabaseMissing('activity_logs', [
+            'action' => 'UPDATE',
+            'entity_type' => 'assets',
+            'entity_identifier' => $first->asset_id,
+            'source' => 'Audit Agent',
+        ]);
+    }
+
     /**
      * A device nobody has on file must NOT become an asset by itself.
      *

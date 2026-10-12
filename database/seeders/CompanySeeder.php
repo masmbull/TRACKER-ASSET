@@ -9,8 +9,16 @@ class CompanySeeder extends Seeder
 {
     public function run(): void
     {
-        Company::firstOrCreate(['name' => 'MITO Group'], ['code' => 'MITO', 'address' => '']);
-        Company::firstOrCreate(['name' => 'MITO Technology'], ['code' => 'MITO-TECH', 'address' => '']);
-        Company::firstOrCreate(['name' => 'PT. Mahakarya Sukses Indonesia'], ['code' => 'MITO-CORP', 'address' => '']);
+        $entities = [
+            ['name' => 'PT. MAHAKARYA SUKSES INDONESIA', 'code' => 'MSI', 'address' => ''],
+            ['name' => 'PT. STEIN PERKASA INTERNASIONAL', 'code' => 'SPI', 'address' => ''],
+            ['name' => 'PT. MITRA ELEKTRO PERKASA', 'code' => 'MEP', 'address' => ''],
+            ['name' => 'PT. PERKASA INJEKSI INDONESIA', 'code' => 'PII', 'address' => ''],
+            ['name' => 'PT. SUKA DESSERT INDONESIA', 'code' => 'SDI', 'address' => ''],
+        ];
+
+        foreach ($entities as $entity) {
+            Company::firstOrCreate(['code' => $entity['code']], ['name' => $entity['name'], 'address' => $entity['address']]);
+        }
     }
 }
