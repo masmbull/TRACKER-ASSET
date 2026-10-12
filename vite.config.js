@@ -11,6 +11,7 @@ export default defineConfig({
             fonts: [
                 bunny('Outfit', {
                     weights: [400, 500, 600, 700],
+                    preload: [{ weight: 400 }, { weight: 600 }],
                 }),
             ],
         }),
