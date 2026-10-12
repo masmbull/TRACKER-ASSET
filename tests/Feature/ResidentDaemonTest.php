@@ -349,7 +349,9 @@ class ResidentDaemonTest extends TestCase
 
         $this->actingAs($admin)->get(route('agent.commands'))
             ->assertOk()
-            ->assertSee('Sweep Now');
+            ->assertSee('Sweep Now')
+            ->assertSee('confirm-update-all-agents', false)
+            ->assertSee('Update all agents');
     }
 
     public function test_commands_page_autorefreshes_while_pending()

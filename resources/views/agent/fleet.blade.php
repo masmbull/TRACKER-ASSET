@@ -6,14 +6,11 @@
 <x-page-header title="Live Fleet" subtitle="Latest telemetry of every deployed device — battery wear, C: disk space, RAM, Wi-Fi and the logged-in Windows user.">
     <x-slot:actions>
         <div class="flex flex-wrap items-center gap-2">
-            <form method="POST" action="{{ route('agent.scanAll') }}">
+            <form method="POST" action="{{ route('agent.scanAll') }}" data-modal-action>
                 @csrf
                 <x-button type="submit" variant="secondary" size="sm">Scan All Devices</x-button>
             </form>
-            <form method="POST" action="{{ route('agent.updateAll') }}">
-                @csrf
-                <x-button type="submit" variant="primary" size="sm">Update All Agents</x-button>
-            </form>
+            <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')">Update All Agents</x-button>
         </div>
     </x-slot:actions>
 </x-page-header>
@@ -37,7 +34,7 @@
      only glanceable; the numbers an operator acts on are still here, just
      without the card scaffolding. --}}
 <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-theme-sm text-gray-600 dark:text-gray-300">
-    <span><span class="font-semibold text-gray-800 dark:text-white">{{ $stats['online'] }}</span>/{{ $stats['devices'] }} online</span>
+    <span><span class="font-semibold text-gray-800 dark:text-white" data-fleet-online>{{ $stats['online'] }}</span>/{{ $stats['devices'] }} online</span>
     @if($stats['battery_alerts'] > 0)
         <x-badge variant="warning">{{ $stats['battery_alerts'] }} battery</x-badge>
     @endif
@@ -104,7 +101,7 @@
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
                     @endphp
-                    <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
                         <td class="py-3 px-3">
                             <button type="button"
                                     class="text-left"
@@ -130,20 +127,20 @@
                             @endphp
 
                             @if(! $device->isUsable())
-                                <x-badge variant="error" :dot="true">revoked</x-badge>
+                                <x-badge variant="error" :dot="true" data-fleet-status-badge>revoked</x-badge>
                             @elseif($online || $polling)
-                                <x-badge variant="success" :dot="true">online</x-badge>
+                                <x-badge variant="success" :dot="true" data-fleet-status-badge>online</x-badge>
                             @elseif($telemetry === null && $isSettingUp)
                                 {{-- A machine mid-install has no telemetry yet, and
                                      "never scanned" reads as a fault with the machine
                                      rather than an install still running on it. --}}
-                                <x-badge variant="info" :dot="true">{{ $deviceOperation->command }}ing</x-badge>
+                                <x-badge variant="gray" :dot="true" data-fleet-status-badge>{{ $deviceOperation->command }}ing</x-badge>
                             @elseif($telemetry === null)
-                                <x-badge variant="gray" :dot="true">never scanned</x-badge>
+                                <x-badge variant="gray" :dot="true" data-fleet-status-badge>never scanned</x-badge>
                             @else
-                                <x-badge variant="warning" :dot="true">stale</x-badge>
+                                <x-badge variant="warning" :dot="true" data-fleet-status-badge>stale</x-badge>
                             @endif
-                            <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400">
+                            <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400" data-fleet-reported-at>
                                 {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans() : 'no report yet' }}
                             </span>
 
@@ -162,7 +159,7 @@
                                 </div>
                             @endif
                         </td>
-                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300">
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-battery>
                             @if($telemetry?->battery_percent !== null)
                                 <span @class([
                                     'font-medium',
@@ -174,7 +171,7 @@
                                 <span class="text-gray-400">—</span>
                             @endif
                         </td>
-                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300">
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-disk>
                             @if($telemetry?->disk_free_percent !== null)
                                 <span @class([
                                     'font-medium',
@@ -230,7 +227,7 @@
                                         @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>
 
                                 @if($device->isUsable())
-                                    <form method="POST" action="{{ route('agent.scan', $device) }}">
+                                    <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action>
                                         @csrf
                                         <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Scan</button>
                                     </form>
@@ -241,10 +238,7 @@
                                          device is actually behind: offering it on a
                                          current device invites a pointless restart. --}}
                                     @if($device->isOutdated() === true)
-                                        <form method="POST" action="{{ route('agent.updateOne', $device) }}">
-                                            @csrf
-                                            <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700">Update</button>
-                                        </form>
+                                        <button type="button" class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</button>
                                     @endif
                                 @endif
 
@@ -541,7 +535,7 @@
                     This cannot be undone from here.
                 </div>
 
-                <form method="POST" action="{{ route('agent.uninstall', $device) }}" class="flex justify-end gap-3 pt-2">
+                <form method="POST" action="{{ route('agent.uninstall', $device) }}" class="flex justify-end gap-3 pt-2" data-modal-action data-close-modal="uninstall-agent-{{ $device->id }}">
                     @csrf
                     <button type="button" @click="$dispatch('close-modal', 'uninstall-agent-{{ $device->id }}')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
                     <x-button type="submit" variant="danger">Uninstall agent</x-button>
@@ -596,6 +590,128 @@
 </x-card>
 
 <script>
-    setTimeout(function () { window.location.reload(); }, 30000);
+    const fleetBadgeClasses = {
+        online: 'bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-500',
+        stale: 'bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-warning-500',
+        'never scanned': 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
+        installing: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
+        updating: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
+    };
+
+    function updateFleetCell(cell, primary, secondary, isAlert = false) {
+        if (!cell) {
+            return;
+        }
+
+        cell.replaceChildren();
+
+        if (primary === null || primary === undefined) {
+            const missing = document.createElement('span');
+            missing.className = 'text-gray-400';
+            missing.textContent = '—';
+            cell.append(missing);
+            return;
+        }
+
+        const value = document.createElement('span');
+        value.className = isAlert ? 'font-medium text-error-500' : 'font-medium';
+        value.textContent = `${primary}%`;
+        cell.append(value);
+
+        if (secondary !== null && secondary !== undefined) {
+            const detail = document.createElement('span');
+            detail.className = 'block text-theme-xs text-gray-500 dark:text-gray-400';
+            detail.textContent = secondary;
+            cell.append(detail);
+        }
+    }
+
+    async function refreshFleet() {
+        if (document.hidden) {
+            return;
+        }
+
+        try {
+            const response = await fetch(@json(route('agent.fleet.refresh')), {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const snapshot = await response.json();
+            const onlineCount = document.querySelector('[data-fleet-online]');
+            if (onlineCount) {
+                onlineCount.textContent = snapshot.online;
+            }
+
+            Object.entries(snapshot.devices).forEach(([id, device]) => {
+                const row = document.querySelector(`[data-fleet-device="${id}"]`);
+                if (!row) {
+                    return;
+                }
+
+                const badge = row.querySelector('[data-fleet-status-badge]');
+                if (badge && fleetBadgeClasses[device.status]) {
+                    badge.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-theme-xs font-medium ${fleetBadgeClasses[device.status]}`;
+                    badge.replaceChildren();
+                    const dot = document.createElement('span');
+                    dot.className = 'h-1.5 w-1.5 rounded-full bg-current';
+                    badge.append(dot, document.createTextNode(device.status));
+                }
+
+                const reportedAt = row.querySelector('[data-fleet-reported-at]');
+                if (reportedAt) {
+                    reportedAt.textContent = device.reported_at;
+                }
+
+                updateFleetCell(
+                    row.querySelector('[data-fleet-battery]'),
+                    device.battery_percent,
+                    device.battery_health === null ? null : `health ${device.battery_health}%`,
+                    device.battery_alert,
+                );
+                updateFleetCell(
+                    row.querySelector('[data-fleet-disk]'),
+                    device.disk_free_percent,
+                    device.disk_free_gb === null ? null : `${device.disk_free_gb} GB free`,
+                    device.disk_free_percent !== null && device.disk_free_percent < 15,
+                );
+            });
+        } catch (error) {
+            console.warn('Live Fleet refresh failed.', error);
+        }
+    }
+
+    setInterval(refreshFleet, 60000);
 </script>
+
+<x-modal id="confirm-update-all-agents" title="Update all agents" maxWidth="md">
+    <div class="space-y-4">
+        <p class="text-theme-sm text-gray-600 dark:text-gray-300">Outdated agents will download the update and restart. Devices already on the current release are skipped.</p>
+        <form method="POST" action="{{ route('agent.updateAll') }}" class="flex justify-end gap-3" data-modal-action data-close-modal="confirm-update-all-agents">
+            @csrf
+            <button type="button" @click="$dispatch('close-modal', 'confirm-update-all-agents')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+            <x-button type="submit" variant="primary">Update agents</x-button>
+        </form>
+    </div>
+</x-modal>
+
+@foreach($paginatedDevices as $device)
+    @if($device->isUsable() && $device->isOutdated() === true)
+        <x-modal id="confirm-update-agent-{{ $device->id }}" title="Update agent" maxWidth="md">
+            <div class="space-y-4">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">Update <span class="font-semibold text-gray-800 dark:text-white">{{ $device->name }}</span>? It will download the latest agent and restart.</p>
+                <form method="POST" action="{{ route('agent.updateOne', $device) }}" class="flex justify-end gap-3" data-modal-action data-close-modal="confirm-update-agent-{{ $device->id }}">
+                    @csrf
+                    <button type="button" @click="$dispatch('close-modal', 'confirm-update-agent-{{ $device->id }}')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                    <x-button type="submit" variant="warning">Update agent</x-button>
+                </form>
+            </div>
+        </x-modal>
+    @endif
+@endforeach
 @endsection

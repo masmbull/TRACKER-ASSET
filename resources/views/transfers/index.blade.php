@@ -39,7 +39,8 @@
 </form>
 
 @if($transfers->count() > 0)
-<table class="min-w-full bg-white shadow rounded">
+<div class="w-full overflow-x-auto">
+<table class="min-w-[900px] w-full bg-white shadow rounded">
     <thead>
         <tr class="border-b">
             <th class="text-left py-3 px-4">Transfer #</th>
@@ -90,6 +91,7 @@
         @endforeach
     </tbody>
 </table>
+</div>
 
 {{ $transfers->links() }}
 @else

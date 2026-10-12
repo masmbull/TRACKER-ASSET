@@ -276,7 +276,11 @@ public partial class App : System.Windows.Application
 
                         if (command == "scan")
                         {
-                            OpenScanWindow(config);
+                            // A browser-triggered scan belongs to the web page, not the
+                            // local tray window. Run the actual full inventory in the
+                            // background and settle the command only after the agent has
+                            // posted both the audit and the fingerprint payload.
+                            RunScan(config);
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
                         }
                         else if (command == "update")
@@ -622,13 +626,7 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            var payload = HardwareCollector.Collect();
-            // Live Fleet (PRD §11) ties telemetry to the device identity that the
-            // installer stored, so a device shows up even before its token is
-            // bound to that device_id.
-            payload["device_id"] = config.DeviceId;
-
-            Api.Post(config.ServerUrl, config.Token, payload);
+            AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId);
         }
         catch
         {

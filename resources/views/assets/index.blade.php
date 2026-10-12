@@ -20,7 +20,7 @@
 
 <x-card class="mb-6" x-data="{ showFilters: {{ request()->hasAny(['status','category','company','location']) ? 'true' : 'false' }} }">
     <form method="GET" action="{{ route('assets.index') }}">
-        <div class="flex gap-3">
+        <div class="flex flex-col gap-3 sm:flex-row">
             <div class="flex-1 relative">
                 <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2">
                     <svg class="fill-gray-400" width="20" height="20" viewBox="0 0 20 20" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z" fill=""/></svg>
@@ -29,12 +29,14 @@
                        placeholder="Search or type command..."
                        class="dark:bg-dark-900 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-4 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-brand-500/10 focus:ring-3 focus:outline-none dark:border-gray-800 dark:text-white/90 dark:placeholder:text-white/30">
             </div>
-            <x-button type="submit" size="md">Search</x-button>
-            <x-button type="button" variant="secondary" size="md" @click="showFilters = !showFilters">Filters</x-button>
-            <a href="{{ route('assets.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-theme-sm font-medium text-gray-700 hover:bg-gray-50">Reset</a>
+            <div class="grid grid-cols-3 gap-2 sm:flex">
+                <x-button type="submit" size="md" class="w-full sm:w-auto">Search</x-button>
+                <x-button type="button" variant="secondary" size="md" class="w-full sm:w-auto" @click="showFilters = !showFilters">Filters</x-button>
+                <a href="{{ route('assets.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">Reset</a>
+            </div>
         </div>
 
-        <div x-show="showFilters" x-collapse x-cloak class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div x-show="showFilters" x-collapse x-cloak class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <x-select name="status" label="Status">
                 <option value="">All</option>
                 @foreach($statuses as $status)

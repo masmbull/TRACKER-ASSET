@@ -20,9 +20,11 @@
     </style>
 </head>
 <body>
-@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-dark.png'))))
+@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-white.png'))))
 <div class="header">
-    <img src="{{ $logoUri }}" style="width: 120px; display: block; margin-bottom: 6px;" alt="MITO Electronic">
+    <div style="display: inline-block; background: #ed1c24; padding: 6px 10px; margin-bottom: 6px;">
+        <img src="{{ $logoUri }}" style="width: 120px; display: block;" alt="MITO Electronic">
+    </div>
     <h1>IKE_BAST INSPECTION TABLE</h1>
     <div class="meta">No. Dokumen: <strong>{{ $session->session_number }}</strong></div>
     <div class="meta">Tanggal Inspeksi: {{ $session->inspection_date?->format('Y-m-d') ?? '-' }}</div>

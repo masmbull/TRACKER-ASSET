@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Asset;
 use App\Models\AssetStatus;
 use App\Models\Company;
+use App\Models\CustomQrHistory;
 use App\Models\Location;
 use App\Services\AssetQrCode;
 use Illuminate\Http\Request;
@@ -37,6 +38,41 @@ class QrController extends Controller
     }
 
     /**
+     * Generate a QR symbol from text or a URL supplied by the user.
+     */
+    public function custom(Request $request): Response
+    {
+        $this->authorize('viewAny', Asset::class);
+
+        $validated = $request->validate([
+            'content' => ['required', 'string', 'max:500'],
+        ]);
+
+        $svg = AssetQrCode::fromConfig()->customSvg($validated['content']);
+
+        $history = $request->user()->customQrHistories()->create(['content' => $validated['content']]);
+
+        $response = $this->svgResponse($svg, 'mito-custom-qr.svg');
+
+        $response->headers->set('X-QR-History-Id', (string) $history->id);
+        $response->headers->set('X-QR-History-Created-At', $history->created_at->toIso8601String());
+        $response->headers->set('X-QR-History-Download', route('assets.qr.history.download', $history));
+
+        return $response;
+    }
+
+    public function downloadHistory(Request $request, CustomQrHistory $customQrHistory): Response
+    {
+        abort_unless($customQrHistory->user_id === (int) $request->user()->id, 404);
+
+        return response(AssetQrCode::fromConfig()->customSvg($customQrHistory->content), 200, [
+            'Content-Type' => 'image/svg+xml',
+            'Content-Disposition' => 'attachment; filename="mito-custom-qr-'.$customQrHistory->id.'.svg"',
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    /**
      * A printable sheet of labels for assets that already exist (PRD §41).
      *
      * Generating one code at a time means visiting 261 assets and printing 261
@@ -55,8 +91,15 @@ class QrController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
+        $qrHistory = $request->user()
+            ->customQrHistories()
+            ->latest()
+            ->paginate(10, ['*'], 'history_page')
+            ->withQueryString();
+
         return view('assets.qr-sheet', [
             'assets' => $assets,
+            'qrHistory' => $qrHistory,
             'qr' => AssetQrCode::fromConfig(),
             'companies' => Company::orderBy('name')->get(),
             'locations' => Location::orderBy('name')->get(),

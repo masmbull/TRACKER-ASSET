@@ -8,15 +8,12 @@
 <x-page-header title="Fleet Command Center" subtitle="Agents poll every 10 seconds and pending commands are executed automatically.">
     <x-slot:actions>
         <div class="flex flex-wrap items-center gap-2">
-            <form method="POST" action="{{ route('agent.scanAll') }}">
+            <form method="POST" action="{{ route('agent.scanAll') }}" data-modal-action>
                 @csrf
                 <x-button type="submit" variant="secondary" size="sm">Scan All Laptops</x-button>
             </form>
-            <form method="POST" action="{{ route('agent.updateAll') }}">
-                @csrf
-                <x-button type="submit" variant="primary" size="sm">Update All Agents</x-button>
-            </form>
-            <form method="POST" action="{{ route('agent.sweep') }}">
+            <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')">Update All Agents</x-button>
+            <form method="POST" action="{{ route('agent.sweep') }}" data-modal-action>
                 @csrf
                 <x-button type="submit" variant="success" size="sm">Sweep Now</x-button>
             </form>
@@ -83,7 +80,7 @@
                 </td>
                 <td class="py-2 px-2">
                     @if($token->isUsable())
-                        <form method="POST" action="{{ route('agent.scan', $token) }}" class="inline">
+                        <form method="POST" action="{{ route('agent.scan', $token) }}" class="inline" data-modal-action>
                             @csrf
                             <button type="submit" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">Scan Now</button>
                         </form>
@@ -101,4 +98,15 @@
         setTimeout(function () { window.location.reload(); }, 10000);
     </script>
 @endif
+
+<x-modal id="confirm-update-all-agents" title="Update all agents" maxWidth="md">
+    <div class="space-y-4">
+        <p class="text-theme-sm text-gray-600 dark:text-gray-300">Outdated agents will download the update and restart. Devices already on the current release are skipped.</p>
+        <form method="POST" action="{{ route('agent.updateAll') }}" class="flex justify-end gap-3" data-modal-action data-close-modal="confirm-update-all-agents">
+            @csrf
+            <button type="button" @click="$dispatch('close-modal', 'confirm-update-all-agents')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+            <x-button type="submit" variant="primary">Update agents</x-button>
+        </form>
+    </div>
+</x-modal>
 @endsection

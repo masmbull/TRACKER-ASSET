@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -61,6 +62,11 @@ class User extends Authenticatable
     public function attachments()
     {
         return $this->hasMany(Attachment::class, 'uploaded_by');
+    }
+
+    public function customQrHistories(): HasMany
+    {
+        return $this->hasMany(CustomQrHistory::class);
     }
 
     public function activities()

@@ -63,6 +63,25 @@ class SidebarNavigationTest extends TestCase
         );
     }
 
+    public function test_sidebar_toggle_is_visible_and_controls_desktop_and_mobile(): void
+    {
+        $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('data-sidebar-toggle', $html);
+        $this->assertStringContainsString('sidebarExpanded = !sidebarExpanded', $html);
+        $this->assertStringContainsString('sidebarToggle = !sidebarToggle', $html);
+        $this->assertStringContainsString('Collapse sidebar', $html);
+        $this->assertStringContainsString('Open navigation', $html);
+        $this->assertDoesNotMatchRegularExpression(
+            '/<button[^>]*data-sidebar-toggle[^>]*class="[^"]*xl:hidden/',
+            $html,
+            'The only sidebar toggle must not be hidden at desktop widths.'
+        );
+    }
+
     /**
      * The page the menu is on should be the one marked active.
      *

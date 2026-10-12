@@ -22,6 +22,68 @@
         </x-slot:actions>
     </x-page-header>
 
+    <div class="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <x-card title="Create a QR code">
+        <form id="custom-qr-form" method="POST" action="{{ route('assets.qr.custom') }}" class="space-y-3">
+            @csrf
+            <div>
+                <label for="qr-content" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Text or URL</label>
+                <textarea id="qr-content" name="content" rows="3" maxlength="500" required
+                          placeholder="Paste a link or type text to encode"
+                          class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"></textarea>
+                <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Up to 500 characters. The generated QR includes the MITO logo.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <x-button type="submit" variant="primary">Generate QR</x-button>
+                <p id="custom-qr-error" class="hidden text-theme-sm text-error-600 dark:text-error-400" role="alert"></p>
+            </div>
+        </form>
+    </x-card>
+
+    <x-card title="Scan or find an asset">
+        <p class="mb-3 text-theme-sm text-gray-500 dark:text-gray-400">Scan a barcode or QR label, or type an asset ID, serial number, or hostname.</p>
+        <form method="POST" action="{{ route('barcode.resolve') }}" class="flex flex-wrap gap-2">
+            @csrf
+            <input type="text" name="code" value="{{ old('code') }}" required
+                   placeholder="Scan or enter asset code"
+                   class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+            <x-button type="submit" variant="secondary">Find asset</x-button>
+        </form>
+        @error('code')
+            <p class="mt-2 text-theme-sm text-error-600 dark:text-error-400" role="alert">{{ $message }}</p>
+        @enderror
+    </x-card>
+    </div>
+
+    <div id="custom-qr-loading" class="fixed inset-0 z-[100001] hidden items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="custom-qr-loading-title" aria-live="polite">
+        <section class="flex w-full max-w-sm flex-col items-center rounded-xl bg-white p-8 text-center shadow-xl dark:bg-gray-900">
+            <div class="h-11 w-11 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" aria-hidden="true"></div>
+            <h2 id="custom-qr-loading-title" class="mt-5 text-lg font-semibold text-gray-900 dark:text-white">Generating QR code</h2>
+            <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">This should only take a moment.</p>
+        </section>
+    </div>
+
+    <div id="custom-qr-modal" class="fixed inset-0 z-[100000] hidden items-center justify-center bg-gray-950/60 p-4" role="presentation">
+        <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="custom-qr-modal-title">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h2 id="custom-qr-modal-title" class="text-lg font-semibold text-gray-900 dark:text-white">Your QR code</h2>
+                    <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">Scan it or download the SVG.</p>
+                </div>
+                <button id="custom-qr-close" type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10" aria-label="Close QR preview" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="mt-5 flex justify-center rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700">
+                <img id="custom-qr-preview" class="h-auto w-full max-w-72" alt="Generated QR code with MITO logo">
+            </div>
+            <div class="mt-5 flex justify-end gap-2">
+                <x-button id="custom-qr-download" variant="secondary" href="#" download="mito-custom-qr.svg">Download SVG</x-button>
+                <x-button type="button" variant="primary" id="custom-qr-done">Done</x-button>
+            </div>
+        </section>
+    </div>
+
     <x-card>
         <form method="GET" action="/assets/qr" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div>
@@ -63,6 +125,36 @@
         </form>
     </x-card>
 
+    <x-card class="mt-4" title="Generated QR history">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[620px] text-left">
+                <thead>
+                    <tr class="border-b border-gray-200 text-theme-xs font-semibold uppercase text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                        <th class="px-3 py-2.5">Content</th>
+                        <th class="px-3 py-2.5">Created</th>
+                        <th class="px-3 py-2.5 text-right">Download</th>
+                    </tr>
+                </thead>
+                <tbody id="custom-qr-history" class="divide-y divide-gray-100 dark:divide-gray-800">
+                    @forelse($qrHistory as $history)
+                        <tr data-history-id="{{ $history->id }}">
+                            <td class="max-w-lg truncate px-3 py-3 text-theme-sm text-gray-700 dark:text-gray-300" title="{{ $history->content }}">{{ $history->content }}</td>
+                            <td class="whitespace-nowrap px-3 py-3 text-theme-sm text-gray-500 dark:text-gray-400">{{ $history->created_at->format('Y-m-d H:i') }}</td>
+                            <td class="px-3 py-3 text-right"><a href="{{ route('assets.qr.history.download', $history) }}" class="text-theme-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">Download SVG</a></td>
+                        </tr>
+                    @empty
+                        <tr data-history-empty>
+                            <td colspan="3" class="px-3 py-5 text-center text-theme-sm text-gray-500 dark:text-gray-400">Generated QR codes will appear here.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($qrHistory->hasPages())
+            <div class="mt-3">{{ $qrHistory->links() }}</div>
+        @endif
+    </x-card>
+
     <p class="mt-4 text-theme-sm text-gray-500">
         {{ $assets->total() }} {{ Str::plural('label', $assets->total()) }} &middot; showing {{ $assets->firstItem() }}&ndash;{{ $assets->lastItem() }}
         @if($assets->total() > config('assets.qr.sheet_size'))
@@ -92,6 +184,135 @@
         </p>
     @endforelse
 </div>
+
+<script>
+    const customQrForm = document.getElementById('custom-qr-form');
+    const customQrModal = document.getElementById('custom-qr-modal');
+    const customQrLoading = document.getElementById('custom-qr-loading');
+    const customQrPreview = document.getElementById('custom-qr-preview');
+    const customQrDownload = document.getElementById('custom-qr-download');
+    const customQrError = document.getElementById('custom-qr-error');
+    let customQrObjectUrl = null;
+
+    function closeCustomQrModal() {
+        customQrModal.classList.add('hidden');
+        customQrModal.classList.remove('flex');
+        customQrPreview.removeAttribute('src');
+        customQrDownload.setAttribute('href', '#');
+
+        if (customQrObjectUrl) {
+            URL.revokeObjectURL(customQrObjectUrl);
+            customQrObjectUrl = null;
+        }
+    }
+
+    customQrForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        customQrError.classList.add('hidden');
+
+        if (customQrObjectUrl) {
+            URL.revokeObjectURL(customQrObjectUrl);
+            customQrObjectUrl = null;
+        }
+
+        customQrLoading.classList.remove('hidden');
+        customQrLoading.classList.add('flex');
+
+        const submitButton = customQrForm.querySelector('button[type="submit"]');
+        const originalLabel = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Generating...';
+
+        try {
+            const response = await fetch(customQrForm.action, {
+                method: 'POST',
+                body: new FormData(customQrForm),
+                headers: { Accept: 'application/json, image/svg+xml' },
+                credentials: 'same-origin',
+                signal: AbortSignal.timeout(30000),
+            });
+            const contentType = response.headers.get('content-type') || '';
+
+            if (!response.ok || !contentType.includes('image/svg+xml')) {
+                let message = response.redirected
+                    ? 'Your session expired. Sign in again, then retry.'
+                    : 'Could not generate the QR code. Check the content and retry.';
+
+                if (contentType.includes('application/json')) {
+                    const details = await response.json();
+                    message = details.errors?.content?.[0] || details.message || message;
+                }
+
+                throw new Error(message);
+            }
+
+            const svg = await response.blob();
+            customQrObjectUrl = URL.createObjectURL(svg);
+            customQrPreview.src = customQrObjectUrl;
+            customQrDownload.href = customQrObjectUrl;
+            appendHistoryRow({
+                id: response.headers.get('X-QR-History-Id'),
+                content: document.getElementById('qr-content').value,
+                createdAt: response.headers.get('X-QR-History-Created-At'),
+                downloadUrl: response.headers.get('X-QR-History-Download'),
+            });
+            customQrLoading.classList.add('hidden');
+            customQrLoading.classList.remove('flex');
+            customQrModal.classList.remove('hidden');
+            customQrModal.classList.add('flex');
+            document.getElementById('custom-qr-close').focus();
+        } catch (error) {
+            customQrLoading.classList.add('hidden');
+            customQrLoading.classList.remove('flex');
+            customQrError.textContent = error.message;
+            customQrError.classList.remove('hidden');
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = originalLabel;
+        }
+    });
+
+    function appendHistoryRow(history) {
+        const tableBody = document.getElementById('custom-qr-history');
+        tableBody.querySelector('[data-history-empty]')?.remove();
+
+        const row = document.createElement('tr');
+        row.dataset.historyId = history.id;
+
+        const contentCell = document.createElement('td');
+        contentCell.className = 'max-w-lg truncate px-3 py-3 text-theme-sm text-gray-700 dark:text-gray-300';
+        contentCell.textContent = history.content;
+        contentCell.title = history.content;
+
+        const createdCell = document.createElement('td');
+        createdCell.className = 'whitespace-nowrap px-3 py-3 text-theme-sm text-gray-500 dark:text-gray-400';
+        createdCell.textContent = new Date(history.createdAt).toLocaleString();
+
+        const downloadCell = document.createElement('td');
+        downloadCell.className = 'px-3 py-3 text-right';
+        const downloadLink = document.createElement('a');
+        downloadLink.href = history.downloadUrl;
+        downloadLink.className = 'text-theme-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400';
+        downloadLink.textContent = 'Download SVG';
+        downloadCell.append(downloadLink);
+
+        row.append(contentCell, createdCell, downloadCell);
+        tableBody.prepend(row);
+    }
+
+    document.getElementById('custom-qr-close').addEventListener('click', closeCustomQrModal);
+    document.getElementById('custom-qr-done').addEventListener('click', closeCustomQrModal);
+    customQrModal.addEventListener('click', (event) => {
+        if (event.target === customQrModal) {
+            closeCustomQrModal();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !customQrModal.classList.contains('hidden')) {
+            closeCustomQrModal();
+        }
+    });
+</script>
 
 <style>
     .label-grid {

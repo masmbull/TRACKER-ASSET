@@ -282,7 +282,36 @@ class LiveFleetTest extends TestCase
             ->assertSee('Battery cycles')
             ->assertSee('412')
             ->assertSee('Wi-Fi')
-            ->assertSee('MITO-OFFICE');
+            ->assertSee('MITO-OFFICE')
+            ->assertSee('refreshFleet', false)
+            ->assertSee('setInterval(refreshFleet, 60000)', false)
+            ->assertDontSee('window.location.reload', false)
+            ->assertSee('Switch to dark mode', false)
+            ->assertSee('Switch to light mode', false)
+            ->assertSee('ajax-action-modal', false)
+            ->assertSee('data-modal-action', false);
+    }
+
+    public function test_live_fleet_refresh_returns_current_device_state_as_json(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload([
+                'battery_percent' => '18',
+                'battery_health' => '55',
+                'disk_free_gb' => '9.4',
+            ]))
+            ->assertCreated();
+
+        $this->actingAs($admin)
+            ->getJson(route('agent.fleet.refresh'))
+            ->assertOk()
+            ->assertJsonPath('online', 1)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'online')
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_percent', 18)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_alert', true)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.disk_free_percent', 2);
     }
 
     /**
@@ -368,9 +397,11 @@ class LiveFleetTest extends TestCase
     public function test_live_fleet_requires_the_manage_agents_gate(): void
     {
         $this->get(route('agent.fleet'))->assertRedirect('/login');
+        $this->get(route('agent.fleet.refresh'))->assertRedirect('/login');
 
         $support = User::factory()->create(['role' => 'support']);
         $this->actingAs($support)->get(route('agent.fleet'))->assertForbidden();
+        $this->actingAs($support)->getJson(route('agent.fleet.refresh'))->assertForbidden();
     }
 
     /**
