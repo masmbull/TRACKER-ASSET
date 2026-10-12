@@ -27,39 +27,39 @@
     </x-slot:actions>
 </x-page-header>
 
-<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+<div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
     @foreach($stats as $stat)
-        <x-card class="border-l-4 {{ $stat['border'] }}">
-            <div class="flex items-start justify-between gap-3">
-                <div>
-                    <p class="text-theme-sm font-medium text-gray-500 dark:text-gray-400">{{ $stat['label'] }}</p>
-                    <p class="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">{{ number_format($stat['value']) }}</p>
-                    <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500">{{ $stat['detail'] }}</p>
+        <x-card class="border-l-4 {{ $stat['border'] }} !p-3 sm:!p-4">
+            <div class="flex items-start justify-between gap-2 sm:gap-3">
+                <div class="min-w-0">
+                    <p class="text-theme-xs font-medium text-gray-500 dark:text-gray-400 sm:text-theme-sm">{{ $stat['label'] }}</p>
+                    <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white sm:text-3xl">{{ number_format($stat['value']) }}</p>
+                    <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500 sm:text-theme-xs">{{ $stat['detail'] }}</p>
                 </div>
-                <span class="mt-1 h-2.5 w-2.5 rounded-full bg-current {{ $stat['text'] }}" aria-hidden="true"></span>
+                <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-current {{ $stat['text'] }}" aria-hidden="true"></span>
             </div>
         </x-card>
     @endforeach
 </div>
 
-<section class="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-gray-200 py-3 dark:border-gray-800" aria-label="Other asset statuses">
+<section class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-gray-200 py-3 dark:border-gray-800 sm:mt-5 sm:gap-x-8" aria-label="Other asset statuses">
     @foreach($secondaryStats as $stat)
-        <div class="flex items-center gap-2">
-            <span class="text-theme-xs font-medium text-gray-500 dark:text-gray-400">{{ $stat['label'] }}</span>
+        <div class="flex items-center gap-2 rounded-full bg-gray-50 px-2.5 py-1 dark:bg-white/5">
+            <span class="text-[10px] font-medium text-gray-500 dark:text-gray-400 sm:text-theme-xs">{{ $stat['label'] }}</span>
             <span class="text-theme-sm font-semibold {{ $stat['text'] }}">{{ number_format($stat['value']) }}</span>
         </div>
     @endforeach
 </section>
 
-<div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 mt-6">
-    <x-card title="Open Repairs">
-        <p class="text-title-sm font-bold text-orange-500">{{ $openRepairs }}</p>
+<div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <x-card title="Open Repairs" class="!p-4 sm:!p-5">
+        <p class="text-xl font-bold text-orange-500 sm:text-title-sm">{{ $openRepairs }}</p>
     </x-card>
-    <x-card title="Total Repairs">
-        <p class="text-title-sm font-bold text-gray-800 dark:text-white/90">{{ $totalRepairs }}</p>
+    <x-card title="Total Repairs" class="!p-4 sm:!p-5">
+        <p class="text-xl font-bold text-gray-800 dark:text-white/90 sm:text-title-sm">{{ $totalRepairs }}</p>
     </x-card>
-    <x-card title="Recent Transfers">
-        <p class="text-title-sm font-bold text-brand-500">{{ $recentTransfers->count() }}</p>
+    <x-card title="Recent Transfers" class="!p-4 sm:!p-5">
+        <p class="text-xl font-bold text-brand-500 sm:text-title-sm">{{ $recentTransfers->count() }}</p>
     </x-card>
 </div>
 

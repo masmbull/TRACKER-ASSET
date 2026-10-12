@@ -12,6 +12,8 @@ export default defineConfig({
                 bunny('Outfit', {
                     weights: [400, 500, 600, 700],
                     preload: [{ weight: 400 }, { weight: 600 }],
+                    // fontaine not installed; skip metric-matched fallbacks
+                    optimizedFallbacks: false,
                 }),
             ],
         }),

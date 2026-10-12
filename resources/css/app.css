@@ -726,10 +726,13 @@
   }
   
   .sidebar[data-collapsed="true"] .logo {
-    display: none;
+    display: flex;
   }
   .sidebar[data-collapsed="true"] .logo-icon {
-    display: block;
+    display: none;
+  }
+  .sidebar[data-collapsed="true"] .brand-text {
+    display: inline;
   }
   .sidebar[data-collapsed="true"] .sidebar-header {
     justify-content: space-between;
