@@ -33,7 +33,7 @@
      and a sentence explaining it, which is a lot of ink for facts that are
      only glanceable; the numbers an operator acts on are still here, just
      without the card scaffolding. --}}
-<div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-theme-sm text-gray-600 dark:text-gray-300">
+<div class="mb-4 flex flex-col items-start gap-2 text-theme-sm text-gray-600 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2 dark:text-gray-300">
     <span><span class="font-semibold text-gray-800 dark:text-white" data-fleet-online>{{ $stats['online'] }}</span>/{{ $stats['devices'] }} online</span>
     @if($stats['battery_alerts'] > 0)
         <x-badge variant="warning">{{ $stats['battery_alerts'] }} battery</x-badge>
@@ -73,8 +73,8 @@
          into a wall of text. The row carries the three things an operator scans
          a fleet for - is it up, is the battery dying, is the disk full - and
          everything else waits one click away in the detail modal. --}}
-    <div class="overflow-x-auto">
-        <table class="w-full">
+    <div class="overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0">
+        <table class="min-w-[760px] w-full">
             <thead>
                 <tr class="border-b border-gray-100 dark:border-gray-800">
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Device</th>

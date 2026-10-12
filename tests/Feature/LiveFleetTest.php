@@ -264,6 +264,50 @@ class LiveFleetTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_queue_script_push_to_multiple_specific_devices(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $targetA = AgentApiToken::create([
+            'name' => 'laptop-a',
+            'device_id' => 'MITO-0001',
+            'token_hash' => hash('sha256', 'token-a'),
+            'token_plain' => 'token-a',
+        ]);
+
+        $targetB = AgentApiToken::create([
+            'name' => 'laptop-b',
+            'device_id' => 'MITO-0002',
+            'token_hash' => hash('sha256', 'token-b'),
+            'token_plain' => 'token-b',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'devices',
+            'agent_token_ids' => [$targetA->id, $targetB->id],
+            'script_name' => 'multi-deploy.ps1',
+            'script_type' => 'powershell',
+            'script_body' => 'Write-Host "hello"',
+            'working_directory' => 'C:\\Temp\\Scripts',
+            'run_as' => 'current-user',
+            'timeout_seconds' => 180,
+            'trigger' => 'once',
+            'notes' => 'Deploy to multiple devices',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $targetA->id,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $targetB->id,
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_fleet_can_filter_to_unregistered_devices_only(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
