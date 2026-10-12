@@ -4,7 +4,7 @@ $types = [
     'success' => 'border-success-200 bg-success-50 text-success-700 dark:border-success-500/20 dark:bg-success-500/10 dark:text-success-400',
     'error' => 'border-error-200 bg-error-50 text-error-700 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400',
     'warning' => 'border-warning-200 bg-warning-50 text-warning-700 dark:border-warning-500/20 dark:bg-warning-500/10 dark:text-warning-400',
-    'info' => 'border-blue-light-200 bg-blue-light-50 text-blue-light-700',
+    'info' => 'border-blue-light-200 bg-blue-light-50 text-blue-light-700 dark:border-blue-light-500/20 dark:bg-blue-light-500/10 dark:text-blue-light-300',
 ];
 @endphp
 <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"

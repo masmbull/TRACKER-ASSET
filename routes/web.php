@@ -62,6 +62,8 @@ Route::middleware('auth')->group(function () {
     // Before the resource route below: /assets/qr would otherwise be matched by
     // assets/{asset} with "qr" as the id, and 404 on an asset lookup.
     Route::get('/assets/qr', [QrController::class, 'sheet'])->name('assets.qr.sheet');
+    Route::post('/assets/qr/custom', [QrController::class, 'custom'])->name('assets.qr.custom');
+    Route::get('/assets/qr/history/{customQrHistory}/download', [QrController::class, 'downloadHistory'])->name('assets.qr.history.download');
     Route::get('/assets/{asset}/qr', [QrController::class, 'show'])->name('assets.qr');
 
     Route::resource('assets', AssetController::class);
@@ -110,6 +112,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
 
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
+        Route::get('/agent/fleet/refresh', [AgentFleetController::class, 'refresh'])->name('agent.fleet.refresh');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
         // Deep inventory detail for one device. Declared before the token-scoped
         // POST routes so "fingerprint" can never be read as a token id.

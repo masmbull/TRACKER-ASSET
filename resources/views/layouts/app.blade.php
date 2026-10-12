@@ -26,7 +26,6 @@
         darkMode: JSON.parse(localStorage.getItem('darkMode') || 'false'),
         sidebarToggle: false,
         sidebarExpanded: JSON.parse(localStorage.getItem('sidebarExpanded') ?? 'true'),
-        menuToggle: false,
         selectedMenu: $persist('{{ request()->route()->getName() ?? 'dashboard' }}')
     }"
     x-init="$watch('darkMode', v => { localStorage.setItem('darkMode', JSON.stringify(v)); document.documentElement.classList.toggle('dark', v) }); $watch('sidebarExpanded', v => localStorage.setItem('sidebarExpanded', JSON.stringify(v))); document.documentElement.classList.toggle('dark', darkMode)"
@@ -64,11 +63,16 @@
             // resolves without Str at all.
             $isSection = fn (string $pattern): bool => $route === $pattern
                 || \Illuminate\Support\Str::is($pattern, (string) $route);
+            $activeRouteAliases = [
+                'assets.index' => ['assets.show', 'assets.edit', 'assets.audit', 'assets.audit.device', 'assets.transfer', 'assets.repair.create'],
+                'assets.qr.sheet' => ['assets.qr'],
+                'documents.index' => ['documents.preview', 'documents.download'],
+                'reports.index' => ['reports.export'],
+            ];
             $navGroups = [
                 'MENU' => [
-                    ['route' => 'dashboard', 'label' => 'Dashboard', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V8.99998C3.25 10.2426 4.25736 11.25 5.5 11.25H9C10.2426 11.25 11.25 10.2426 11.25 8.99998V5.5C11.25 4.25736 10.2426 3.25 9 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H9C9.41421 4.75 9.75 5.08579 9.75 5.5V8.99998C9.75 9.41419 9.41421 9.74998 9 9.74998H5.5C5.08579 9.74998 4.75 9.41419 4.75 8.99998V5.5ZM5.5 12.75C4.25736 12.75 3.25 13.7574 3.25 15V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H9C10.2426 20.75 11.25 19.7427 11.25 18.5V15C11.25 13.7574 10.2426 12.75 9 12.75H5.5ZM4.75 15C4.75 14.5858 5.08579 14.25 5.5 14.25H9C9.41421 14.25 9.75 14.5858 9.75 15V18.5C9.75 18.9142 9.41421 19.25 9 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V15ZM12.75 5.5C12.75 4.25736 13.7574 3.25 15 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V8.99998C20.75 10.2426 19.7426 11.25 18.5 11.25H15C13.7574 11.25 12.75 10.2426 12.75 8.99998V5.5ZM15 4.75C14.5858 4.75 14.25 5.08579 14.25 5.5V8.99998C14.25 9.41419 14.5858 9.74998 15 9.74998H18.5C18.9142 9.74998 19.25 9.41419 19.25 8.99998V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H15ZM15 12.75C13.7574 12.75 12.75 13.7574 12.75 15V18.5C12.75 19.7426 13.7574 20.75 15 20.75H18.5C19.7426 20.75 20.75 19.7427 20.75 18.5V15C20.75 13.7574 19.7426 12.75 18.5 12.75H15ZM14.25 15C14.25 14.5858 14.5858 14.25 15 14.25H18.5C18.9142 14.25 19.25 14.5858 19.25 15V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15C14.5858 19.25 14.25 18.9142 14.25 18.5V15Z" fill="currentColor"/>'],
-                    ['route' => 'assets.index', 'label' => 'All Assets', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M3.25 5.5C3.25 4.25736 4.25736 3.25 5.5 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V18.5C20.75 19.7426 19.7426 20.75 18.5 20.75H5.5C4.25736 20.75 3.25 19.7426 3.25 18.5V5.5ZM5.5 4.75C5.08579 4.75 4.75 5.08579 4.75 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5ZM19.25 10.0833H15.416V13.9165H19.25V10.0833ZM13.916 10.0833L10.083 10.0833V13.9165L13.916 13.9165V10.0833ZM8.58301 10.0833H4.75V13.9165H8.58301V10.0833ZM4.75 18.5V15.4165H8.58301V19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5ZM10.083 19.25V15.4165L13.916 15.4165V19.25H10.083ZM15.416 19.25V15.4165H19.25V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15.416Z" fill="currentColor"/>'],
-                    ['route' => 'assets.retired', 'label' => 'Retired', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25C6.61522 2.25 2.25 6.61522 2.25 12C2.25 17.3848 6.61522 21.75 12 21.75C17.3848 21.75 21.75 17.3848 21.75 12C21.75 6.61522 17.3848 2.25 12 2.25ZM3.75 12C3.75 7.44365 7.44365 3.75 12 3.75C16.5563 3.75 20.25 7.44365 20.25 12C20.25 16.5563 16.5563 20.25 12 20.25C7.44365 20.25 3.75 16.5563 3.75 12ZM15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967Z" fill="currentColor"/>'],
+                    ['route' => 'dashboard', 'label' => 'Dashboard', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V8.99998C3.25 10.2426 4.25736 11.25 5.5 11.25H9C10.2426 11.25 11.25 10.2426 11.25 8.99998V5.5C11.25 4.25736 10.2426 3.25 9 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H9C9.41421 4.75 9.75 5.08579 9.75 5.5V8.99998C9.75 9.41419 9.41421 9.74998 9 9.74998H5.5C5.08579 9.74998 4.75 9.41419 4.75 8.99998V5.5ZM5.5 12.75C4.25736 12.75 3.25 13.7574 3.25 15V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H9C10.2426 20.75 11.25 19.7427 11.25 18.5V15C11.25 13.7574 10.2426 12.75 9 12.75H5.5ZM4.75 15C4.75 14.5858 5.08579 14.25 5.5 14.25H9C9.41421 14.25 9.75 14.5858 9.75 15V18.5C9.75 18.9142 9.41421 19.25 9 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V15ZM12.75 5.5C12.75 4.25736 13.7574 3.25 15 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V8.99998C20.75 10.2426 19.7426 11.25 18.5 11.25H15C13.7574 11.25 12.75 10.2426 12.75 8.99998V5.5ZM15 4.75C14.5858 4.75 14.25 5.08579 14.25 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5C5.08579 4.75 4.75 5.08579 4.75 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5ZM19.25 10.0833H15.416V13.9165H19.25V10.0833ZM13.916 10.0833L10.083 10.0833V13.9165L13.916 13.9165V10.0833ZM8.58301 10.0833H4.75V13.9165H8.58301V10.0833ZM4.75 18.5V15.4165H8.58301V19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5ZM10.083 19.25V15.4165L13.916 15.4165V19.25H10.083ZM15.416 19.25V15.4165H19.25V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15.416Z" fill="currentColor"/>'],
+                    ['route' => 'assets.retired', 'label' => 'Retired', 'icon' => '<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25C6.61522 2.25 2.25 6.61522 2.25 12C2.25 17.3848 6.61522 21.75 12 21.75C17.3848 21.75 21.75 17.3848 21.75 12C21.75 6.61522 17.3848 2.25 12 2.25ZM3.75 12C3.75 7.44365 7.44365 3.75 12 3.75C16.5563 3.75 20.25 7.44365 20.25 12C20.25 16.5563 16.5563 20.25 12 20.25C7.44365 20.25 3.75 16.5563 3.75 12ZM12.75 7.25C12.75 6.83579 12.4142 6.5 12 6.5C11.5858 6.5 11.25 6.83579 11.25 7.25V12C11.25 12.4142 11.5858 12.75 12 12.75C12.4142 12.75 12.75 12.4142 12.75 12V7.25Z" fill="currentColor"/>'],
                     // Adding an asset is the most common action in the app and had no
                     // navigation entry at all: the route existed, and the only way in
                     // was a button on the asset list page.
@@ -96,6 +100,13 @@
             ];
         @endphp
 
+        @php
+            $navGroups['MANAGEMENT'] = array_values(array_filter(
+                $navGroups['MANAGEMENT'],
+                fn (array $item): bool => $item['route'] !== 'barcode.form'
+            ));
+        @endphp
+
         <aside
             :class="[
                 'sidebar z-[9999] flex h-screen flex-col overflow-y-auto border-r border-gray-200 bg-white px-5 fixed top-0 left-0 xl:static dark:border-gray-800 dark:bg-black',
@@ -117,8 +128,10 @@
                         <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg">
                     </div>
                 </a>
-                <button @click="sidebarExpanded = !sidebarExpanded"
-                        class="hidden xl:flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-white/10 transition-colors flex-shrink-0">
+                <button data-sidebar-toggle
+                    @click="sidebarExpanded = !sidebarExpanded"
+                    :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+                    class="hidden xl:flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-white/10 transition-colors flex-shrink-0">
                     <svg :class="sidebarExpanded ? '' : 'hidden'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
                     <svg :class="sidebarExpanded ? 'hidden' : ''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
                 </button>
@@ -139,7 +152,7 @@
                                      nothing to resolve a policy from and denies
                                      everybody. --}}
                                 @if(!isset($item['gate']) || Gate::allows($item['gate'], $item['model'] ?? []))
-                                    @php $isActive = $route === $item['route']; @endphp
+                                    @php $isActive = $route === $item['route'] || in_array($route, $activeRouteAliases[$item['route']] ?? [], true); @endphp
                                     <li>
                                         <a href="{{ route($item['route']) }}"
                                            @click="selectedMenu = '{{ $item['route'] }}'"
@@ -229,6 +242,7 @@
                     <div class="flex w-full items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 xl:justify-normal xl:border-b-0 xl:px-0 dark:border-gray-800">
                         <!-- Hamburger Toggle -->
                         <button @click.stop="sidebarToggle = !sidebarToggle"
+                            :aria-label="sidebarToggle ? 'Close navigation' : 'Open navigation'"
                                 class="z-[99999] flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 xl:hidden dark:border-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
                             <svg :class="sidebarToggle ? 'hidden' : 'block xl:hidden'" class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.25 6C3.25 5.58579 3.58579 5.25 4 5.25L20 5.25C20.4142 5.25 20.75 5.58579 20.75 6C20.75 6.41421 20.4142 6.75 20 6.75L4 6.75C3.58579 6.75 3.25 6.41422 3.25 6ZM3.25 18C3.25 17.5858 3.58579 17.25 4 17.25L20 17.25C20.4142 17.25 20.75 17.5858 20.75 18C20.75 18.4142 20.4142 18.75 20 18.75L4 18.75C3.58579 18.75 3.25 18.4142 3.25 18ZM4 11.25C3.58579 11.25 3.25 11.5858 3.25 12C3.25 12.4142 3.58579 12.75 4 12.75L12 12.75C12.4142 12.75 12.75 12.4142 12.75 12C12.75 11.5858 12.4142 11.25 12 11.25L4 11.25Z" fill=""/></svg>
                             <svg :class="sidebarToggle ? 'block xl:hidden' : 'hidden'" class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z" fill=""/></svg>
@@ -236,13 +250,15 @@
 
                     </div>
 
-                    <div :class="menuToggle ? 'flex' : 'hidden'" class="w-full items-center justify-end gap-4 px-4 py-3 xl:flex xl:px-0">
+                    <div class="flex w-full items-center justify-end gap-4 px-4 py-3 xl:px-0">
                         <div class="flex items-center gap-2">
                             <!-- Dark Mode Toggle -->
-                            <button @click.prevent="darkMode = !darkMode"
+                            <button type="button" @click.prevent="darkMode = !darkMode"
+                                    :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                                    :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                                     class="relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-                                <svg class="hidden dark:block" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M9.99998 1.5415C10.4142 1.5415 10.75 1.87729 10.75 2.2915V3.5415C10.75 3.95572 10.4142 4.2915 9.99998 4.2915C9.58577 4.2915 9.24998 3.95572 9.24998 3.5415V2.2915C9.24998 1.87729 9.58577 1.5415 9.99998 1.5415ZM10.0009 6.79327C8.22978 6.79327 6.79402 8.22904 6.79402 10.0001C6.79402 11.7712 8.22978 13.207 10.0009 13.207C11.772 13.207 13.2078 11.7712 13.2078 10.0001C13.2078 8.22904 11.772 6.79327 10.0009 6.79327ZM5.29402 10.0001C5.29402 7.40061 7.40135 5.29327 10.0009 5.29327C12.6004 5.29327 14.7078 7.40061 14.7078 10.0001C14.7078 12.5997 12.6004 14.707 10.0009 14.707C7.40135 14.707 5.29402 12.5997 5.29402 10.0001Z"/></svg>
-                                <svg class="dark:hidden" width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M17.4547 11.97L18.1799 12.1611C18.265 11.8383 18.1265 11.4982 17.8401 11.3266C17.5538 11.1551 17.1885 11.1934 16.944 11.4207L17.4547 11.97ZM8.0306 2.5459L8.57989 3.05657C8.80718 2.81209 8.84554 2.44682 8.67398 2.16046C8.50243 1.8741 8.16227 1.73559 7.83948 1.82066L8.0306 2.5459ZM12.9154 13.0035C9.64678 13.0035 6.99707 10.3538 6.99707 7.08524H5.49707C5.49707 11.1823 8.81835 14.5035 12.9154 14.5035V13.0035ZM16.944 11.4207C15.8869 12.4035 14.4721 13.0035 12.9154 13.0035V14.5035C14.8657 14.5035 16.6418 13.7499 17.9654 12.5193L16.944 11.4207ZM16.7295 11.7789C15.9437 14.7607 13.2277 16.9586 10.0003 16.9586V18.4586C13.9257 18.4586 17.2249 15.7853 18.1799 12.1611L16.7295 11.7789ZM10.0003 16.9586C6.15734 16.9586 3.04199 13.8433 3.04199 10.0003H1.54199C1.54199 14.6717 5.32892 18.4586 10.0003 18.4586V16.9586ZM3.04199 10.0003C3.04199 6.77289 5.23988 4.05695 8.22173 3.27114L7.83948 1.82066C4.21532 2.77574 1.54199 6.07486 1.54199 10.0003H3.04199ZM6.99707 7.08524C6.99707 5.52854 7.5971 4.11366 8.57989 3.05657L7.48132 2.03522C6.25073 3.35885 5.49707 5.13487 5.49707 7.08524H6.99707Z"/></svg>
+                                <svg class="hidden dark:block" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+                                <svg class="dark:hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg>
                             </button>
 
                             <!-- User Area -->
@@ -332,6 +348,114 @@
             </main>
         </div>
     </div>
+
+    <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4" role="presentation" aria-live="polite">
+        <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
+            <div class="flex items-start gap-4">
+                <div id="ajax-action-spinner" class="mt-0.5 h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" aria-hidden="true"></div>
+                <div class="min-w-0 flex-1">
+                    <h2 id="ajax-action-title" class="text-lg font-semibold text-gray-900 dark:text-white">Working</h2>
+                    <p id="ajax-action-message" class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">Please wait.</p>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end">
+                <button id="ajax-action-close" type="button" class="hidden rounded-lg bg-brand-600 px-4 py-2 text-theme-sm font-medium text-white hover:bg-brand-700">Done</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('ajax-action-modal');
+            const title = document.getElementById('ajax-action-title');
+            const message = document.getElementById('ajax-action-message');
+            const spinner = document.getElementById('ajax-action-spinner');
+            const closeButton = document.getElementById('ajax-action-close');
+
+            const closeModal = () => {
+                if (modal.dataset.busy !== 'true') {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }
+            };
+
+            document.querySelectorAll('form[data-modal-action]').forEach((form) => {
+                form.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+
+                    if (modal.dataset.busy === 'true') {
+                        return;
+                    }
+
+                    modal.dataset.busy = 'true';
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                    modal.setAttribute('aria-busy', 'true');
+                    title.textContent = 'Working';
+                    message.textContent = 'Sending your request. Please wait.';
+                    spinner.classList.remove('hidden');
+                    closeButton.classList.add('hidden');
+
+                    const submitButtons = [...form.querySelectorAll('button[type="submit"]')];
+                    submitButtons.forEach((button) => {
+                        button.disabled = true;
+                    });
+
+                    try {
+                        const response = await fetch(form.action, {
+                            method: 'POST',
+                            body: new FormData(form),
+                            headers: {
+                                Accept: 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            credentials: 'same-origin',
+                        });
+                        const payload = response.headers.get('content-type')?.includes('application/json')
+                            ? await response.json()
+                            : {};
+
+                        if (!response.ok || payload.ok !== true) {
+                            throw new Error(payload.message || (response.redirected
+                                ? 'Your session expired. Sign in again, then retry.'
+                                : 'The action could not be completed. Please try again.'));
+                        }
+
+                        if (form.dataset.closeModal) {
+                            window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
+                        }
+
+                        title.textContent = 'Request accepted';
+                        message.textContent = payload.message;
+                    } catch (error) {
+                        title.textContent = 'Action not completed';
+                        message.textContent = error.message;
+                    } finally {
+                        modal.dataset.busy = 'false';
+                        modal.removeAttribute('aria-busy');
+                        spinner.classList.add('hidden');
+                        closeButton.classList.remove('hidden');
+                        submitButtons.forEach((button) => {
+                            button.disabled = false;
+                        });
+                        closeButton.focus();
+                    }
+                });
+            });
+
+            closeButton.addEventListener('click', closeModal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeModal();
+                }
+            });
+        })();
+    </script>
 
     @livewireScripts
 </body>

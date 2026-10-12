@@ -77,13 +77,34 @@ class AssetQrCode
             ."<title>{$label}</title>"
             ."<rect width=\"{$width}\" height=\"{$height}\" fill=\"#ffffff\"/>"
             ."<g transform=\"translate({$pad},{$pad})\">"
-            .$this->codeSvg($asset, $size)
+            .$this->codeSvg($this->targetUrl($asset), $size)
             .$this->logoOverlay($size)
             .'</g>'
             ."<text x=\"{$centre}\" y=\"{$titleY}\" text-anchor=\"middle\" font-family=\"".self::FONT.'"'
             ." font-size=\"18\" font-weight=\"700\" fill=\"#111827\">{$caption}</text>"
             ."<text x=\"{$centre}\" y=\"{$labelY}\" text-anchor=\"middle\" font-family=\"".self::FONT.'"'
             ." font-size=\"17\" fill=\"#374151\">{$label}</text>"
+            .'</svg>';
+    }
+
+    /**
+     * A standalone QR symbol for user-entered text or a URL.
+     */
+    public function customSvg(string $payload): string
+    {
+        $size = (int) ($this->config['size'] ?? 300);
+        $width = $size + (self::PADDING * 2);
+        $box = $this->px($width);
+        $pad = $this->px(self::PADDING);
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="'.$box.'" height="'.$box.'"'
+            .' viewBox="0 0 '.$box.' '.$box.'" role="img" aria-label="MITO custom QR code">'
+            .'<title>MITO custom QR code</title>'
+            .'<rect width="'.$box.'" height="'.$box.'" fill="#ffffff"/>'
+            .'<g transform="translate('.$pad.','.$pad.')">'
+            .$this->codeSvg($payload, $size)
+            .$this->logoOverlay($size)
+            .'</g>'
             .'</svg>';
     }
 
@@ -99,13 +120,13 @@ class AssetQrCode
      * its own numbers leaves the code a pixel or two out and the label visibly
      * off-centre.
      */
-    private function codeSvg(Asset $asset, int $size): string
+    private function codeSvg(string $payload, int $size): string
     {
         $svg = QrCode::format('svg')
             ->size($size)
             ->margin((int) ($this->config['margin'] ?? 2))
             ->errorCorrection((string) ($this->config['error_correction'] ?? 'H'))
-            ->generate($this->targetUrl($asset));
+            ->generate($payload);
 
         $box = $this->px($size);
 

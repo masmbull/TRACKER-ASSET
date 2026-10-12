@@ -372,7 +372,7 @@ public static class AgentRunner
     /// </summary>
     static bool UninstallRequested { get; set; }
 
-    static int RunOnce(string url, string token, string? assetId = null)
+    internal static int RunFullScan(string url, string token, string? assetId = null)
     {
         try
         {
@@ -381,12 +381,12 @@ public static class AgentRunner
             {
                 payload["asset_id"] = assetId;
             }
+
             var deviceId = TryReadDeviceId();
             if (!string.IsNullOrWhiteSpace(deviceId))
             {
                 payload["device_id"] = deviceId;
             }
-
 
             var result = Api.Post(url, token, payload);
 
@@ -416,6 +416,8 @@ public static class AgentRunner
             return 1;
         }
     }
+
+    static int RunOnce(string url, string token, string? assetId = null) => RunFullScan(url, token, assetId);
 
     /// <summary>
     /// Credential self-heal: the server answered 401, so the token we are

@@ -8,6 +8,8 @@ use App\Models\AgentFingerprint;
 use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\URL;
@@ -47,6 +49,70 @@ class AgentFleetController extends Controller
     private const PAGE_SIZES = [10, 25, 50, 100];
 
     private const DEFAULT_PAGE_SIZE = 10;
+
+    /**
+     * Return only the fields that change while the fleet page is open.
+     */
+    public function refresh(): JsonResponse
+    {
+        $devices = AgentApiToken::query()
+            ->with('telemetry')
+            ->where('is_active', true)
+            ->get();
+
+        $activeOperations = AgentCommand::query()
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->whereIn('command', ['install', 'update'])
+            ->whereIn('agent_token_id', $devices->pluck('id'))
+            ->orderByDesc('id')
+            ->get(['agent_token_id', 'command'])
+            ->unique('agent_token_id')
+            ->keyBy('agent_token_id');
+
+        $onlineCount = 0;
+        $deviceStates = [];
+
+        foreach ($devices as $device) {
+            if (! $device->isUsable()) {
+                continue;
+            }
+
+            $telemetry = $device->telemetry;
+            $isOnline = ($device->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false)
+                || ($telemetry?->isOnline() ?? false);
+
+            if ($isOnline) {
+                $onlineCount++;
+            }
+
+            $operation = $activeOperations->get($device->id);
+            $status = $isOnline
+                ? 'online'
+                : ($telemetry === null && $operation !== null
+                    ? $operation->command.'ing'
+                    : ($telemetry === null ? 'never scanned' : 'stale'));
+
+            $deviceStates[$device->id] = [
+                'status' => $status,
+                'reported_at' => $telemetry?->reported_at?->diffForHumans() ?? 'no report yet',
+                'battery_percent' => $telemetry?->battery_percent,
+                'battery_health' => $telemetry?->battery_health,
+                'battery_alert' => $telemetry !== null
+                    && ($telemetry->hasLowBattery() || $telemetry->hasWeakBattery()),
+                'disk_free_percent' => $telemetry?->disk_free_percent === null
+                    ? null
+                    : (int) round((float) $telemetry->disk_free_percent),
+                'disk_free_gb' => $telemetry?->disk_free_gb === null
+                    ? null
+                    : number_format((float) $telemetry->disk_free_gb, 0),
+            ];
+        }
+
+        return response()->json([
+            'online' => $onlineCount,
+            'devices' => $deviceStates,
+        ]);
+    }
 
     /**
      * Live Fleet (PRD §11): the last telemetry snapshot of every deployed
@@ -603,23 +669,23 @@ class AgentFleetController extends Controller
     /**
      * Queue a scan for one laptop (identified by its token).
      */
-    public function scanNow(AgentApiToken $token)
+    public function scanNow(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
     {
         // A scan aimed at a token the middleware will reject is a command that
         // can never be delivered. The uninstall action refuses it outright; a
         // scan must refuse it too, otherwise the button silently produces work
         // the fleet will never see and the operator is told it was queued.
         if (! $token->isUsable()) {
-            return back()->with('error', sprintf(
+            return $this->actionResponse($request, sprintf(
                 "'%s' is revoked or its token has expired, so the agent can no longer be reached and a scan cannot be delivered. ".
                 'Issue a new token and redeploy the agent on that machine first.',
                 $token->name
-            ));
+            ), false);
         }
 
         $this->enqueue($token->id, 'scan');
 
-        return back()->with('success', "Scan queued for '{$token->name}' — the agent picks it up within a few seconds.");
+        return $this->actionResponse($request, "Scan queued for '{$token->name}' — the agent picks it up within a few seconds.");
     }
 
     /**
@@ -633,7 +699,7 @@ class AgentFleetController extends Controller
      * nowhere to land. One row per device makes the page match reality, and it is
      * what lets the agent acknowledge the scan it was asked for.
      */
-    public function scanAll()
+    public function scanAll(Request $request): JsonResponse|RedirectResponse
     {
         $pending = AgentCommand::query()
             ->where('command', 'scan')
@@ -654,7 +720,7 @@ class AgentFleetController extends Controller
             $this->enqueue($token->id, 'scan', ['source' => 'scan-all']);
         }
 
-        return back()->with('success', sprintf(
+        return $this->actionResponse($request, sprintf(
             'Scan queued for %d device(s) — each agent picks it up within a few seconds.',
             $tokens->count()
         ));
@@ -673,7 +739,7 @@ class AgentFleetController extends Controller
      * to machines already carrying that exact build would restart the whole
      * office's antivirus mid-scan for nothing.
      */
-    public function updateAll()
+    public function updateAll(Request $request): JsonResponse|RedirectResponse
     {
         $this->enqueue(null, 'update', ['url' => URL::route('agent.download.latest')]);
 
@@ -688,7 +754,7 @@ class AgentFleetController extends Controller
             ? " {$current} already on the release will be left alone."
             : '';
 
-        return back()->with('success', "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.");
+        return $this->actionResponse($request, "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.");
     }
 
     /**
@@ -704,11 +770,11 @@ class AgentFleetController extends Controller
      * devices are behind, and refusing a manual update because the operator
      * disagrees with the badge would be worse than the badge being wrong.
      */
-    public function updateOne(AgentApiToken $token)
+    public function updateOne(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
     {
         $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
 
-        return back()->with('success', "Update queued for {$token->name} — it re-pulls the latest binary and restarts.");
+        return $this->actionResponse($request, "Update queued for {$token->name} — it re-pulls the latest binary and restarts.");
     }
 
     /**
@@ -726,7 +792,7 @@ class AgentFleetController extends Controller
      * its token and therefore still executes the removal the moment it comes
      * back, instead of going permanently deaf.
      */
-    public function uninstall(Request $request, AgentApiToken $token)
+    public function uninstall(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
     {
         // A revoked/expired token can never receive the command: the agent
         // middleware answers 401 before the inbox is even reached, so the row
@@ -734,16 +800,16 @@ class AgentFleetController extends Controller
         // "Uninstall queued" badge for a machine that will never be contacted.
         // Refuse it at the source instead of queueing and cleaning up later.
         if (! $token->isUsable()) {
-            return back()->with('error', sprintf(
+            return $this->actionResponse($request, sprintf(
                 "'%s' is already revoked, so the agent can no longer be reached and an uninstall cannot be delivered. ".
                 'Remove the program from that machine manually.',
                 $token->name
-            ));
+            ), false);
         }
 
         $this->enqueue($token->id, 'uninstall', ['requested_by' => $request->user()?->name]);
 
-        return back()->with('success', sprintf(
+        return $this->actionResponse($request, sprintf(
             "Uninstall queued for '%s'. The agent removes itself at its next poll (within 10 seconds) and the token is revoked then. ".
             'A machine that is currently offline will do this the next time it comes back online.',
             $token->name
@@ -754,7 +820,7 @@ class AgentFleetController extends Controller
      * Manual sweep (same logic as the scheduled `audit:sweep`): queue a scan
      * for every active, non-busy agent, skipping recently-swept ones.
      */
-    public function sweep()
+    public function sweep(Request $request): JsonResponse|RedirectResponse
     {
         // Same usability rule as the scheduled `audit:sweep` and the device list
         // above: an expired token answers 401 just like a revoked one, so
@@ -783,7 +849,19 @@ class AgentFleetController extends Controller
             $queued++;
         }
 
-        return back()->with('success', sprintf('Sweep queued %d agent(s).', $queued));
+        return $this->actionResponse($request, sprintf('Sweep queued %d agent(s).', $queued));
+    }
+
+    private function actionResponse(Request $request, string $message, bool $success = true): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => $success,
+                'message' => $message,
+            ], $success ? 200 : 422);
+        }
+
+        return back()->with($success ? 'success' : 'error', $message);
     }
 
     private function enqueue(?int $tokenId, string $command, array $payload = []): void

@@ -49,6 +49,34 @@ class AssetTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_asset_forms_associate_labels_with_form_controls(): void
+    {
+        $user = User::factory()->create(['role' => 'support']);
+        $asset = Asset::factory()->create();
+
+        foreach ([route('assets.create'), route('assets.edit', $asset)] as $url) {
+            $response = $this->actingAs($user)->get($url);
+            $response->assertOk();
+
+            $document = new \DOMDocument;
+            $previousLibxmlState = libxml_use_internal_errors(true);
+            $document->loadHTML($response->getContent());
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousLibxmlState);
+            $xpath = new \DOMXPath($document);
+            $controls = $xpath->query('//form//*[self::input or self::select or self::textarea][not(self::input[@type="hidden"])]');
+
+            $this->assertNotFalse($controls);
+
+            foreach ($controls as $control) {
+                $id = $control->getAttribute('id');
+
+                $this->assertNotSame('', $id);
+                $this->assertGreaterThan(0, $xpath->query('//label[@for="'.$id.'"]')->length, $id);
+            }
+        }
+    }
+
     public function test_authenticated_user_can_search_assets_by_status_name(): void
     {
         $user = User::factory()->create([

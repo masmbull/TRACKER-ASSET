@@ -292,7 +292,7 @@
             This will send a scan request to the audit agent for this device so the latest hardware data can be compared.
         </p>
 
-        <form method="POST" action="{{ route('assets.audit.agent.scan', $asset) }}" class="space-y-4">
+        <form method="POST" action="{{ route('assets.audit.agent.scan', $asset) }}" class="space-y-4" data-modal-action data-close-modal="scan-again-modal">
             @csrf
 
             <div class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-theme-sm text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-400">
