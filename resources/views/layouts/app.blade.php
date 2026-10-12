@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@yield('title', 'TRACKER-ASSET')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{ \Illuminate\Support\Facades\Vite::fonts('outfit') }}
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
-    @livewireStyles
     <script>
         (function() {
             try {
@@ -457,6 +457,5 @@
         })();
     </script>
 
-    @livewireScripts
 </body>
 </html>
