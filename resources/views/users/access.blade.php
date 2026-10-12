@@ -4,7 +4,7 @@
 
 @section('content')
     <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        <div class="min-w-0">
             <p class="text-theme-sm font-medium text-brand-600">Administration</p>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Access Control</h1>
             <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">Set exceptions for an individual user without changing their base role.</p>
@@ -19,12 +19,12 @@
     <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.75fr)_minmax(0,1.75fr)]">
         <section class="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div class="border-b border-gray-200 p-4 dark:border-gray-800">
-                <form method="GET" action="{{ route('users.access') }}" class="flex gap-2">
+                <form method="GET" action="{{ route('users.access') }}" class="flex flex-col gap-2 sm:flex-row">
                     @if($selectedUser)
                         <input type="hidden" name="user" value="{{ $selectedUser->id }}">
                     @endif
-                    <input type="search" name="search" value="{{ request('search') }}" placeholder="Search users..." class="min-w-0 flex-1 rounded-lg border-gray-300 text-theme-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <button type="submit" class="rounded-lg bg-gray-900 px-3 text-theme-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900">Search</button>
+                    <input type="search" name="search" value="{{ request('search') }}" placeholder="Search users..." class="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-theme-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                    <button type="submit" class="rounded-lg bg-gray-900 px-3 py-2 text-theme-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900">Search</button>
                 </form>
             </div>
             <div class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -80,8 +80,8 @@
                                         @foreach($permissions as $permission => $label)
                                             @php $override = $selectedUser->permissionOverride($permission); @endphp
                                             <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
-                                                <label for="permission-{{ str_replace('.', '-', $permission) }}" class="text-theme-sm font-medium text-gray-800 dark:text-gray-100">{{ $label }}</label>
-                                                <select id="permission-{{ str_replace('.', '-', $permission) }}" name="permissions[{{ $permission }}]" class="rounded-lg border-gray-300 py-2 text-theme-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                                                <label for="permission-{{ str_replace('.', '-', $permission) }}" class="min-w-0 flex-1 text-theme-sm font-medium text-gray-800 dark:text-gray-100">{{ $label }}</label>
+                                                <select id="permission-{{ str_replace('.', '-', $permission) }}" name="permissions[{{ $permission }}]" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:max-w-[14rem]">
                                                     <option value="inherit" @selected($override === null)>Inherit role</option>
                                                     <option value="allow" @selected($override === true)>Allow</option>
                                                     <option value="deny" @selected($override === false)>Deny</option>
