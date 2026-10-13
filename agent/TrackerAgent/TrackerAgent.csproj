@@ -9,9 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- Tray startup and fleet reconnect fix. Bump this so installed 1.3.1
-          machines accept the repaired binary instead of showing Already Installed. -->
-        <Version>1.3.2</Version>
+        <!-- 1.3.3: the status window now shows the public IP alongside the local
+          one. Bump this so installed builds see the new dialog after an update. -->
+        <Version>1.3.3</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
