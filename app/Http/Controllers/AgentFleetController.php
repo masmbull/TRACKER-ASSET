@@ -784,9 +784,9 @@ class AgentFleetController extends Controller
             ), false);
         }
 
-        $this->enqueue($token->id, 'scan');
+        $command = $this->enqueue($token->id, 'scan');
 
-        return $this->actionResponse($request, "Scan queued for '{$token->name}' — the agent picks it up within a few seconds.");
+        return $this->actionResponse($request, "Scan queued for '{$token->name}' — the agent picks it up within a few seconds.", commandId: $command->id);
     }
 
     /**
@@ -908,13 +908,13 @@ class AgentFleetController extends Controller
             ), false);
         }
 
-        $this->enqueue($token->id, 'uninstall', ['requested_by' => $request->user()?->name]);
+        $command = $this->enqueue($token->id, 'uninstall', ['requested_by' => $request->user()?->name]);
 
         return $this->actionResponse($request, sprintf(
             "Uninstall queued for '%s'. The agent removes itself at its next poll (within 10 seconds) and the token is revoked then. ".
             'A machine that is currently offline will do this the next time it comes back online.',
             $token->name
-        ));
+        ), commandId: $command->id);
     }
 
     /**
@@ -953,25 +953,58 @@ class AgentFleetController extends Controller
         return $this->actionResponse($request, sprintf('Sweep queued %d agent(s).', $queued));
     }
 
-    private function actionResponse(Request $request, string $message, bool $success = true): JsonResponse|RedirectResponse
+    private function actionResponse(Request $request, string $message, bool $success = true, ?int $commandId = null): JsonResponse|RedirectResponse
     {
         if ($request->expectsJson()) {
             return response()->json([
                 'ok' => $success,
                 'message' => $message,
+                // Present when the action queued work: the progress modal needs a
+                // command to poll. Null for actions that do not queue one.
+                'command_id' => $commandId,
             ], $success ? 200 : 422);
         }
 
         return back()->with($success ? 'success' : 'error', $message);
     }
 
-    private function enqueue(?int $tokenId, string $command, array $payload = []): void
+    private function enqueue(?int $tokenId, string $command, array $payload = []): AgentCommand
     {
-        AgentCommand::create([
+        return AgentCommand::create([
             'agent_token_id' => $tokenId,
             'command' => $command,
             'payload' => $payload ?: null,
             'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Progress of one queued command, for the modal that watches an action run.
+     *
+     * The fleet table already shows a progress bar inline, but that is built from
+     * the page's own poll and only covers install/update. An operator who clicks
+     * Scan or Uninstall is looking at a dialog and wants *that* action's state, so
+     * this answers per command: status, percentage, the agent's stage sentence,
+     * and whether it has settled. Kept deliberately small - it is polled while a
+     * modal is open, so it returns four scalars, not a model.
+     */
+    public function commandStatus(AgentCommand $command): JsonResponse
+    {
+        $this->authorize('manage-agents');
+
+        return response()->json([
+            'id' => $command->id,
+            'command' => $command->command,
+            'status' => $command->status,
+            'progress' => $command->progress,
+            // The label already says "stalled at 45%" when the agent has gone
+            // quiet, so a dialog left open over a dead agent stops lying without
+            // any extra work here.
+            'label' => $command->progressLabel(),
+            'stalled' => $command->isStalled(),
+            'done' => $command->status === 'done',
+            'failed' => $command->status === 'failed',
+            'message' => $command->result['message'] ?? null,
         ]);
     }
 }

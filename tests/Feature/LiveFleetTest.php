@@ -503,8 +503,13 @@ class LiveFleetTest extends TestCase
             ->assertSee('Wi-Fi')
             ->assertSee('MITO-OFFICE')
             ->assertDontSee('refreshFleet', false)
-            ->assertDontSee('setInterval', false)
+            // The concern is an auto-refreshing page, not timer usage in general.
+            // The progress dialog now polls one command with its own setInterval,
+            // which stops the moment that command settles - asserting on the bare
+            // word would forbid that legitimate, bounded use alongside the
+            // page-reload the old code did.
             ->assertDontSee('window.location.reload', false)
+            ->assertDontSee('location.reload()', false)
             ->assertSee('Switch to dark mode', false)
             ->assertSee('Switch to light mode', false)
             ->assertSee('ajax-action-modal', false)

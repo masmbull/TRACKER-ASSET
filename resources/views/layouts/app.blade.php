@@ -418,6 +418,21 @@
                     <p id="ajax-action-message" class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">Please wait.</p>
                 </div>
             </div>
+
+            {{-- Progress bar, shown only once the server has told us which command
+                 to watch. The spinner covers "sending the request"; this covers
+                 "the agent is doing the work", which is a different wait entirely -
+                 a scan can run for a minute and an old spinner just spins. --}}
+            <div id="ajax-action-progress" class="mt-4 hidden">
+                <div class="mb-1.5 flex items-center justify-between text-theme-xs">
+                    <span id="ajax-action-stage" class="text-gray-600 dark:text-gray-300">Starting…</span>
+                    <span id="ajax-action-percent" class="font-medium text-gray-700 dark:text-gray-200">0%</span>
+                </div>
+                <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                    <div id="ajax-action-bar" class="h-full rounded-full bg-brand-500 transition-all duration-500" style="width: 5%"></div>
+                </div>
+            </div>
+
             <div class="mt-5 flex justify-end">
                 <button id="ajax-action-close" type="button" class="hidden rounded-lg bg-brand-600 px-4 py-2 text-theme-sm font-medium text-white transition hover:bg-brand-700">Done</button>
             </div>
@@ -436,6 +451,10 @@
             const message = document.getElementById('ajax-action-message');
             const spinner = document.getElementById('ajax-action-spinner');
             const closeButton = document.getElementById('ajax-action-close');
+            const progressWrap = document.getElementById('ajax-action-progress');
+            const stageEl = document.getElementById('ajax-action-stage');
+            const percentEl = document.getElementById('ajax-action-percent');
+            const barEl = document.getElementById('ajax-action-bar');
 
             const busyBar = () => document.getElementById('top-progress');
             const setBar = (on) => busyBar()?.classList.toggle('is-busy', on);
@@ -444,7 +463,75 @@
                 if (modal.dataset.busy !== 'true') {
                     modal.classList.add('hidden');
                     modal.classList.remove('flex');
+                    window.clearInterval(pollTimer);
+                    pollTimer = null;
                 }
+            };
+
+            let pollTimer = null;
+
+            const setProgressBar = (percent, stage, stalled, failed) => {
+                const clamped = Math.max(5, Math.min(100, Number(percent) || 0));
+                barEl.style.width = clamped + '%';
+                barEl.classList.toggle('bg-error-500', Boolean(stalled) || Boolean(failed));
+                barEl.classList.toggle('bg-brand-500', !stalled && !failed);
+                percentEl.textContent = (Number(percent) || 0) + '%';
+                if (stage) {
+                    stageEl.textContent = stage;
+                }
+                stageEl.classList.toggle('text-error-500', Boolean(stalled));
+            };
+
+            /**
+             * Watch the queued command until it settles, patching the bar.
+             *
+             * The POST has already returned - the action is only *queued* at that
+             * point, and the agent may be several seconds away from picking it up.
+             * Polling the command's own status is what turns "Sending your request"
+             * into a bar that actually reflects the machine: 0% while it waits for
+             * the agent, live percentages while it runs, and a clear end at
+             * done/failed. Any failure here is silence, never an error dialog - a
+             * lost poll does not mean the scan failed.
+             */
+            const watchCommand = (commandId) => {
+                spinner.classList.add('hidden');
+                progressWrap.classList.remove('hidden');
+                title.textContent = 'Working';
+                setProgressBar(0, 'Waiting for the device…', false, false);
+
+                window.clearInterval(pollTimer);
+                pollTimer = window.setInterval(async () => {
+                    try {
+                        const response = await fetch('/agent/commands/' + commandId + '/status', {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+                            credentials: 'same-origin',
+                        });
+                        if (!response.ok) {
+                            return;
+                        }
+                        const state = await response.json();
+
+                        if (state.done || state.failed) {
+                            window.clearInterval(pollTimer);
+                            pollTimer = null;
+                            setProgressBar(state.done ? 100 : (state.progress ?? 100), state.failed ? 'Failed' : 'Completed', false, state.failed);
+                            modal.dataset.busy = 'false';
+                            modal.removeAttribute('aria-busy');
+                            spinner.classList.remove('hidden');
+                            closeButton.classList.remove('hidden');
+                            setBar(false);
+                            title.textContent = state.failed ? 'Action failed' : 'Done';
+                            message.textContent = state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.');
+                            window.showToast?.(state.message || (state.failed ? 'Action failed.' : 'Done.'), state.failed ? 'error' : 'success');
+                            window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: state.message || '' } }));
+                            return;
+                        }
+
+                        setProgressBar(state.progress, state.label || 'In progress…', state.stalled, false);
+                    } catch {
+                        // Silence; the next tick retries.
+                    }
+                }, 1500);
             };
 
             document.querySelectorAll('form[data-modal-action]').forEach((form) => {
@@ -455,6 +542,9 @@
                         return;
                     }
 
+                    window.clearInterval(pollTimer);
+                    pollTimer = null;
+                    progressWrap.classList.add('hidden');
                     modal.dataset.busy = 'true';
                     modal.classList.remove('hidden');
                     modal.classList.add('flex');
@@ -495,7 +585,18 @@
                             window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
                         }
 
-                        // Success: no extra click. Close, toast, stay on page.
+                        // A queued command is not a finished action: keep the
+                        // dialog open and watch it. Everything else has no work
+                        // to follow, so it closes as before.
+                        if (payload.command_id) {
+                            submitButtons.forEach((button) => {
+                                button.disabled = false;
+                                button.classList.remove('opacity-80');
+                            });
+                            watchCommand(payload.command_id);
+                            return;
+                        }
+
                         modal.dataset.busy = 'false';
                         modal.removeAttribute('aria-busy');
                         closeModal();

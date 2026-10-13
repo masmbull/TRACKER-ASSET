@@ -373,10 +373,17 @@ public static class AgentRunner
     /// </summary>
     static bool UninstallRequested { get; set; }
 
-    internal static int RunFullScan(string url, string token, string? assetId = null)
+    internal static int RunFullScan(string url, string token, string? assetId = null, long? commandId = null)
     {
         try
         {
+            // A scan driven by a fleet command reports where it has got to, so the
+            // operator watching the modal sees "Uploading audit…" rather than a
+            // spinner that says nothing for a minute. A heartbeat-driven scan has
+            // no command id and stays silent. Best-effort throughout: a lost
+            // progress ping must never abort real collection work.
+            ReportScanProgress(url, token, commandId, 10, "Collecting hardware…");
+
             var payload = HardwareCollector.Collect();
             if (!string.IsNullOrWhiteSpace(assetId))
             {
@@ -388,6 +395,8 @@ public static class AgentRunner
             {
                 payload["device_id"] = deviceId;
             }
+
+            ReportScanProgress(url, token, commandId, 40, "Uploading audit…");
 
             var result = Api.Post(url, token, payload);
 
@@ -405,10 +414,14 @@ public static class AgentRunner
             // full scan is the natural moment to refresh the second one, since
             // the user is already waiting and the registry walk costs seconds.
             //
+            ReportScanProgress(url, token, commandId, 65, "Collecting deep inventory…");
+
             if (!SendFingerprint(url, token))
             {
                 return 1;
             }
+
+            ReportScanProgress(url, token, commandId, 95, "Finishing…");
 
             return 0;
         }
@@ -419,7 +432,19 @@ public static class AgentRunner
         }
     }
 
-    static int RunOnce(string url, string token, string? assetId = null) => RunFullScan(url, token, assetId);
+    /// <summary>Report scan progress only when a command asked for this scan.</summary>
+    private static void ReportScanProgress(string url, string token, long? commandId, int percent, string stage)
+    {
+        if (commandId is null)
+        {
+            return;
+        }
+
+        Api.ReportProgress(url, token, commandId.Value, percent, stage);
+    }
+
+    static int RunOnce(string url, string token, string? assetId = null, long? commandId = null)
+        => RunFullScan(url, token, assetId, commandId);
 
     internal static int RunScriptCommand(string url, string token, long commandId, JsonElement command)
     {
@@ -771,7 +796,7 @@ public static class AgentRunner
 
                         if (command == "scan")
                         {
-                            int rc = RunOnce(url, token, assetId);
+                            int rc = RunOnce(url, token, assetId, id);
                             Api.Ack(url, token, id, rc == 0 ? "done" : "failed");
                             Console.WriteLine($"[OK] Command #{id} scan -> {(rc == 0 ? "done" : "failed")}");
 

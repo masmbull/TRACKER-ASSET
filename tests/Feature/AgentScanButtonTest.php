@@ -472,4 +472,89 @@ class AgentScanButtonTest extends TestCase
     {
         return ['Authorization' => 'Bearer '.$token->token_plain];
     }
+
+    /**
+     * The scan response carries the queued command's id.
+     *
+     * The progress dialog has nothing to watch until the server says *which*
+     * command it queued, and "which one" cannot be guessed from the device - the
+     * device may already have run two scans today. Without the id the modal can
+     * only show an indeterminate spinner.
+     */
+    public function test_scan_response_carries_the_command_id_for_the_progress_modal(): void
+    {
+        $token = $this->enrollAgent();
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('agent.scan', $token))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertSame(
+            AgentCommand::firstOrFail()->id,
+            $response->json('command_id'),
+            'The modal polls commandStatus by id, so a scan must return it.'
+        );
+    }
+
+    public function test_uninstall_response_carries_the_command_id_for_the_progress_modal(): void
+    {
+        $token = $this->enrollAgent();
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('agent.uninstall', $token))
+            ->assertOk();
+
+        $this->assertSame(AgentCommand::firstOrFail()->id, $response->json('command_id'));
+    }
+
+    /**
+     * The status endpoint the dialog polls: it reports the command's real state,
+     * its percentage and its stage, and says plainly when it has settled.
+     */
+    public function test_command_status_reports_progress_and_settlement(): void
+    {
+        $token = $this->enrollAgent();
+        $this->actingAs($this->admin)->postJson(route('agent.scan', $token));
+        $command = AgentCommand::firstOrFail();
+
+        // Queued, nothing reported yet.
+        $this->actingAs($this->admin)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('done', false)
+            ->assertJsonPath('failed', false);
+
+        // Mid-run, as the agent reports it.
+        $command->update(['status' => 'in_progress', 'progress' => 40, 'stage' => 'Uploading audit…', 'started_at' => now()]);
+
+        $this->actingAs($this->admin)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('status', 'in_progress')
+            ->assertJsonPath('progress', 40)
+            ->assertJsonPath('label', 'Uploading audit… (40%)');
+
+        // Settled.
+        $command->update(['status' => 'done', 'progress' => null, 'stage' => null, 'executed_at' => now()]);
+
+        $this->actingAs($this->admin)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('done', true);
+    }
+
+    public function test_command_status_requires_permission(): void
+    {
+        $token = $this->enrollAgent();
+        $this->actingAs($this->admin)->postJson(route('agent.scan', $token));
+        $command = AgentCommand::firstOrFail();
+
+        $viewer = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($viewer)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertForbidden();
+    }
 }

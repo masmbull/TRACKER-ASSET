@@ -154,6 +154,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
 
+        // Polled by the progress modal while an action runs. Declared before the
+        // token-scoped routes for the same reason as the others: "commands" must
+        // never be read as a token id.
+        Route::get('/agent/commands/{command}/status', [AgentFleetController::class, 'commandStatus'])->name('agent.commands.status');
+
         // Move a device that is not on the register yet into the register.
         // Inside the manage-agents group rather than under the assets policy on
         // purpose: promoting a device writes an asset row, so it must not be
