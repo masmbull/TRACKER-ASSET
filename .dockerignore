@@ -24,10 +24,16 @@ k8s/secrets.yaml
 k8s/*-real.yaml
 
 # Local developer state that must never reach a deployed image.
+#
+# storage/framework/ is excluded whole, not per-subdirectory. Live containers
+# write here as root through the bind mount, so on the host these directories
+# are owned by root - and Docker cannot even read the build context, let alone
+# copy it, which fails the build with "open .../storage/framework/testing/disks:
+# permission denied". Enumerating cache/sessions/views left testing/ behind and
+# produced exactly that. The Dockerfile recreates the directories the app needs,
+# so nothing here belongs in the context.
+storage/framework/
 storage/logs/
-storage/framework/cache/
-storage/framework/sessions/
-storage/framework/views/
 storage/app/imports/
 storage/app/documents/
 storage/app/attachments/
