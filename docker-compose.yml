@@ -8,12 +8,12 @@ services:
     working_dir: /var/www/html
     volumes:
       - .:/var/www/html
-    # nginx (below) is what actually serves HTTP: it maps 80:80 and proxies to
-    # this container's php-fpm on 9000. 8000 is published only so the documented
-    # `docker compose exec app php artisan serve --host 0.0.0.0 --port 8000` has
-    # a port to answer on - php-fpm itself does not listen there.
-    ports:
-      - "8000:8000"
+    # No published HTTP port. This container is php-fpm: it speaks FastCGI on
+    # 9000, not HTTP. Publishing 8000:8000 here promised a port nothing listened
+    # on, and the Cloudflare tunnel was aimed at exactly that port - so every
+    # request timed out and the edge answered 502 while nginx served the app
+    # fine on :80. nginx owns the published HTTP ports now (see the nginx
+    # service); reach the app through it, or through the tunnel on 8000.
     expose:
       - "9000"
     depends_on:
@@ -106,6 +106,11 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      # 8000 is published on nginx, not on app, because the Cloudflare tunnel is
+      # pointed at the host's 8000. nginx is the thing that answers HTTP, so the
+      # tunnel reaches the app by hitting this. Leaving 8000 on the app
+      # container (php-fpm) is what produced the 502: nothing was listening.
+      - "8000:80"
     volumes:
       - .:/var/www/html
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
