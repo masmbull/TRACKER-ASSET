@@ -45,6 +45,7 @@ class DashboardTest extends TestCase
         ]);
         $response->assertSee('Total Assets');
         $response->assertSee('Warnings');
+        $response->assertSee('class="flex w-full items-center justify-end gap-4 px-4 py-3 xl:px-0"', false);
     }
 
     public function test_dashboard_breakdown_uses_real_lookup_columns(): void
@@ -57,5 +58,16 @@ class DashboardTest extends TestCase
         $response->assertViewHas('assetsByCategory', fn ($rows) => (int) $rows->firstWhere('name', 'Laptop')?->total === 2);
         $response->assertViewHas('assetsByLocation', fn ($rows) => (int) $rows->firstWhere('name', 'Jakarta')?->total === 2);
         $response->assertViewHas('assetsByCompany', fn ($rows) => (int) $rows->firstWhere('name', 'Test')?->total === 2);
+    }
+
+    public function test_asset_detail_keeps_all_assets_navigation_active(): void
+    {
+        $asset = Asset::factory()->create();
+
+        $response = $this->actingAs(User::factory()->create())->get(route('assets.show', $asset));
+
+        $response->assertOk();
+        $response->assertSee('href="'.route('assets.index').'"', false);
+        $response->assertSee('class="menu-item group menu-item-active"', false);
     }
 }

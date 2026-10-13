@@ -1,0 +1,25 @@
+{
+  "name": "TRACKER-ASSET",
+  "short_name": "Tracker Asset",
+  "description": "IT Asset Management System",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#dc2626",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/images/mito-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/mito-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

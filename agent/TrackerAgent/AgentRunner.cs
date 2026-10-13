@@ -4,6 +4,7 @@ using System.Management;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -372,7 +373,7 @@ public static class AgentRunner
     /// </summary>
     static bool UninstallRequested { get; set; }
 
-    static int RunOnce(string url, string token, string? assetId = null)
+    internal static int RunFullScan(string url, string token, string? assetId = null)
     {
         try
         {
@@ -381,12 +382,12 @@ public static class AgentRunner
             {
                 payload["asset_id"] = assetId;
             }
+
             var deviceId = TryReadDeviceId();
             if (!string.IsNullOrWhiteSpace(deviceId))
             {
                 payload["device_id"] = deviceId;
             }
-
 
             var result = Api.Post(url, token, payload);
 
@@ -404,15 +405,173 @@ public static class AgentRunner
             // full scan is the natural moment to refresh the second one, since
             // the user is already waiting and the registry walk costs seconds.
             //
-            // Failure is non-fatal on purpose — a laptop with a locked-down
-            // registry should still register and audit successfully.
-            SendFingerprint(url, token);
+            if (!SendFingerprint(url, token))
+            {
+                return 1;
+            }
 
             return 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[X] {ex.Message}");
+            return 1;
+        }
+    }
+
+    static int RunOnce(string url, string token, string? assetId = null) => RunFullScan(url, token, assetId);
+
+    internal static int RunScriptCommand(string url, string token, long commandId, JsonElement command)
+    {
+        try
+        {
+            if (!command.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "Script command payload was empty or malformed.",
+                });
+                return 1;
+            }
+
+            var scriptName = payload.TryGetProperty("script_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+                ? nameEl.GetString() ?? "tracker-script"
+                : "tracker-script";
+            var scriptType = payload.TryGetProperty("script_type", out var typeEl) && typeEl.ValueKind == JsonValueKind.String
+                ? typeEl.GetString() ?? "powershell"
+                : "powershell";
+            var scriptBody = payload.TryGetProperty("script_body", out var bodyEl) && bodyEl.ValueKind == JsonValueKind.String
+                ? bodyEl.GetString() ?? string.Empty
+                : string.Empty;
+            var workingDirectory = payload.TryGetProperty("working_directory", out var dirEl) && dirEl.ValueKind == JsonValueKind.String
+                ? dirEl.GetString()
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TrackerAgent", "Scripts");
+            var timeoutSeconds = payload.TryGetProperty("timeout_seconds", out var timeoutEl) && timeoutEl.ValueKind == JsonValueKind.Number
+                ? (int)Math.Clamp(timeoutEl.GetInt32(), 10, 3600)
+                : 300;
+
+            if (string.IsNullOrWhiteSpace(scriptBody))
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "The script body was empty.",
+                });
+                return 1;
+            }
+
+            var safeDirectory = workingDirectory is null || string.IsNullOrWhiteSpace(workingDirectory)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TrackerAgent", "Scripts")
+                : workingDirectory;
+
+            Directory.CreateDirectory(safeDirectory);
+
+            var extension = scriptType switch
+            {
+                "ps1" or "powershell" => ".ps1",
+                "bat" or "batch" or "cmd" => ".bat",
+                "exe" => ".exe",
+                _ => ".cmd",
+            };
+
+            var normalizedName = scriptName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+                ? scriptName
+                : scriptName + extension;
+            var scriptPath = Path.Combine(safeDirectory, normalizedName);
+
+            File.WriteAllText(scriptPath, scriptBody);
+
+            if (payload.TryGetProperty("sha256", out var hashValue) && hashValue.ValueKind == JsonValueKind.String)
+            {
+                var expectedHash = (hashValue.GetString() ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(expectedHash))
+                {
+                    using var stream = File.OpenRead(scriptPath);
+                    using var sha256 = SHA256.Create();
+                    var actualHash = Convert.ToHexString(sha256.ComputeHash(stream));
+                    if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                        {
+                            ["message"] = "SHA-256 mismatch. The script payload was modified before execution.",
+                        });
+
+                        return 1;
+                    }
+                }
+            }
+
+            if (scriptType == "exe")
+            {
+                Api.ReportProgress(url, token, commandId, 25, "Running executable...");
+                using var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = scriptPath,
+                    WorkingDirectory = safeDirectory,
+                    UseShellExecute = true,
+                });
+
+                if (process is null)
+                {
+                    Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                    {
+                        ["message"] = "The executable could not be started.",
+                    });
+                    return 1;
+                }
+
+                var exitCode = process.WaitForExit(timeoutSeconds * 1000) ? process.ExitCode : 1;
+                Api.Ack(url, token, commandId, exitCode == 0 ? "done" : "failed", new Dictionary<string, string>
+                {
+                    ["message"] = exitCode == 0 ? "Script completed successfully." : "The script timed out or exited with an error.",
+                });
+
+                return exitCode;
+            }
+
+            var startInfo = scriptType == "powershell" || scriptType == "ps1"
+                ? new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\"",
+                    WorkingDirectory = safeDirectory,
+                    UseShellExecute = false,
+                }
+                : new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c \"\"{scriptPath}\"\"",
+                    WorkingDirectory = safeDirectory,
+                    UseShellExecute = false,
+                };
+
+            Api.ReportProgress(url, token, commandId, 25, "Running script...");
+
+            using var launched = Process.Start(startInfo);
+            if (launched is null)
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "The script could not be launched.",
+                });
+                return 1;
+            }
+
+            var exitCodeFinal = launched.WaitForExit(timeoutSeconds * 1000) ? launched.ExitCode : 1;
+
+            Api.Ack(url, token, commandId, exitCodeFinal == 0 ? "done" : "failed", new Dictionary<string, string>
+            {
+                ["message"] = exitCodeFinal == 0 ? "Script completed successfully." : "The script timed out or exited with an error.",
+            });
+
+            return exitCodeFinal;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Script execution failed: {ex.Message}");
+            Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+            {
+                ["message"] = $"The script execution failed: {ex.Message}",
+            });
             return 1;
         }
     }
@@ -693,6 +852,13 @@ public static class AgentRunner
                             UninstallRequested = true;
                             return 0;
                         }
+                        else if (command == "script")
+                        {
+                            Console.WriteLine($"[*] Command #{id} script received. Executing script...");
+                            Api.ReportProgress(url, token, id, 10, "Preparing script...");
+                            var scriptExitCode = RunScriptCommand(url, token, id, cmd);
+                            Console.WriteLine($"[OK] Command #{id} script -> {(scriptExitCode == 0 ? "done" : "failed")}");
+                        }
                         else
                         {
                             Api.Ack(url, token, id, "done");
@@ -726,7 +892,7 @@ public static class AgentRunner
     /// must still keep reporting telemetry. The collector itself swallows
     /// per-reader failures for the same reason.
     /// </remarks>
-    static void SendFingerprint(string url, string token)
+    static bool SendFingerprint(string url, string token)
     {
         try
         {
@@ -744,15 +910,21 @@ public static class AgentRunner
                 payload["device_id"] = deviceId;
             }
 
-            if (Api.Fingerprint(url, token, payload))
+            var sent = Api.Fingerprint(url, token, payload);
+
+            if (sent)
             {
                 Console.WriteLine(
                     $"[OK] Deep inventory sent ({payload.GetValueOrDefault("software_count", "0")} programs).");
             }
+
+            return sent;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[!] Fingerprint error: {ex.Message}");
+
+            return false;
         }
     }
 

@@ -80,6 +80,7 @@ public partial class InstallerWindow : Window
             case InstallerMode.AlreadyInstalled:
                 SubtitleText.Text = "Already installed";
                 ShowAlreadyInstalled();
+                EnsureInstalledTrayIsRunning();
                 break;
 
             case InstallerMode.Update:
@@ -87,6 +88,13 @@ public partial class InstallerWindow : Window
                 StartProgressAnimation();
                 BeginShimmer();
                 _ = AutoUpdateAsync();
+                break;
+
+            case InstallerMode.CheckForUpdates:
+                SubtitleText.Text = "Checking for updates...";
+                StartProgressAnimation();
+                BeginShimmer();
+                _ = CheckForUpdatesAsync();
                 break;
 
             default:
@@ -168,6 +176,44 @@ public partial class InstallerWindow : Window
         {
             ShowFailure(_lastError.Length > 0 ? _lastError : "Installation failed.");
         }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        Report(5, "Checking server...");
+
+        var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
+
+        var completedTask = await Task.WhenAny(serverDiscoveryTask, timeoutTask);
+        if (completedTask == timeoutTask)
+        {
+            ShowNoUpdateAvailable("The update check timed out while contacting the TRACKER-ASSET server.");
+            return;
+        }
+
+        var serverUrl = await serverDiscoveryTask;
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            ShowNoUpdateAvailable("No TRACKER-ASSET server was reachable, so an update check could not be completed.");
+            return;
+        }
+
+        _serverUrl = serverUrl;
+        Report(35, "Comparing installed version with the latest build...");
+
+        var token = ReadTokenFromConfig();
+        var hasUpdate = AutoUpdater.CheckForUpdate(serverUrl, token ?? string.Empty, out var message);
+
+        if (hasUpdate)
+        {
+            Report(100, "Update available");
+            ShowUpdateAvailable(message);
+            return;
+        }
+
+        Report(100, "No update available");
+        ShowNoUpdateAvailable(message);
     }
 
     /// <summary>
@@ -259,7 +305,7 @@ public partial class InstallerWindow : Window
 
     /// <summary>
     /// The whole install in one pass: files, device identity, registration,
-    /// autostart, resident background agent and a first hardware scan so the
+    /// autostart, a visible tray agent and a queued first hardware scan so the
     /// device appears in Live Fleet right away.
     /// </summary>
     /// <remarks>
@@ -301,7 +347,7 @@ public partial class InstallerWindow : Window
                 : existingId;
 
             Report(62, "Registering the device with the server...");
-            var token = RegisterDevice(serverUrl, ReadRegistryString("Token") ?? string.Empty);
+            var token = RegisterDevice(serverUrl);
 
             // Kept so the catch block can report a failure that happened after
             // registration. Without it a crash at the autostart step would leave
@@ -317,32 +363,24 @@ public partial class InstallerWindow : Window
                 "Registering the device with the server...");
 
             Report(76, "Configuring autostart...");
-            RegisterAutostart(destExe, serverUrl, token);
+            RegisterAutostart(destExe);
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 76,
                 "Configuring autostart...");
 
-            Report(86, "Starting the background agent...");
-            // Tray process is launched from OnClosed after this window exits,
-            // so the file lock on the installed exe is fully released first.
+            Report(86, "Starting the tray agent...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
-                "Starting the background agent...");
+                "Starting the tray agent...");
 
-            // The first deep inventory is the slow step - it walks the whole
-            // software registry and runs a Windows Update search that measured
-            // 30 s on this hardware - and it is the step most likely to fail, so
-            // it is the one an operator most needs to see moving.
-            Report(94, "Running the first hardware scan...");
+            Report(94, "Finishing agent setup...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
-                "Running the first hardware scan...");
-            // Launch in daemon mode for reliable background operation
-            StartDetached(destExe, $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 5");
+                "Finishing agent setup...");
 
             Report(100, "Installation complete");
             Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
                 "Installation complete",
                 new Dictionary<string, string>
                 {
-                    ["message"] = "Agent installed and the first hardware scan was dispatched.",
+                    ["message"] = "Agent installed; the first hardware scan is queued.",
                 });
             Thread.Sleep(250);
             return true;
@@ -381,9 +419,9 @@ public partial class InstallerWindow : Window
     /// registration endpoint is public and idempotent per device_id, so running
     /// the installer twice never creates a second token.
     /// </summary>
-    private string RegisterDevice(string serverUrl, string fallbackToken)
+    private string RegisterDevice(string serverUrl)
     {
-        var token = fallbackToken;
+        var token = string.Empty;
 
         try
         {
@@ -409,15 +447,28 @@ public partial class InstallerWindow : Window
                 if (doc.RootElement.TryGetProperty("token", out var issued) &&
                     issued.ValueKind == JsonValueKind.String)
                 {
-                    token = issued.GetString() ?? token;
+                    token = issued.GetString() ?? string.Empty;
                 }
+            }
+            else
+            {
+                var message = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                throw new InvalidOperationException(
+                    $"Device registration was rejected (HTTP {(int)response.StatusCode}): {message}");
+            }
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("The server did not issue an agent token.");
             }
         }
         catch (Exception ex)
         {
-            // Server unreachable: keep the previous token and let the resident
-            // agent retry on its next poll instead of failing the install.
+            // Do not report success with an empty or rejected credential: that
+            // leaves a locally installed agent which can never appear in Fleet.
             Debug.WriteLine($"Registration failed: {ex.Message}");
+            _lastError = ex.Message;
+            throw;
         }
 
         SaveConfig(serverUrl, token);
@@ -451,17 +502,14 @@ public partial class InstallerWindow : Window
         catch { }
     }
 
-    private static void RegisterAutostart(string exePath, string serverUrl, string token)
+    private static void RegisterAutostart(string exePath)
     {
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Run");
 
-            // Launch in daemon mode (headless, proven stable) instead of tray
-            // Daemon mode runs the same polling loop but without WPF UI blocking
-            key?.SetValue("MitoAuditTracker",
-                $"\"{exePath}\" --daemon --url \"{serverUrl}\" --token \"{token}\" --poll 5");
+            key?.SetValue("MitoAuditTracker", InstallCheck.BuildTrayAutostartCommand(exePath));
         }
         catch { }
     }
@@ -548,13 +596,13 @@ public partial class InstallerWindow : Window
             }
 
             Report(25, "Stopping the running background agent...");
-            var restart = StopInstalledAgent();
+            StopInstalledAgent();
 
             Report(55, $"Copying version {_newVersion}...");
             CopyWithRetry(sourceExe, _installedExe);
 
-            Report(80, "Restarting the background agent...");
-            RestartAgent(restart);
+            Report(80, "Restarting the tray agent...");
+            RestartAgent();
 
             Report(100, "Update complete");
             Thread.Sleep(250);
@@ -569,18 +617,13 @@ public partial class InstallerWindow : Window
     }
 
     /// <summary>
-    /// Kills every agent process running from the installed path (resident
-    /// daemon and/or an open tray window) while remembering their command
-    /// lines, so the update can bring them back exactly as they were.
-    /// Returns null when the process list could not be read - the caller then
-    /// falls back to a config-based daemon restart.
+    /// Stops every agent process running from the installed path before the
+    /// binary is replaced.
     /// </summary>
-    private static List<string>? StopInstalledAgent()
+    private static void StopInstalledAgent()
     {
         try
         {
-            var commandLines = new List<string>();
-
             using var searcher = new ManagementObjectSearcher(
                 "SELECT CommandLine, ExecutablePath, ProcessId FROM Win32_Process WHERE Name = 'TrackerAgent.exe'");
 
@@ -592,12 +635,6 @@ public partial class InstallerWindow : Window
                         process["ExecutablePath"] as string, InstallCheck.InstalledExe))
                 {
                     continue;
-                }
-
-                if (process["CommandLine"] is string commandLine &&
-                    !string.IsNullOrWhiteSpace(commandLine))
-                {
-                    commandLines.Add(commandLine);
                 }
 
                 if (process["ProcessId"] is uint pid && pid != 0 &&
@@ -613,12 +650,10 @@ public partial class InstallerWindow : Window
                 }
             }
 
-            return commandLines;
         }
         catch
         {
-            // WMI unavailable: still kill by path via the process API, but the
-            // caller cannot replay the exact command lines anymore.
+            // WMI unavailable: still kill by path via the process API.
             foreach (var process in Process.GetProcessesByName("TrackerAgent"))
             {
                 try
@@ -641,62 +676,17 @@ public partial class InstallerWindow : Window
                 finally { process.Dispose(); }
             }
 
-            return null;
         }
     }
 
     /// <summary>
-    /// Restarts what <see cref="StopInstalledAgent"/> stopped: replay the
-    /// captured command lines, or - when the process list was unreadable -
-    /// bring the daemon back from config.json so the device keeps reporting.
+    /// Starts without CLI flags so the installed config launches the tray and
+    /// resumes fleet reporting.
     /// </summary>
-    private static void RestartAgent(List<string>? captured)
+    private static void RestartAgent()
     {
-        if (captured != null)
-        {
-            foreach (var commandLine in captured)
-            {
-                StartDetached(InstallCheck.InstalledExe, ExtractArguments(commandLine));
-            }
-
-            return;
-        }
-
-        try
-        {
-            if (!File.Exists(InstallCheck.InstalledConfig))
-            {
-                return;
-            }
-
-            using var doc = JsonDocument.Parse(File.ReadAllText(InstallCheck.InstalledConfig));
-            var token = doc.RootElement.TryGetProperty("token", out var t) ? t.GetString() : null;
-            var serverUrl = doc.RootElement.TryGetProperty("server_url", out var s) ? s.GetString() : null;
-
-            if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(serverUrl))
-            {
-                return;
-            }
-
-            StartDetached(InstallCheck.InstalledExe,
-                $"--daemon --url \"{serverUrl}\" --token \"{token}\" --poll 10");
-        }
-        catch { }
-    }
-
-    /// <summary>Strips the leading executable from a captured command line.</summary>
-    private static string ExtractArguments(string commandLine)
-    {
-        var line = commandLine.Trim();
-
-        if (line.StartsWith("\""))
-        {
-            var end = line.IndexOf('"', 1);
-            return end >= 0 ? line[(end + 1)..].TrimStart() : "";
-        }
-
-        var space = line.IndexOf(' ');
-        return space >= 0 ? line[(space + 1)..].TrimStart() : "";
+        RegisterAutostart(InstallCheck.InstalledExe);
+        StartDetached(InstallCheck.InstalledExe, string.Empty);
     }
 
     /// <summary>
@@ -724,7 +714,7 @@ public partial class InstallerWindow : Window
         throw last!;
     }
 
-    /// <summary>Clicked build == installed build: show the notice, do nothing.</summary>
+    /// <summary>Clicked build == installed build: ensure the tray agent is running.</summary>
     private void ShowAlreadyInstalled()
     {
         StatusPanel.Visibility = Visibility.Collapsed;
@@ -735,10 +725,62 @@ public partial class InstallerWindow : Window
         SetResult(
             GlyphInfo,
             "Already Installed",
-            $"Version {_installedVersion} is already running on this machine.\n\n" +
+            $"Version {_installedVersion} is installed on this machine.\n\n" +
             $"{_installedExe}\n\n" +
-            "To update, download and run a newer version of the agent.",
+            "The tray agent has been started or was already running. To update, download and run a newer version.",
             InfoBrush);
+    }
+
+    private void EnsureInstalledTrayIsRunning()
+    {
+        RegisterAutostart(_installedExe);
+
+        var trayIsRunning = false;
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT CommandLine, ExecutablePath, ProcessId FROM Win32_Process WHERE Name = 'TrackerAgent.exe'");
+
+            foreach (var entry in searcher.Get())
+            {
+                using var process = (ManagementObject)entry;
+
+                if (!InstallCheck.IsSameFile(process["ExecutablePath"] as string, _installedExe))
+                {
+                    continue;
+                }
+
+                var commandLine = process["CommandLine"] as string ?? string.Empty;
+
+                if (commandLine.Contains("--daemon", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (process["ProcessId"] is uint processId && processId != 0)
+                    {
+                        try
+                        {
+                            using var daemon = Process.GetProcessById((int)processId);
+                            daemon.Kill(entireProcessTree: true);
+                            daemon.WaitForExit(3000);
+                        }
+                        catch { }
+                    }
+
+                    continue;
+                }
+
+                trayIsRunning = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Could not inspect running agent processes: {ex.Message}");
+        }
+
+        if (!trayIsRunning)
+        {
+            StartDetached(_installedExe, string.Empty);
+        }
     }
 
     /// <summary>Swap finished: report the version jump, then auto-close.</summary>
@@ -787,7 +829,7 @@ public partial class InstallerWindow : Window
             _autoCloseTimer.Tick += (_, _) =>
             {
                 _autoCloseTimer.Stop();
-                Debug.WriteLine("[INSTALL] OnClosed: launching tray daemon");
+                Debug.WriteLine("[INSTALL] OnClosed: launching tray agent");
                 Close();
             };
             _autoCloseTimer.Start();
@@ -812,6 +854,66 @@ public partial class InstallerWindow : Window
                 message,
                 ErrorBrush);
         });
+    }
+
+    private void ShowUpdateAvailable(string message)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _progressTimer.Stop();
+            SubtitleText.Text = "Update available";
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ResultPanel.Visibility = Visibility.Visible;
+            RetryButton.Visibility = Visibility.Collapsed;
+            CloseButton.Visibility = Visibility.Visible;
+
+            SetResult(GlyphInfo, "Update Available", message, InfoBrush);
+        });
+    }
+
+    private void ShowNoUpdateAvailable(string message)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _progressTimer.Stop();
+            SubtitleText.Text = "Update check complete";
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ResultPanel.Visibility = Visibility.Visible;
+            RetryButton.Visibility = Visibility.Collapsed;
+            CloseButton.Visibility = Visibility.Visible;
+
+            SetResult(GlyphOk, "No Update Available", message, SuccessBrush);
+        });
+    }
+
+    private static string? ReadTokenFromConfig()
+    {
+        try
+        {
+            var configPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER",
+                "config.json");
+
+            if (!File.Exists(configPath))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+            if (document.RootElement.TryGetProperty("token", out var token) &&
+                token.ValueKind == JsonValueKind.String)
+            {
+                var value = token.GetString();
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+        }
+        catch
+        {
+            // Best effort only; a missing token should not block the update popup.
+        }
+
+        return null;
     }
 
     /// <summary>Segoe MDL2 glyphs used by the result badge.</summary>
@@ -894,13 +996,21 @@ public partial class InstallerWindow : Window
     {
         base.OnClosed(e);
 
-        if (_mode == InstallerMode.Install && _installDir.Length > 0)
+        if (_mode == InstallerMode.Install && _installDir.Length > 0 &&
+            !string.IsNullOrWhiteSpace(_installTokenForReporting))
         {
             var installedExe = System.IO.Path.Combine(_installDir, "TrackerAgent.exe");
             if (System.IO.File.Exists(installedExe))
             {
                 StartDetached(installedExe, string.Empty);
             }
+        }
+
+        if (_mode == InstallerMode.AlreadyInstalled && !InstallCheck.IsSameFile(
+                Environment.ProcessPath, _installedExe) &&
+            File.Exists(_installedExe))
+        {
+            StartDetached(_installedExe, string.Empty);
         }
     }
 }

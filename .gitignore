@@ -49,6 +49,9 @@ agent/publish/
 server.php
 tailadmin-free-tailwind-dashboard-template-main/
 cookie.jar
+# Dev scratch: curl session cookie jar + local screenshot captures.
+cookies.txt
+dashboard-mobile*.png
 
 
 # K8s secrets. The committed file is k8s/secrets-template.yaml and holds no

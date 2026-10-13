@@ -100,6 +100,23 @@ class AgentScanButtonTest extends TestCase
         ]);
     }
 
+    public function test_asset_detail_scan_returns_json_for_the_action_modal(): void
+    {
+        $token = $this->enrollAgent();
+
+        $this->actingAs($this->admin)
+            ->postJson(route('assets.audit.agent.scan', $this->asset))
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('message', 'Scan command queued. The audit agent on this device will pick it up within a few seconds and send the scan result.');
+
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $token->id,
+            'command' => 'scan',
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_send_scan_errors_when_no_agent_is_enrolled(): void
     {
         $this->actingAs($this->admin)
@@ -215,6 +232,28 @@ class AgentScanButtonTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame(1, AgentCommand::count());
+    }
+
+    public function test_scan_all_returns_json_for_the_in_place_action_modal(): void
+    {
+        $this->enrollAgent();
+
+        $this->actingAs($this->admin)
+            ->postJson(route('agent.scanAll'))
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('message', 'Scan queued for 1 device(s) — each agent picks it up within a few seconds.');
+    }
+
+    public function test_rejected_ajax_scan_returns_an_error_for_the_action_modal(): void
+    {
+        $token = $this->enrollAgent(['is_active' => false]);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('agent.scan', $token))
+            ->assertUnprocessable()
+            ->assertJsonPath('ok', false)
+            ->assertJsonPath('message', "'field-laptop' is revoked or its token has expired, so the agent can no longer be reached and a scan cannot be delivered. Issue a new token and redeploy the agent on that machine first.");
     }
 
     /**

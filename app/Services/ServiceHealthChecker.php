@@ -378,6 +378,23 @@ class ServiceHealthChecker
                 return sprintf('%s · %s:%d reachable', $mailer, $host, $port);
             }
 
+            // "not accepting connections" for a name that never resolved sent
+            // whoever read it to restart a mail server they were not running.
+            // `mailpit` is the host in .env.example, and it only resolves inside
+            // docker compose - on a developer machine the SMTP port is not even
+            // published - so the usual local failure is resolution, not a dead
+            // mailbox. fsockopen reports the two differently: a name that does
+            // not resolve returns the getaddrinfo message and no errno, a
+            // refused or blackholed connect returns a socket errno.
+            if (str_contains($errstr, 'getaddrinfo')) {
+                throw new ProbeFailure(sprintf(
+                    '%s · %s does not resolve from this machine (MAIL_HOST=%s only resolves inside docker compose)',
+                    $mailer,
+                    $host,
+                    $host
+                ));
+            }
+
             // Thrown, not returned. Returning the failure as a detail string
             // marked the whole row "ok" while the text next to it said the
             // server was unreachable, which is worse than showing it red: the

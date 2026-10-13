@@ -3,34 +3,34 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TRACKER-ASSET"
         Icon="mito-icon.png"
-        Width="520" Height="400"
+        Width="540" Height="410"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        FontFamily="Arial"
-        Background="#FFFFFF">
+        FontFamily="Segoe UI"
+        Background="#F3F6FB"
+        WindowStyle="SingleBorderWindow">
 
     <Window.Resources>
-        <Style x:Key="BrutalButton" TargetType="Button">
-            <Setter Property="FontFamily" Value="Arial Black"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Black"/>
-            <Setter Property="Foreground" Value="#000000"/>
-            <Setter Property="Background" Value="#FFFF00"/>
-            <Setter Property="BorderBrush" Value="#000000"/>
-            <Setter Property="BorderThickness" Value="4"/>
+        <SolidColorBrush x:Key="BrandBrush" Color="#1F5EFF"/>
+        <SolidColorBrush x:Key="BrandDarkBrush" Color="#1737A6"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#1F9D60"/>
+        <SolidColorBrush x:Key="ErrorBrush" Color="#E5484D"/>
+        <SolidColorBrush x:Key="NeutralTextBrush" Color="#1F2937"/>
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#5B6472"/>
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource BrandBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BrandDarkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Height" Value="48"/>
-            <Setter Property="MinWidth" Value="120"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#000000" Direction="315" 
-                                                  ShadowDepth="6" BlurRadius="0" Opacity="1"/>
-                            </Border.Effect>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -39,55 +39,45 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#FFFFFF" BorderBrush="#000000" BorderThickness="5">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="10" BlurRadius="0" Opacity="1"/>
-        </Border.Effect>
-        
-        <Grid Margin="40,32,40,32">
+    <Border Margin="18" Background="White" CornerRadius="18" BorderBrush="#D8E0F0" BorderThickness="1">
+        <Grid Margin="28,22,28,22">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="#FF00FF" BorderBrush="#000000" BorderThickness="4" Padding="16,12">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="5" BlurRadius="0" Opacity="1"/>
-                </Border.Effect>
+            <Border Grid.Row="0" Background="#EEF4FF" BorderBrush="#D8E0F0" BorderThickness="1" CornerRadius="12" Padding="18,14">
                 <StackPanel>
-                    <TextBlock Text="TRACKER-ASSET" FontFamily="Arial Black" FontSize="28" FontWeight="Black" Foreground="#000000"/>
-                    <TextBlock x:Name="SubtitleText" Text="INSTALLING" FontFamily="Arial" FontSize="14" FontWeight="Bold" Foreground="#000000" Margin="0,4,0,0"/>
+                    <TextBlock Text="TRACKER-ASSET" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource NeutralTextBrush}"/>
+                    <TextBlock x:Name="SubtitleText" Text="Installing..." FontSize="13" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
 
-            <Grid Grid.Row="1" Margin="0,32,0,0">
+            <Grid Grid.Row="1" Margin="0,24,0,0">
                 <StackPanel x:Name="StatusPanel" VerticalAlignment="Center">
-                    <TextBlock x:Name="StatusText" Text="STARTING..." FontFamily="Arial Black" FontSize="16" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Center" Margin="0,0,0,24"/>
-                    
-                    <Border Background="#FFFFFF" BorderBrush="#000000" BorderThickness="4" Height="40" ClipToBounds="True">
-                        <Rectangle x:Name="ProgressFill" Fill="#00FF00" Width="0" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="StatusText" Text="Starting..." FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource NeutralTextBrush}" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+
+                    <Border Background="#F5F7FB" BorderBrush="#D8E0F0" BorderThickness="1" Height="18" CornerRadius="9" ClipToBounds="True">
+                        <Rectangle x:Name="ProgressFill" Fill="{StaticResource BrandBrush}" Width="0" HorizontalAlignment="Left" RadiusX="9" RadiusY="9"/>
                     </Border>
-                    
-                    <TextBlock x:Name="PercentText" Text="0%" FontFamily="Arial Black" FontSize="20" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Right" Margin="0,16,0,0"/>
+
+                    <TextBlock x:Name="PercentText" Text="0%" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource NeutralTextBrush}" HorizontalAlignment="Right" Margin="0,12,0,0"/>
                 </StackPanel>
 
                 <StackPanel x:Name="ResultPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Border Width="100" Height="100" Background="#00FF00" BorderBrush="#000000" BorderThickness="5" HorizontalAlignment="Center" Margin="0,0,0,20">
-                        <Border.Effect>
-                            <DropShadowEffect Color="#000000" Direction="315" ShadowDepth="8" BlurRadius="0" Opacity="1"/>
-                        </Border.Effect>
-                        <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#000000" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Border Width="84" Height="84" Background="#F3F9F6" BorderBrush="#CFE6DA" BorderThickness="1" CornerRadius="42" HorizontalAlignment="Center" Margin="0,0,0,18">
+                        <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets" FontSize="36" Foreground="{StaticResource SuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    
-                    <TextBlock x:Name="ResultText" Text="DONE" FontFamily="Arial Black" FontSize="24" FontWeight="Black" Foreground="#000000" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                    <TextBlock x:Name="ResultDetail" Text="Agent ready" FontFamily="Arial" FontSize="13" FontWeight="Bold" Foreground="#333333" TextAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="360"/>
+
+                    <TextBlock x:Name="ResultText" Text="Done" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource NeutralTextBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="ResultDetail" Text="Agent ready" FontSize="13" Foreground="{StaticResource MutedTextBrush}" TextAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="360"/>
                 </StackPanel>
             </Grid>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,32,0,0">
-                <Button x:Name="RetryButton" Content="RETRY" Visibility="Collapsed" Margin="0,0,12,0" Style="{StaticResource BrutalButton}" Background="#FF00FF" Click="RetryButton_Click"/>
-                <Button x:Name="CloseButton" Content="CLOSE" Visibility="Collapsed" Style="{StaticResource BrutalButton}" Click="CloseButton_Click"/>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button x:Name="RetryButton" Content="Retry" Visibility="Collapsed" Margin="0,0,10,0" Style="{StaticResource PrimaryButtonStyle}" Background="{StaticResource BrandBrush}" Click="RetryButton_Click"/>
+                <Button x:Name="CloseButton" Content="Close" Visibility="Collapsed" Style="{StaticResource PrimaryButtonStyle}" Background="{StaticResource BrandDarkBrush}" Click="CloseButton_Click"/>
             </StackPanel>
         </Grid>
     </Border>

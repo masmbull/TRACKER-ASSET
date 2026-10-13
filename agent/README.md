@@ -8,7 +8,7 @@ Windows hardware collector that runs on each laptop/workstation and reports back
 2. POSTs JSON to the server API
 3. Server compares against registered asset data
 4. Returns MATCH / MISMATCH / UNKNOWN DEVICE result
-5. **Never overwrites registered data** â€” comparison only
+5. Writes a scan audit, then updates only reported hardware fields when the serial number matches exactly one registered asset; management fields remain unchanged
 
 ## Two Modes
 
@@ -136,13 +136,14 @@ token to type and the only UI while it works is an animated progress bar.
 2. Copies itself to `%LOCALAPPDATA%\TRACKER`, generates or reuses the device id,
    registers the device on `/api/agent/register` and writes `config.json`.
 3. Adds the `--daemon` autostart entry (HKCU Run), starts the resident agent and runs a
-   first hardware scan, so the laptop appears in Master Assets and Live Fleet within
-   seconds.
+   first hardware scan. A known unique serial refreshes hardware fields on its asset;
+   an unknown device appears in Live Fleet for an IT operator to add to the register.
 4. Shows "Installation complete" and closes itself. If no server answers, a single
    **Retry** button is offered.
 
-Once configured, later launches go straight to the tray icon (Scan Now / Check for
-Updates / Exit).
+Once configured, later launches go straight to the tray icon (Status / Scan Now /
+Check for Updates). There is no Exit item: the agent is meant to stay resident, and
+it is removed only through the uninstall command on the fleet page.
 
 ## Zero-Config Download (config trailer)
 

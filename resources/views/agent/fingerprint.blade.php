@@ -12,7 +12,7 @@
 <x-page-header :title="$token->name" subtitle="Deep inventory — security posture, licensing and installed software.">
     <x-slot:actions>
         <div class="flex flex-wrap items-center gap-2">
-            <form method="POST" action="{{ route('agent.scan', $token) }}">
+            <form method="POST" action="{{ route('agent.scan', $token) }}" data-modal-action>
                 @csrf
                 <x-button type="submit" variant="secondary" size="sm">Scan Now</x-button>
             </form>

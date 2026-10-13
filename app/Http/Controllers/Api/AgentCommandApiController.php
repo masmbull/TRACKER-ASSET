@@ -36,6 +36,8 @@ class AgentCommandApiController extends Controller
      */
     public const IN_PROGRESS_GRACE_MINUTES = AgentCommand::STALL_GRACE_MINUTES;
 
+    private const MAX_INBOX_WAIT_SECONDS = 5;
+
     public function inbox(Request $request)
     {
         $tokenId = (int) $request->attributes->get('agent_token_id');
@@ -50,10 +52,10 @@ class AgentCommandApiController extends Controller
         // not been counted yet would otherwise park a worker per laptop on a pool
         // that used to hold five, and the site would go down instead of quiet.
         // Without ?wait= this returns exactly as before.
-        $wait = (int) $request->integer('wait', 0);
+        $wait = min((int) $request->integer('wait', 0), self::MAX_INBOX_WAIT_SECONDS);
 
         if ($commands->isEmpty() && $wait > 0) {
-            $deadline = microtime(true) + min($wait, 60);
+            $deadline = microtime(true) + $wait;
 
             do {
                 sleep(1);

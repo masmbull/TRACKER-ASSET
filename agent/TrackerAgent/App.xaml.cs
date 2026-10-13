@@ -14,6 +14,8 @@ namespace TrackerAgent;
 public partial class App : System.Windows.Application
 {
     private NotifyIcon _trayIcon = null!;
+    private Mutex? _trayMutex;
+    private bool _ownsTrayMutex;
     private string _installDir = "";
     private string _configPath = "";
 
@@ -152,6 +154,25 @@ public partial class App : System.Windows.Application
 
     private void StartTray(AgentConfig config)
     {
+        try
+        {
+            _trayMutex = new Mutex(true, @"Local\MITO.TRACKER-ASSET.Tray", out _ownsTrayMutex);
+
+            if (!_ownsTrayMutex)
+            {
+                _trayMutex.Dispose();
+                _trayMutex = null;
+                Shutdown();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not enforce single tray instance: {ex.Message}");
+        }
+
+        RegisterTrayAutostart();
+
         // Tray-only app: closing the Status window (or never opening one) must not
         // end the process. Shutdown happens from the Exit menu and from the
         // uninstall command, both of which call Shutdown() on purpose.
@@ -176,16 +197,29 @@ public partial class App : System.Windows.Application
             Dispatcher.Invoke(() =>
             {
                 var window = new StatusWindow(
-                    InstallCheck.ReadVersion(InstallCheck.InstalledExe)?.ToString() ?? "unknown",
-                    config.ServerUrl, config.DeviceId, config.InstalledAt);
+                    config.ServerUrl, config.InstalledAt);
                 window.Show();
                 window.Activate();
             }));
         _trayIcon.ContextMenuStrip.Items.Add("Scan Now", null, (_, _) => RunScan(config));
         _trayIcon.ContextMenuStrip.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
-        _trayIcon.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
 
         _ = Task.Run(() => CommandLoop(config));
+    }
+
+    private static void RegisterTrayAutostart()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run");
+            key?.SetValue("MitoAuditTracker",
+                InstallCheck.BuildTrayAutostartCommand(InstallCheck.InstalledExe));
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not register tray autostart: {ex.Message}");
+        }
     }
 
     private async Task CommandLoop(AgentConfig config)
@@ -241,8 +275,21 @@ public partial class App : System.Windows.Application
 
                         if (command == "scan")
                         {
-                            OpenScanWindow(config);
-                            Api.Ack(config.ServerUrl, config.Token, id, "done");
+                            // A browser-triggered scan belongs to the web page, not the
+                            // local tray window. Run the actual full inventory in the
+                            // background and settle the command only after the agent has
+                            // posted both the audit and the fingerprint payload.
+                            var result = RunScan(config);
+                            nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                            nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+                            Api.Ack(config.ServerUrl, config.Token, id,
+                                result == 0 ? "done" : "failed",
+                                new Dictionary<string, string>
+                                {
+                                    ["message"] = result == 0
+                                        ? "Audit and deep inventory completed."
+                                        : "The full scan failed. Check the agent log and retry.",
+                                });
                         }
                         else if (command == "update")
                         {
@@ -280,6 +327,13 @@ public partial class App : System.Windows.Application
                             AgentRunner.SelfRemove();
                             return;
                         }
+                        else if (command == "script")
+                        {
+                            AgentLog.Write($"Script command #{id} received. Executing...");
+                            Api.ReportProgress(config.ServerUrl, config.Token, id, 10, "Preparing script...");
+                            var scriptExitCode = AgentRunner.RunScriptCommand(config.ServerUrl, config.Token, id, cmd);
+                            AgentLog.Write($"Script command #{id} finished with exit code {scriptExitCode}.");
+                        }
                         else
                         {
                             Api.Ack(config.ServerUrl, config.Token, id, "done");
@@ -311,8 +365,11 @@ public partial class App : System.Windows.Application
                         // Settle the scan the server opened when this device
                         // registered, before doing the work: the row is the page's
                         // "queued" badge and it would otherwise stay lit forever.
-                        Api.AckPendingHeartbeat(config.ServerUrl, config.Token);
-                        RunScan(config);
+                        var result = RunScan(config);
+                        nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
+                        nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
+                        Api.AckPendingHeartbeat(
+                            config.ServerUrl, config.Token, result == 0 ? "done" : "failed");
                         nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
                     }
                     finally
@@ -583,22 +640,17 @@ public partial class App : System.Windows.Application
     /// did not already have, and one saying "Scan failed." popped up with no
     /// indication of what failed or where to look.
     /// </remarks>
-    private void RunScan(AgentConfig config)
+    private int RunScan(AgentConfig config)
     {
         try
         {
-            var payload = HardwareCollector.Collect();
-            // Live Fleet (PRD §11) ties telemetry to the device identity that the
-            // installer stored, so a device shows up even before its token is
-            // bound to that device_id.
-            payload["device_id"] = config.DeviceId;
-
-            Api.Post(config.ServerUrl, config.Token, payload);
+            return AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId);
         }
         catch
         {
             // Swallowed on purpose. The server marks the device offline when it
             // stops reporting, which is the visible signal.
+            return 1;
         }
     }
 
@@ -624,6 +676,19 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+
+        if (_ownsTrayMutex)
+        {
+            try
+            {
+                _trayMutex?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+            }
+        }
+
+        _trayMutex?.Dispose();
         base.OnExit(e);
     }
 

@@ -5,14 +5,39 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'employee_id', 'email', 'password', 'entra_id', 'department', 'job_title', 'company', 'role', 'is_active'])]
+#[Fillable(['name', 'employee_id', 'email', 'password', 'entra_id', 'department', 'job_title', 'company', 'role', 'permission_overrides', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
+
+    /** @var array<string, array<string, string>> */
+    public const PERMISSION_GROUPS = [
+        'Assets' => [
+            'assets.view' => 'View assets',
+            'assets.create' => 'Add assets',
+            'assets.update' => 'Edit assets',
+            'assets.archive' => 'Retire or dispose assets',
+            'assets.audit' => 'Audit assets',
+            'assets.transfer' => 'Transfer assets',
+            'assets.repair' => 'Manage repairs',
+            'assets.attachments' => 'Manage attachments',
+            'assets.documents' => 'Generate documents',
+            'assets.import' => 'Import Excel',
+            'assets.export' => 'Export reports',
+        ],
+        'Administration' => [
+            'master.manage' => 'Manage master data and templates',
+            'activity.view' => 'View activity log',
+            'users.manage' => 'Manage users',
+            'agents.manage' => 'Manage audit agents',
+            'services.manage' => 'View service monitor',
+        ],
+    ];
 
     protected function casts(): array
     {
@@ -20,7 +45,15 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'permission_overrides' => 'array',
         ];
+    }
+
+    public function permissionOverride(string $permission): ?bool
+    {
+        $value = ($this->permission_overrides ?? [])[$permission] ?? null;
+
+        return is_bool($value) ? $value : null;
     }
 
     public function assignments()
@@ -61,6 +94,11 @@ class User extends Authenticatable
     public function attachments()
     {
         return $this->hasMany(Attachment::class, 'uploaded_by');
+    }
+
+    public function customQrHistories(): HasMany
+    {
+        return $this->hasMany(CustomQrHistory::class);
     }
 
     public function activities()

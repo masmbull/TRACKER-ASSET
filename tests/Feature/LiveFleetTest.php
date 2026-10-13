@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\AgentTelemetry;
 use App\Models\Asset;
 use App\Models\AssetAudit;
@@ -11,6 +12,7 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\ScriptPayload;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -185,24 +187,241 @@ class LiveFleetTest extends TestCase
             ->assertCreated();
 
         $this->actingAs($admin)->post(route('agent.promote.store', $this->agentToken), [
-            'asset_id' => 'LAPTOP-900',
             'company_id' => Company::first()->id,
             'category_id' => AssetCategory::first()->id,
             'location_id' => Location::first()->id,
             'asset_status_id' => AssetStatus::first()->id,
+            'purchase_year' => 2026,
         ]);
 
         $response = $this->actingAs($admin)->get(route('agent.fleet'));
 
         $response->assertOk();
         $response->assertDontSee('not on the register');
-        $response->assertSee('LAPTOP-900');
+        $response->assertSee('TC-LAP-2026-0001');
         $response->assertDontSee(route('agent.promote', $this->agentToken));
     }
 
     /**
      * The summary link must actually filter, or it is a dead end.
      */
+    public function test_admin_can_queue_script_push_to_all_devices(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_name' => 'install-demo.ps1',
+            'script_type' => 'powershell',
+            'script_body' => 'Write-Host "hello"',
+            'working_directory' => 'C:\\Temp\\Scripts',
+            'run_as' => 'admin',
+            'timeout_seconds' => 180,
+            'trigger' => 'once',
+            'notes' => 'Deploy demo script to all devices',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => null,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * The form sends only a body now: the type, the file name and the SHA-256
+     * are derived server-side, so a pasted script cannot disagree with a
+     * hand-picked type or carry a wrong hand-typed hash.
+     */
+    public function test_script_type_and_hash_are_derived_from_the_body(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $body = 'Write-Host "deploy"; Get-Service spooler';
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => $body,
+        ])->assertRedirect();
+
+        $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
+
+        $this->assertSame('powershell', $command->payload['script_type']);
+        $this->assertSame('tracker-script.ps1', $command->payload['script_name']);
+        $this->assertSame(hash('sha256', $body), $command->payload['sha256']);
+    }
+
+    /**
+     * The extension must match the type the agent will actually execute, or the
+     * agent doubles it up ("tracker-script.bat.ps1") for an aliased type.
+     */
+    public function test_default_name_matches_the_executed_type(): void
+    {
+        $this->assertSame('tracker-script.ps1', ScriptPayload::defaultName('ps1'));
+        $this->assertSame('tracker-script.ps1', ScriptPayload::defaultName('powershell'));
+        $this->assertSame('tracker-script.bat', ScriptPayload::defaultName('bat'));
+        $this->assertSame('tracker-script.exe', ScriptPayload::defaultName('exe'));
+    }
+
+    public function test_cmd_body_is_detected_as_batch(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => "@echo off\r\nif exist C:\\Temp goto clean\r\n%~dp0run.bat",
+        ])->assertRedirect();
+
+        $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
+
+        $this->assertSame('cmd', $command->payload['script_type']);
+        $this->assertSame('tracker-script.bat', $command->payload['script_name']);
+    }
+
+    public function test_binary_body_is_rejected(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => "MZ\x00\x90\x00\x03\x00\x00\x00",
+        ])->assertSessionHasErrors('script_body');
+
+        $this->assertDatabaseCount('agent_commands', 0);
+    }
+
+    public function test_internal_script_api_can_enqueue_a_targeted_command(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'device',
+                'agent_token_id' => $this->agentToken->id,
+                'script_name' => 'install-demo.ps1',
+                'script_type' => 'powershell',
+                'script_body' => 'Write-Host "hello"',
+                'working_directory' => 'C:\\Temp\\Scripts',
+                'run_as' => 'admin',
+                'timeout_seconds' => 180,
+                'trigger' => 'once',
+                'notes' => 'Deploy demo script to one device',
+            ]);
+
+        $response->assertStatus(202)
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('target', 'device');
+
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $this->agentToken->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * A caller that still posts a hand-typed hash or type must be verified
+     * against the body, not trusted: honouring them let the API skip the binary
+     * rejection and hand the agent a hash that did not describe the script.
+     */
+    public function test_internal_script_api_rejects_a_sha256_that_does_not_match_the_body(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => 'Write-Host "hello"',
+                'sha256' => str_repeat('0', 64),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('sha256');
+
+        $this->assertDatabaseCount('agent_commands', 0);
+    }
+
+    public function test_internal_script_api_rejects_a_type_that_disagrees_with_the_body(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => '@echo off'."\r\n".'pause',
+                'script_type' => 'powershell',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('script_type');
+    }
+
+    public function test_internal_script_api_accepts_a_matching_type_alias(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => 'Write-Host "hello"',
+                'script_type' => 'ps1',
+            ])
+            ->assertStatus(202);
+
+        $this->assertDatabaseHas('agent_commands', ['command' => 'script', 'status' => 'pending']);
+    }
+
+    public function test_admin_can_queue_script_push_to_multiple_specific_devices(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $targetA = AgentApiToken::create([
+            'name' => 'laptop-a',
+            'device_id' => 'MITO-0001',
+            'token_hash' => hash('sha256', 'token-a'),
+            'token_plain' => 'token-a',
+        ]);
+
+        $targetB = AgentApiToken::create([
+            'name' => 'laptop-b',
+            'device_id' => 'MITO-0002',
+            'token_hash' => hash('sha256', 'token-b'),
+            'token_plain' => 'token-b',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'devices',
+            'agent_token_ids' => [$targetA->id, $targetB->id],
+            'script_name' => 'multi-deploy.ps1',
+            'script_type' => 'powershell',
+            'script_body' => 'Write-Host "hello"',
+            'working_directory' => 'C:\\Temp\\Scripts',
+            'run_as' => 'current-user',
+            'timeout_seconds' => 180,
+            'trigger' => 'once',
+            'notes' => 'Deploy to multiple devices',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $targetA->id,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('agent_commands', [
+            'command' => 'script',
+            'agent_token_id' => $targetB->id,
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_fleet_can_filter_to_unregistered_devices_only(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -282,7 +501,46 @@ class LiveFleetTest extends TestCase
             ->assertSee('Battery cycles')
             ->assertSee('412')
             ->assertSee('Wi-Fi')
-            ->assertSee('MITO-OFFICE');
+            ->assertSee('MITO-OFFICE')
+            ->assertDontSee('refreshFleet', false)
+            ->assertDontSee('setInterval', false)
+            ->assertDontSee('window.location.reload', false)
+            ->assertSee('Switch to dark mode', false)
+            ->assertSee('Switch to light mode', false)
+            ->assertSee('ajax-action-modal', false)
+            ->assertSee('data-modal-action', false);
+    }
+
+    public function test_live_fleet_page_does_not_auto_refresh(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)->get(route('agent.fleet'));
+
+        $response->assertOk();
+        $response->assertDontSee('setInterval(refreshFleet', false);
+    }
+
+    public function test_live_fleet_refresh_returns_current_device_state_as_json(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload([
+                'battery_percent' => '18',
+                'battery_health' => '55',
+                'disk_free_gb' => '9.4',
+            ]))
+            ->assertCreated();
+
+        $this->actingAs($admin)
+            ->getJson(route('agent.fleet.refresh'))
+            ->assertOk()
+            ->assertJsonPath('online', 1)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'online')
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_percent', 18)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_alert', true)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.disk_free_percent', 2);
     }
 
     /**
@@ -368,9 +626,11 @@ class LiveFleetTest extends TestCase
     public function test_live_fleet_requires_the_manage_agents_gate(): void
     {
         $this->get(route('agent.fleet'))->assertRedirect('/login');
+        $this->get(route('agent.fleet.refresh'))->assertRedirect('/login');
 
         $support = User::factory()->create(['role' => 'support']);
         $this->actingAs($support)->get(route('agent.fleet'))->assertForbidden();
+        $this->actingAs($support)->getJson(route('agent.fleet.refresh'))->assertForbidden();
     }
 
     /**

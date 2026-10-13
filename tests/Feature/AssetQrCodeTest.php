@@ -6,6 +6,7 @@ use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\Company;
+use App\Models\CustomQrHistory;
 use App\Models\Location;
 use App\Models\User;
 use App\Services\AssetQrCode;
@@ -59,15 +60,109 @@ class AssetQrCodeTest extends TestCase
         $response->assertHeader('Content-Type', 'image/svg+xml');
     }
 
+    public function test_custom_qr_encodes_user_content_and_embeds_the_mito_logo(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('assets.qr.custom'), ['content' => 'https://example.test/my-link']);
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'image/svg+xml')
+            ->assertHeader('Content-Disposition', 'inline; filename="mito-custom-qr.svg"');
+
+        $svg = $response->getContent();
+        $this->assertNotFalse(simplexml_load_string($svg));
+        $this->assertStringContainsString('data:image/png;base64,', $svg);
+        $this->assertStringContainsString('MITO custom QR code', $svg);
+    }
+
+    public function test_custom_qr_changes_when_the_user_enters_different_content(): void
+    {
+        $qr = AssetQrCode::fromConfig();
+
+        $this->assertNotSame(
+            $qr->customSvg('https://example.test/first'),
+            $qr->customSvg('https://example.test/second')
+        );
+    }
+
+    public function test_custom_qr_is_saved_and_can_be_downloaded_again_by_its_owner(): void
+    {
+        $content = 'https://example.test/history-item';
+
+        $response = $this->actingAs($this->user)
+            ->post(route('assets.qr.custom'), ['content' => $content]);
+
+        $response->assertOk();
+
+        $historyId = $response->headers->get('X-QR-History-Id');
+        $this->assertNotEmpty($historyId);
+        $this->assertDatabaseHas('custom_qr_histories', [
+            'id' => $historyId,
+            'user_id' => $this->user->id,
+            'content' => $content,
+        ]);
+
+        $this->get(route('assets.qr.history.download', $historyId))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/svg+xml')
+            ->assertHeader('Content-Disposition', 'attachment; filename="mito-custom-qr-'.$historyId.'.svg"')
+            ->assertSee('MITO custom QR code', false);
+    }
+
+    public function test_custom_qr_history_cannot_be_downloaded_by_another_user(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('assets.qr.custom'), ['content' => 'private QR payload']);
+
+        $otherUser = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($otherUser)
+            ->get(route('assets.qr.history.download', $response->headers->get('X-QR-History-Id')))
+            ->assertNotFound();
+    }
+
+    public function test_qr_sheet_shows_only_the_current_users_generation_history(): void
+    {
+        $history = CustomQrHistory::factory()->create([
+            'user_id' => $this->user->id,
+            'content' => 'https://example.test/my-history',
+        ]);
+        CustomQrHistory::factory()->create([
+            'content' => 'https://example.test/another-users-history',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('assets.qr.sheet'))
+            ->assertOk()
+            ->assertSee('https://example.test/my-history')
+            ->assertSee($history->created_at->format('Y-m-d H:i'))
+            ->assertSee(route('assets.qr.history.download', $history), false)
+            ->assertDontSee('https://example.test/another-users-history');
+    }
+
+    public function test_custom_qr_rejects_empty_or_oversized_content(): void
+    {
+        $this->actingAs($this->user)
+            ->from('/assets/qr')
+            ->post(route('assets.qr.custom'), ['content' => ''])
+            ->assertSessionHasErrors('content');
+
+        $this->actingAs($this->user)
+            ->from('/assets/qr')
+            ->post(route('assets.qr.custom'), ['content' => str_repeat('x', 501)])
+            ->assertSessionHasErrors('content');
+    }
+
     /**
      * The regression this whole feature is built on: the raster back end needs
-     * Imagick, which is not installed, so the old PNG route threw for every role.
+     * Imagick, which may not be installed, so the old PNG route threw for every
+     * role. The endpoint must serve an SVG whether or not Imagick is present,
+     * so the environment is not asserted here - a runner that happens to carry
+     * the extension would otherwise fail a test that is about not needing it.
      */
     public function test_qr_does_not_require_the_imagick_extension(): void
     {
         $asset = Asset::factory()->create();
-
-        $this->assertFalse(extension_loaded('imagick'), 'Only meaningful while Imagick is absent.');
 
         $this->actingAs($this->user)->get("/assets/{$asset->id}/qr")->assertOk();
     }
@@ -92,6 +187,16 @@ class AssetQrCodeTest extends TestCase
         $this->assertStringContainsString('<image', $svg, 'The MITO mark should be embedded in the code.');
         $this->assertStringContainsString('MITO GROUP ASSETS', $svg, 'The caption belongs under the code.');
         $this->assertStringContainsString($asset->asset_id, $svg, 'A sticker that will not scan is still identifiable.');
+    }
+
+    public function test_each_asset_gets_a_unique_qr_payload(): void
+    {
+        $firstAsset = Asset::factory()->create();
+        $secondAsset = Asset::factory()->create();
+        $qr = AssetQrCode::fromConfig();
+
+        $this->assertNotSame($qr->targetUrl($firstAsset), $qr->targetUrl($secondAsset));
+        $this->assertNotSame($qr->svg($firstAsset), $qr->svg($secondAsset));
     }
 
     /**
@@ -273,7 +378,25 @@ class AssetQrCodeTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('MITO GROUP ASSETS');
+        $response->assertSee('Create a QR code');
+        $response->assertSee('Paste a link or type text to encode');
+        $response->assertSee('custom-qr-loading', false);
+        $response->assertSee('Generating QR code');
+        $response->assertSee('custom-qr-modal', false);
+        $response->assertSee('customQrForm.addEventListener', false);
+        $response->assertSee('Download SVG');
+        $response->assertSee('Scan or find an asset');
+        $response->assertSee('Generated QR history');
+        $response->assertDontSee('Barcode Scan');
+        $response->assertDontSee('target="_blank"', false);
         $response->assertSee('/assets/'.Asset::first()->id.'/qr', false);
+        $response->assertSee('QR Labels');
+
+        $html = $response->getContent();
+
+        $this->assertSame(1, substr_count($html, '<aside'));
+        $this->assertStringContainsString('sidebarExpanded = !sidebarExpanded', $html);
+        $this->assertStringContainsString('sidebarToggle = !sidebarToggle', $html);
     }
 
     public function test_qr_sheet_can_be_filtered(): void
@@ -294,5 +417,6 @@ class AssetQrCodeTest extends TestCase
 
         $this->get("/assets/{$asset->id}/qr")->assertRedirect('/login');
         $this->get('/assets/qr')->assertRedirect('/login');
+        $this->post(route('assets.qr.custom'), ['content' => 'https://example.test'])->assertRedirect('/login');
     }
 }

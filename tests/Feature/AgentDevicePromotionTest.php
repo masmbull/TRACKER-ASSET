@@ -34,7 +34,7 @@ class AgentDevicePromotionTest extends TestCase
     {
         parent::setUp();
 
-        Company::create(['name' => 'Mito Group', 'code' => 'MITO', 'address' => '']);
+        Company::create(['name' => 'PT. Mahakarya Sukses Indonesia', 'code' => 'MSI', 'address' => '']);
         AssetCategory::create(['name' => 'Laptop']);
         Location::create(['name' => 'Jakarta', 'status' => 'active']);
         AssetStatus::create(['name' => 'Active']);
@@ -86,24 +86,24 @@ class AgentDevicePromotionTest extends TestCase
     private function promotionPayload(array $overrides = []): array
     {
         return array_merge([
-            'asset_id' => 'LAPTOP-014',
             'company_id' => Company::first()->id,
             'category_id' => AssetCategory::first()->id,
             'location_id' => Location::first()->id,
             'asset_status_id' => AssetStatus::first()->id,
+            'purchase_year' => 2026,
         ], $overrides);
     }
 
-    public function test_promotion_creates_the_asset_and_claims_the_waiting_scan(): void
+    public function test_promotion_generates_the_asset_code_from_entity_category_and_purchase_year(): void
     {
         $scan = $this->deviceHasScanned();
 
         $response = $this->actingAs($this->admin)
             ->post(route('agent.promote.store', $this->token), $this->promotionPayload());
 
-        $response->assertRedirect(route('assets.show', Asset::where('asset_id', 'LAPTOP-014')->firstOrFail()));
+        $response->assertRedirect(route('assets.show', Asset::where('asset_id', 'MSI-LAP-2026-0001')->firstOrFail()));
 
-        $asset = Asset::where('asset_id', 'LAPTOP-014')->firstOrFail();
+        $asset = Asset::where('asset_id', 'MSI-LAP-2026-0001')->firstOrFail();
 
         // Hardware came from the scan. This is the whole value of the form: nobody
         // retypes a serial off a label.
@@ -123,7 +123,27 @@ class AgentDevicePromotionTest extends TestCase
         $this->assertDatabaseHas('activity_logs', [
             'action' => 'CREATE',
             'entity_type' => 'assets',
-            'entity_identifier' => 'LAPTOP-014',
+            'entity_identifier' => 'MSI-LAP-2026-0001',
+        ]);
+    }
+
+    public function test_promotion_continues_after_a_matching_code_imported_from_excel(): void
+    {
+        Asset::factory()->create([
+            'asset_id' => 'MSI-LAP-2026-0001',
+            'company_id' => Company::first()->id,
+            'category_id' => AssetCategory::first()->id,
+            'purchase_year' => 2026,
+        ]);
+        $this->deviceHasScanned('SN-EXCEL-IMPORT-01');
+
+        $this->actingAs($this->admin)
+            ->post(route('agent.promote.store', $this->token), $this->promotionPayload())
+            ->assertRedirect(route('assets.show', Asset::where('asset_id', 'MSI-LAP-2026-0002')->firstOrFail()));
+
+        $this->assertDatabaseHas('assets', [
+            'asset_id' => 'MSI-LAP-2026-0002',
+            'serial_number' => 'SN-EXCEL-IMPORT-01',
         ]);
     }
 
@@ -143,11 +163,13 @@ class AgentDevicePromotionTest extends TestCase
             $this->promotionPayload()
         );
 
-        $asset = Asset::where('asset_id', 'LAPTOP-014')->firstOrFail();
+        $asset = Asset::where('asset_id', 'MSI-LAP-2026-0001')->firstOrFail();
 
-        foreach (['current_user_id', 'admin_it_pic', 'purchase_year', 'vendor', 'purchase_price'] as $field) {
+        foreach (['current_user_id', 'admin_it_pic', 'vendor', 'purchase_price'] as $field) {
             $this->assertNull($asset->{$field}, "{$field} must stay empty rather than be guessed.");
         }
+
+        $this->assertSame(2026, $asset->purchase_year, 'Purchase year is required and must not be guessed.');
 
         // "N/A" is the other way this used to go, and it is worse than blank: a
         // register full of N/A looks complete and cannot be told from real data.
@@ -172,7 +194,7 @@ class AgentDevicePromotionTest extends TestCase
             $this->promotionPayload(['current_user_id' => $holder->id])
         );
 
-        $asset = Asset::where('asset_id', 'LAPTOP-014')->firstOrFail();
+        $asset = Asset::where('asset_id', 'MSI-LAP-2026-0001')->firstOrFail();
 
         $this->assertSame($holder->id, $asset->current_user_id);
         $this->assertDatabaseHas('asset_assignments', [
@@ -190,7 +212,7 @@ class AgentDevicePromotionTest extends TestCase
             $this->promotionPayload()
         );
 
-        $asset = Asset::where('asset_id', 'LAPTOP-014')->firstOrFail();
+        $asset = Asset::where('asset_id', 'MSI-LAP-2026-0001')->firstOrFail();
 
         // An asset in a cupboard has no first party yet. Inventing one would put
         // a name on a document that nobody agreed to.
@@ -256,25 +278,20 @@ class AgentDevicePromotionTest extends TestCase
 
         $response->assertSessionHasErrors('category_id');
         $response->assertSessionHasInput('vendor', 'PT Maju Mandiri');
-        $response->assertSessionHasInput('asset_id', 'LAPTOP-014');
         $response->assertSessionHasInput('purchase_year', '2024');
 
-        $this->assertDatabaseMissing('assets', ['asset_id' => 'LAPTOP-014']);
+        $this->assertSame(0, Asset::count());
     }
 
-    public function test_asset_id_must_not_collide_with_an_existing_asset(): void
+    public function test_purchase_year_is_required_to_generate_the_asset_code(): void
     {
-        Asset::factory()->create(['asset_id' => 'LAPTOP-014']);
-
         $this->deviceHasScanned('SN-DUPE-01');
 
-        $this->actingAs($this->admin)->post(
-            route('agent.promote.store', $this->token),
-            $this->promotionPayload()
-        );
+        $this->actingAs($this->admin)
+            ->from(route('agent.promote', $this->token))
+            ->post(route('agent.promote.store', $this->token), $this->promotionPayload(['purchase_year' => '']))
+            ->assertSessionHasErrors('purchase_year');
 
-        // Two rows sharing one asset id would break every document that names it.
-        $this->assertSame(1, Asset::where('asset_id', 'LAPTOP-014')->count());
         $this->assertDatabaseMissing('assets', ['serial_number' => 'SN-DUPE-01']);
     }
 
@@ -293,7 +310,7 @@ class AgentDevicePromotionTest extends TestCase
             ->post(route('agent.promote.store', $this->token), $this->promotionPayload())
             ->assertForbidden();
 
-        $this->assertDatabaseMissing('assets', ['asset_id' => 'LAPTOP-014']);
+        $this->assertDatabaseMissing('assets', ['serial_number' => 'SN-GATE-01']);
     }
 
     /**

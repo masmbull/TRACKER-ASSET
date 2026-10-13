@@ -25,12 +25,12 @@
 </style>
 </head>
 <body>
-@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-dark.png'))))
+@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-white.png'))))
 <div class="header">
     <table style="border: none; width: 100%; margin-bottom: 4px;">
         <tr>
-            <td style="border: none; width: 150px; vertical-align: top; padding: 0;">
-                <img src="{{ $logoUri }}" style="width: 130px;" alt="MITO Electronic">
+            <td style="border: none; width: 150px; vertical-align: top; padding: 6px 10px; background: #ed1c24;">
+                <img src="{{ $logoUri }}" style="width: 130px; display: block;" alt="MITO Electronic">
             </td>
             <td style="border: none; vertical-align: top; padding: 0;">
                 <h1>@yield('title')</h1>

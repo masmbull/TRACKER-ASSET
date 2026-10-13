@@ -17,6 +17,8 @@ use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
 use App\Services\AuditComparisonService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -359,12 +361,12 @@ class AssetController extends Controller
         return redirect()->route('assets.show', $asset)->with('success', 'Asset disposed.');
     }
 
-    public function agentScan(Request $request, Asset $asset)
+    public function agentScan(Request $request, Asset $asset): JsonResponse|RedirectResponse
     {
         $this->authorize('audit', $asset);
 
         if (empty($asset->serial_number)) {
-            return back()->with('error', 'This asset has no serial number. Agent scan requires a serial number to match the device.');
+            return $this->agentScanResponse($request, 'This asset has no serial number. Agent scan requires a serial number to match the device.', false);
         }
 
         // Address the device through the token whose telemetry snapshot is
@@ -375,11 +377,11 @@ class AssetController extends Controller
             ->first();
 
         if (! $token) {
-            return back()->with('error', 'No audit agent is enrolled for this asset yet. Download and run the 1-click agent on the device — it registers itself automatically.');
+            return $this->agentScanResponse($request, 'No audit agent is enrolled for this asset yet. Download and run the 1-click agent on the device — it registers itself automatically.', false);
         }
 
         if (! $token->isUsable()) {
-            return back()->with('error', 'The audit agent for this asset is deactivated or its token has expired. Re-activate it on the Agents page or reinstall the agent on the device.');
+            return $this->agentScanResponse($request, 'The audit agent for this asset is deactivated or its token has expired. Re-activate it on the Agents page or reinstall the agent on the device.', false);
         }
 
         AgentCommand::create([
@@ -400,7 +402,19 @@ class AssetController extends Controller
             'source' => 'Web UI',
         ]);
 
-        return back()->with('success', 'Scan command queued. The audit agent on this device will pick it up within a few seconds and send the scan result.');
+        return $this->agentScanResponse($request, 'Scan command queued. The audit agent on this device will pick it up within a few seconds and send the scan result.');
+    }
+
+    private function agentScanResponse(Request $request, string $message, bool $success = true): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => $success,
+                'message' => $message,
+            ], $success ? 200 : 422);
+        }
+
+        return back()->with($success ? 'success' : 'error', $message);
     }
 
     public function audit(Asset $asset)

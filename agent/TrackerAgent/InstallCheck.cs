@@ -14,6 +14,9 @@ public enum InstallerMode
 
     /// <summary>Agent installed, clicked build is the same version — just a notice.</summary>
     AlreadyInstalled,
+
+    /// <summary>System tray update check: detect server reachability and update availability.</summary>
+    CheckForUpdates,
 }
 
 /// <summary>
@@ -33,6 +36,8 @@ public static class InstallCheck
     public static string InstalledExe => Path.Combine(InstallDir, "TrackerAgent.exe");
 
     public static string InstalledConfig => Path.Combine(InstallDir, "config.json");
+
+    internal static string BuildTrayAutostartCommand(string exePath) => $"\"{exePath}\"";
 
     /// <summary>
     /// Read the full build identity of an exe: "1.2.0+abcdef".

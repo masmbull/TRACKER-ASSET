@@ -1,4 +1,6 @@
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace TrackerAgent.Tests;
@@ -20,7 +22,9 @@ internal static class Program
     private static int Main()
     {
         TokenFromConfigCases();
+        TrayAutostartCases();
         ScanResultCases();
+        FullScanCases();
 
         Console.WriteLine(_failures == 0
             ? "\n[OK] All agent checks passed."
@@ -98,6 +102,18 @@ internal static class Program
     /// mismatches) threw, RunOnce returned 1, and the daemon acked the scan as
     /// "failed".
     /// </summary>
+    private static void TrayAutostartCases()
+    {
+        Console.WriteLine("[*] tray autostart command");
+
+        const string exePath = @"C:\Users\Example\AppData\Local\TRACKER\TrackerAgent.exe";
+        var command = InstallCheck.BuildTrayAutostartCommand(exePath);
+
+        Check(
+            "autostart launches the installed tray without daemon flags or credentials",
+            command == $"\"{exePath}\"" && !command.Contains("--daemon", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static void ScanResultCases()
     {
         Console.WriteLine("[*] scan-result printing");
@@ -143,6 +159,25 @@ internal static class Program
             Prints("""{ "result": "MATCH", "asset": "MITO-0001", "mismatches": "nope" }""").Ok);
     }
 
+    private static void FullScanCases()
+    {
+        Console.WriteLine("[*] full scan request");
+
+        using var server = new RecordingHttpServer();
+        var rc = AgentRunner.RunFullScan(server.Url, "token-123", "asset-999");
+
+        Check("full scan posts the audit and fingerprint endpoints", rc == 0 && server.Requests.Count == 2);
+        Check("audit is sent before the deep fingerprint",
+            server.Requests[0].Contains("/api/audits", StringComparison.Ordinal) &&
+            server.Requests[1].Contains("/api/agent/fingerprint", StringComparison.Ordinal));
+
+        using var fingerprintFailureServer = new RecordingHttpServer(failFingerprint: true);
+        var failedRc = AgentRunner.RunFullScan(fingerprintFailureServer.Url, "token-123", "asset-999");
+
+        Check("rejected fingerprint makes the full scan fail", failedRc != 0);
+        Check("failed full scan still attempts both report endpoints", fingerprintFailureServer.Requests.Count == 2);
+    }
+
     /// <summary>
     /// <see cref="AgentRunner.PrintResult"/> with stdout captured, so its
     /// printed lines can be asserted on without hiding the harness's own.
@@ -178,6 +213,74 @@ internal static class Program
         if (!ok)
         {
             _failures++;
+        }
+    }
+
+    private sealed class RecordingHttpServer : IDisposable
+    {
+        private readonly HttpListener _listener = new();
+        private readonly List<string> _requests = new();
+        private readonly Task _acceptLoop;
+        private readonly bool _failFingerprint;
+
+        public RecordingHttpServer(bool failFingerprint = false)
+        {
+            _failFingerprint = failFingerprint;
+            var port = GetFreePort();
+            Url = $"http://localhost:{port}/";
+            _listener.Prefixes.Add(Url);
+            _listener.Start();
+            _acceptLoop = Task.Run(AcceptLoop);
+        }
+
+        public string Url { get; }
+
+        public IReadOnlyList<string> Requests => _requests;
+
+        private async Task AcceptLoop()
+        {
+            while (_listener.IsListening)
+            {
+                try
+                {
+                    var context = await _listener.GetContextAsync();
+                    var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+                    _requests.Add(path);
+
+                    context.Response.StatusCode = _failFingerprint &&
+                        path.EndsWith("agent/fingerprint", StringComparison.Ordinal) ? 500 : 200;
+                    context.Response.ContentType = "application/json";
+                    var body = "{\"ok\":true}\n";
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+                    context.Response.ContentLength64 = bytes.Length;
+                    await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length);
+                    context.Response.OutputStream.Close();
+                }
+                catch (HttpListenerException)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            _listener.Stop();
+            _listener.Close();
+            _acceptLoop.Wait(TimeSpan.FromSeconds(5));
+        }
+
+        private static int GetFreePort()
+        {
+            var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
         }
     }
 
