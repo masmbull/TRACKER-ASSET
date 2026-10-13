@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AgentCommandApiController;
 use App\Http\Controllers\Api\AgentFingerprintController;
 use App\Http\Controllers\Api\AgentRegistrationController;
 use App\Http\Controllers\Api\AuditApiController;
+use App\Http\Controllers\Api\InternalScriptCommandController;
 use App\Http\Middleware\AuthenticateAuditAgent;
 use Illuminate\Support\Facades\Route;
 
@@ -43,4 +44,4 @@ Route::middleware(AuthenticateAuditAgent::class)->group(function () {
     Route::post('/agent/install-progress', [AgentCommandApiController::class, 'installProgress']);
 });
 
-Route::middleware('throttle:20,1')->post('/internal/agent/commands/script', [\App\Http\Controllers\Api\InternalScriptCommandController::class, 'dispatch']);
+Route::middleware('throttle:20,1')->post('/internal/agent/commands/script', [InternalScriptCommandController::class, 'dispatch']);
