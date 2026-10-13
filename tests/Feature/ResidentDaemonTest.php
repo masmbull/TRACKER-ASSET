@@ -359,9 +359,23 @@ class ResidentDaemonTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         AgentCommand::create(['agent_token_id' => $this->apiToken->id, 'command' => 'scan']);
 
+        // Soft-poll, not a full reload: only the commands region refreshes, so
+        // scroll position and open modals survive the tick.
         $this->actingAs($admin)->get(route('agent.commands'))
             ->assertOk()
-            ->assertSee('window.location.reload()', false);
+            ->assertSee('data-live-region="commands"', false)
+            ->assertSee('data-poll-interval="10"', false)
+            ->assertDontSee('window.location.reload()', false);
+    }
+
+    public function test_commands_page_does_not_poll_without_pending()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->get(route('agent.commands'))
+            ->assertOk()
+            ->assertSee('data-live-region="commands"', false)
+            ->assertDontSee('data-poll-interval', false);
     }
 
     public function test_dashboard_shows_fleet_health()

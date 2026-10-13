@@ -27,7 +27,7 @@
     </x-slot:actions>
 </x-page-header>
 
-<div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+<div class="stagger grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
     @foreach($stats as $stat)
         <x-card class="border-l-4 {{ $stat['border'] }} !p-3 sm:!p-4">
             <div class="flex items-start justify-between gap-2 sm:gap-3">
@@ -51,7 +51,7 @@
     @endforeach
 </section>
 
-<div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+<div class="stagger mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
     <x-card title="Open Repairs" class="!p-4 sm:!p-5">
         <p class="text-xl font-bold text-orange-500 sm:text-title-sm">{{ $openRepairs }}</p>
     </x-card>
@@ -94,7 +94,7 @@
                 'audit_stale' => ['Audit Stale (>6mo)', 'warning'],
             ];
         @endphp
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="stagger grid grid-cols-2 md:grid-cols-4 gap-3">
             @foreach($warningLabels as $key => $meta)
                 <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-center">
                     <p class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $meta[0] }}</p>
@@ -105,7 +105,7 @@
     </div>
 </x-card>
 
-<div class="grid grid-cols-1 gap-6 md:grid-cols-3 mt-6">
+<div class="stagger grid grid-cols-1 gap-6 md:grid-cols-3 mt-6">
     @php
         $charts = [
             ['title' => 'by Category', 'data' => $assetsByCategory, 'color' => 'brand'],
@@ -141,14 +141,14 @@
     <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Agent Fleet</h3>
         @can('manage-agents')
-            <div class="flex gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <x-button variant="secondary" size="sm" :href="route('agent.commands')">Command Center</x-button>
                 <x-button variant="success" size="sm" type="button" @click="$dispatch('open-modal', 'scan-all-agents-modal')">Scan All</x-button>
             </div>
         @endcan
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stagger grid grid-cols-2 md:grid-cols-4 gap-4">
         @php
             $fleetItems = [
                 ['label' => 'Online', 'value' => $fleet['online'], 'variant' => 'success'],

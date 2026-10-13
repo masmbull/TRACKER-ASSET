@@ -3,14 +3,14 @@
 @section('title', 'Users')
 
 @section('content')
-<div class="flex justify-between items-center mb-6">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <h1 class="text-2xl font-bold">Users</h1>
-    <a href="{{ route('users.create') }}" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">+ Add User</a>
+    <a href="{{ route('users.create') }}" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">+ Add User</a>
 </div>
 
-<form method="GET" action="{{ route('users.index') }}" class="flex gap-2 mb-4">
-    <input type="text" name="search" value="{{ request('search') }}" placeholder="Name, email, department..." class="border rounded px-3 py-2 flex-1">
-    <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Search</button>
+<form method="GET" action="{{ route('users.index') }}" class="flex flex-wrap items-center gap-2 mb-4">
+    <input type="text" name="search" value="{{ request('search') }}" placeholder="Name, email, department..." class="border rounded-lg px-3 py-2 flex-1">
+    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-gray-600 px-4 py-2 text-theme-sm font-medium text-white transition-all duration-200 active:scale-[0.97] hover:bg-gray-700">Search</button>
 </form>
 
 {{-- Employee directory search (PRD §39). Hidden entirely when the feature is
@@ -21,7 +21,7 @@
 <div id="m365-directory" class="mb-4">
     <label for="m365-q" class="block text-sm font-medium mb-1">Find in Microsoft 365</label>
     <input id="m365-q" type="text" autocomplete="off" placeholder="Search name, email, department, job title, company..."
-           class="border rounded px-3 py-2 w-full max-w-xl">
+           class="border rounded-lg px-3 py-2 w-full max-w-xl">
     <p id="m365-status" class="text-sm text-gray-600 dark:text-gray-300 mt-2"></p>
     <ul id="m365-results" class="mt-2 divide-y border rounded max-w-xl"></ul>
 </div>
@@ -118,6 +118,6 @@
 
 {{ $users->links() }}
 @else
-<p class="bg-white p-6 rounded shadow">No users found.</p>
+<p class="bg-white p-6 rounded-xl shadow">No users found.</p>
 @endif
 @endsection

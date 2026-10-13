@@ -20,11 +20,10 @@
     </script>
 </head>
 <body class="h-full bg-gray-50 font-outfit">
-    <div class="flex min-h-full items-center justify-center p-4" x-data="{ loaded: false }" x-init="setTimeout(() => loaded = true, 100)">
+    <div id="top-progress" aria-hidden="true"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
 
-        <div x-show="loaded" x-transition:enter="transition ease-out duration-500"
-             x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-             class="relative w-full max-w-md">
+        <div class="animate-fade-up relative w-full max-w-md">
 
             {{-- Logo --}}
             <div class="text-center mb-8">
@@ -60,7 +59,7 @@
                                placeholder="Enter your password">
                     </div>
                     <button type="submit"
-                            class="w-full bg-brand-500 text-white hover:bg-brand-600 shadow-theme-xs font-medium py-2.5 rounded-lg transition text-theme-sm">
+                            class="w-full bg-brand-500 text-white hover:bg-brand-600 shadow-theme-xs font-medium py-2.5 rounded-lg transition-all duration-200 active:scale-[0.99] disabled:opacity-80 text-theme-sm">
                         Sign in
                     </button>
                 </form>

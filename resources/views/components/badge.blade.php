@@ -10,7 +10,7 @@ $colors = [
     'gray' => 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
 ];
 @endphp
-<span {{ $attributes->class(['inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-theme-xs font-medium', $colors[$variant] ?? $colors['gray']]) }}>
-    @if($dot)<span class="h-1.5 w-1.5 rounded-full bg-current"></span>@endif
+<span {{ $attributes->class(['inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-theme-xs font-medium transition-colors duration-200', $colors[$variant] ?? $colors['gray']]) }}>
+    @if($dot)<span @class(['h-1.5 w-1.5 rounded-full bg-current', 'pulse-dot' => in_array($variant, ['success', 'error'], true)])></span>@endif
     {{ $slot }}
 </span>

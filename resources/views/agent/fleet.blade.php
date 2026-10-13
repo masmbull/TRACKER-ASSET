@@ -62,7 +62,7 @@
         <x-badge variant="success">all clear</x-badge>
     @endif
 </div>
-<x-card title="Active Devices" subtitle="Click any device to see everything it reports.">
+<x-card title="Active Devices" subtitle="Click any device to see everything it reports. Updates live — no need to refresh." data-fleet-refresh-url="{{ route('agent.fleet.refresh') }}">
     @if($activeDevices->isEmpty())
         <p class="py-8 text-center text-theme-sm text-gray-400">
             No active devices. Open <a href="{{ route('agent.index') }}" class="font-medium text-brand-500 hover:text-brand-600">Tokens</a> and download the agent to enrol a laptop.
@@ -221,7 +221,7 @@
                             @endif
                         </td>
                         <td class="py-3 px-3">
-                            <div class="flex items-center justify-end gap-x-3 gap-y-1">
+                            <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                                 <button type="button"
                                         class="whitespace-nowrap text-theme-sm font-medium text-brand-500 hover:text-brand-600"
                                         @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>

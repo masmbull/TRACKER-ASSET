@@ -45,7 +45,7 @@ class DashboardTest extends TestCase
         ]);
         $response->assertSee('Total Assets');
         $response->assertSee('Warnings');
-        $response->assertSee('class="flex w-full items-center justify-end gap-4 px-4 py-3 xl:px-0"', false);
+        $response->assertSee('flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end', false);
     }
 
     public function test_dashboard_breakdown_uses_real_lookup_columns(): void

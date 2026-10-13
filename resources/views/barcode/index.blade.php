@@ -9,12 +9,12 @@
     barcode, QR value, Asset ID, serial number or hostname manually.
 </p>
 
-<div class="bg-white p-6 rounded shadow max-w-xl">
-    <form method="POST" action="{{ route('barcode.resolve') }}" class="flex gap-2">
+<div class="bg-white p-6 rounded-xl shadow max-w-xl">
+    <form method="POST" action="{{ route('barcode.resolve') }}" class="flex flex-wrap items-center gap-2">
         @csrf
         <input type="text" name="code" value="{{ old('code') }}" required autofocus
-               placeholder="Scan here…" class="border rounded px-3 py-2 flex-1 font-mono">
-        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Find</button>
+               placeholder="Scan here…" class="border rounded-lg px-3 py-2 flex-1 font-mono">
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-6 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">Find</button>
     </form>
 
     @error('code')

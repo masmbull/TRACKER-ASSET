@@ -3,21 +3,21 @@
 @section('title', 'Transfer History')
 
 @section('content')
-<div class="flex justify-between items-center mb-6">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <h1 class="text-2xl font-bold">Transfer History</h1>
 </div>
 
-<form method="GET" action="{{ route('transfers.index') }}" class="bg-white p-4 rounded shadow mb-4">
+<form method="GET" action="{{ route('transfers.index') }}" class="bg-white p-4 rounded-xl shadow mb-4">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
         <div class="md:col-span-2">
             <label class="block text-xs text-gray-500">Search</label>
             <input type="text" name="search" value="{{ request('search') }}"
                    placeholder="Transfer #, Asset ID, Hostname, User..."
-                   class="w-full border rounded px-3 py-2">
+                   class="w-full border rounded-lg px-3 py-2">
         </div>
         <div>
             <label class="block text-xs text-gray-500">Status</label>
-            <select name="status" class="w-full border rounded px-3 py-2">
+            <select name="status" class="w-full border rounded-lg px-3 py-2">
                 <option value="">All</option>
                 <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
                 <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
@@ -27,14 +27,14 @@
         <div>
             <label class="block text-xs text-gray-500">Date Range</label>
             <div class="flex gap-1">
-                <input type="date" name="from" value="{{ request('from') }}" class="w-1/2 border rounded px-2 py-2 text-sm">
-                <input type="date" name="to" value="{{ request('to') }}" class="w-1/2 border rounded px-2 py-2 text-sm">
+                <input type="date" name="from" value="{{ request('from') }}" class="w-1/2 border rounded-lg px-2 py-2 text-sm">
+                <input type="date" name="to" value="{{ request('to') }}" class="w-1/2 border rounded-lg px-2 py-2 text-sm">
             </div>
         </div>
     </div>
     <div class="flex items-center gap-3">
-        <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Apply</button>
-        <a href="{{ route('transfers.index') }}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Reset</a>
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-gray-600 px-4 py-2 text-theme-sm font-medium text-white transition-all duration-200 active:scale-[0.97] hover:bg-gray-700">Apply</button>
+        <a href="{{ route('transfers.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Reset</a>
     </div>
 </form>
 
@@ -95,6 +95,6 @@
 
 {{ $transfers->links() }}
 @else
-<p class="bg-white p-6 rounded shadow">No transfers found.</p>
+<p class="bg-white p-6 rounded-xl shadow">No transfers found.</p>
 @endif
 @endsection

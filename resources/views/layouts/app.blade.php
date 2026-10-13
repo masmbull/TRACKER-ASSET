@@ -28,7 +28,6 @@
 </head>
 <body
     x-data="{
-        loaded: true,
         darkMode: JSON.parse(localStorage.getItem('darkMode') || 'false'),
         sidebarToggle: false,
         sidebarExpanded: (() => {
@@ -46,15 +45,12 @@
     :class="{'bg-gray-900': darkMode}"
     class="font-outfit bg-gray-50"
 >
-    <!-- Preloader -->
-    <div x-show="loaded"
-         x-init="setTimeout(() => loaded = false, 500)"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 z-[999999] flex items-center justify-center bg-white dark:bg-black">
-        <div class="border-brand-500 h-16 w-16 animate-spin rounded-full border-4 border-solid border-t-transparent"></div>
-    </div>
+    <!-- Slim top progress bar: the only loading indicator. Shown during
+         navigations, async posts and soft polls (see app.js). -->
+    <div id="top-progress" aria-hidden="true"></div>
+
+    <!-- Toast stack: non-blocking notices, filled by app.js. -->
+    <div id="toast-stack" aria-live="polite"></div>
 
     <!-- Page Wrapper -->
     <div class="flex min-h-screen overflow-x-hidden bg-gray-50">
@@ -121,7 +117,7 @@
 
         <aside
             :class="[
-                'sidebar z-[9999] flex h-screen max-w-[85vw] flex-col overflow-y-auto border-r border-gray-200 bg-white px-5 fixed top-0 left-0 transition-all duration-200 ease-out xl:static dark:border-gray-800 dark:bg-black',
+                'sidebar z-[9999] flex h-screen max-w-[85vw] flex-col overflow-y-auto border-r border-gray-200 bg-white px-5 fixed top-0 left-0 transition-all duration-150 ease-out xl:static dark:border-gray-800 dark:bg-black',
                 window.innerWidth >= 1280
                     ? 'translate-x-0'
                     : (sidebarToggle ? 'translate-x-0' : '-translate-x-full')
@@ -147,8 +143,8 @@
                     @click="sidebarExpanded = !sidebarExpanded"
                     :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
                     :title="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-                    class="hidden xl:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-white">
-                    <span x-text="sidebarExpanded ? '«' : '»'" class="text-lg font-bold leading-none" aria-hidden="true"></span>
+                    class="hidden xl:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 shadow-sm transition-all duration-200 hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-white">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="transition-transform duration-200" :class="sidebarExpanded ? '' : 'rotate-180'" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </div>
 
@@ -341,16 +337,17 @@
 
             <!-- Main Content -->
             <main>
-                <div class="mx-auto w-full max-w-7xl p-4 md:p-6">
-                    <!-- Flash Messages -->
+                <div class="animate-fade-up mx-auto w-full max-w-7xl p-4 md:p-6">
+                    <!-- Flash messages become toasts via app.js: no banner push,
+                         no layout shift, and the notice survives as a toast. -->
                     @if(session('success'))
-                        <x-alert type="success">{{ session('success') }}</x-alert>
+                        <div data-flash-toast="{{ session('success') }}" data-flash-type="success" class="hidden"></div>
                     @endif
                     @if(session('error'))
-                        <x-alert type="error">{{ session('error') }}</x-alert>
+                        <div data-flash-toast="{{ session('error') }}" data-flash-type="error" class="hidden"></div>
                     @endif
                     @if(session('warning'))
-                        <x-alert type="warning">{{ session('warning') }}</x-alert>
+                        <div data-flash-toast="{{ session('warning') }}" data-flash-type="info" class="hidden"></div>
                     @endif
 
                     {{--
@@ -391,8 +388,8 @@
         </div>
     </div>
 
-    <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4" role="presentation" aria-live="polite">
-        <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
+    <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-sm" role="presentation" aria-live="polite">
+        <section class="animate-scale-in w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
             <div class="flex items-start gap-4">
                 <div id="ajax-action-spinner" class="mt-0.5 h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" aria-hidden="true"></div>
                 <div class="min-w-0 flex-1">
@@ -401,18 +398,26 @@
                 </div>
             </div>
             <div class="mt-5 flex justify-end">
-                <button id="ajax-action-close" type="button" class="hidden rounded-lg bg-brand-600 px-4 py-2 text-theme-sm font-medium text-white hover:bg-brand-700">Done</button>
+                <button id="ajax-action-close" type="button" class="hidden rounded-lg bg-brand-600 px-4 py-2 text-theme-sm font-medium text-white transition hover:bg-brand-700">Done</button>
             </div>
         </section>
     </div>
 
     <script>
+        // Async action forms (data-modal-action): POST via fetch, no redirect.
+        //
+        // Success dismisses itself: the modal closes, a toast confirms, and the
+        // page stays exactly where it was. Only a failure keeps the modal open,
+        // with the error readable and a Done button to leave.
         (() => {
             const modal = document.getElementById('ajax-action-modal');
             const title = document.getElementById('ajax-action-title');
             const message = document.getElementById('ajax-action-message');
             const spinner = document.getElementById('ajax-action-spinner');
             const closeButton = document.getElementById('ajax-action-close');
+
+            const busyBar = () => document.getElementById('top-progress');
+            const setBar = (on) => busyBar()?.classList.toggle('is-busy', on);
 
             const closeModal = () => {
                 if (modal.dataset.busy !== 'true') {
@@ -437,10 +442,12 @@
                     message.textContent = 'Sending your request. Please wait.';
                     spinner.classList.remove('hidden');
                     closeButton.classList.add('hidden');
+                    setBar(true);
 
                     const submitButtons = [...form.querySelectorAll('button[type="submit"]')];
                     submitButtons.forEach((button) => {
                         button.disabled = true;
+                        button.classList.add('opacity-80');
                     });
 
                     try {
@@ -467,20 +474,29 @@
                             window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
                         }
 
-                        title.textContent = 'Request accepted';
-                        message.textContent = payload.message;
+                        // Success: no extra click. Close, toast, stay on page.
+                        modal.dataset.busy = 'false';
+                        modal.removeAttribute('aria-busy');
+                        closeModal();
+                        setBar(false);
+                        window.showToast?.(payload.message || 'Done.', 'success');
+                        window.dispatchEvent(new CustomEvent('async-action-done', {
+                            detail: { action: form.action, message: payload.message || '' },
+                        }));
                     } catch (error) {
                         title.textContent = 'Action not completed';
                         message.textContent = error.message;
-                    } finally {
                         modal.dataset.busy = 'false';
                         modal.removeAttribute('aria-busy');
                         spinner.classList.add('hidden');
                         closeButton.classList.remove('hidden');
+                        setBar(false);
+                        closeButton.focus();
+                    } finally {
                         submitButtons.forEach((button) => {
                             button.disabled = false;
+                            button.classList.remove('opacity-80');
                         });
-                        closeButton.focus();
                     }
                 });
             });

@@ -37,6 +37,7 @@
 </x-card>
 
 <x-card class="mb-6" title="Commands">
+    <div data-live-region="commands"{!! $pendingCount > 0 ? ' data-poll-interval="10"' : '' !!}>
     @if($commands->count() > 0)
         <div class="overflow-x-auto">
             <x-table :headers="['ID', 'Command', 'Token', 'Status', 'Result', 'Created', 'Executed']">
@@ -61,6 +62,13 @@
     @else
         <p class="py-8 text-center text-theme-sm text-gray-400">No commands yet.</p>
     @endif
+    @if($pendingCount > 0)
+        <p class="mt-3 flex items-center gap-2 text-theme-xs text-gray-400">
+            <span class="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-warning-500"></span>
+            {{ $pendingCount }} pending — updating automatically, no need to refresh.
+        </p>
+    @endif
+    </div>
 </x-card>
 
 <x-card title="Agent Status">
@@ -93,12 +101,6 @@
         @endforeach
     </x-table>
 </x-card>
-
-@if($pendingCount > 0)
-    <script>
-        setTimeout(function () { window.location.reload(); }, 10000);
-    </script>
-@endif
 
 <x-modal id="confirm-update-all-agents" title="Update all agents" maxWidth="md">
     <div class="space-y-4">

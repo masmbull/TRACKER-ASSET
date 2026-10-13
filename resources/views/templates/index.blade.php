@@ -30,7 +30,7 @@
                         </td>
                         <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ is_array($template->template_content) ? count($template->template_content) : 0 }} fields</td>
                         <td class="py-3 px-4">
-                            <button type="button" @click="$dispatch('open-modal', 'toggle-template-{{ $template->id }}')" class="inline-flex rounded-full px-2.5 py-1 text-theme-xs font-medium {{ $template->is_active ? 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300' }}">
+                            <button type="button" @click="$dispatch('open-modal', 'toggle-template-{{ $template->id }}')" class="inline-flex items-center justify-center rounded-full px-2.5 py-1 text-theme-xs font-medium {{ $template->is_active ? 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300' }}">
                                 {{ $template->is_active ? 'Active' : 'Inactive' }}
                             </button>
                         </td>

@@ -28,10 +28,10 @@
     @else
         <x-badge variant="success" :dot="true">All {{ $total }} services healthy</x-badge>
     @endif
-    <span class="text-theme-xs text-gray-500 dark:text-gray-400">checked {{ now()->format('H:i:s') }}</span>
+    <span class="text-theme-xs text-gray-500 dark:text-gray-400" data-live-stamp>checked {{ now()->format('H:i:s') }} · auto-refreshes</span>
 </div>
 
-<x-card>
+<x-card data-live-region="services" data-poll-interval="30">
     <div class="space-y-2">
         @foreach($services as $service)
             <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3 last:border-0 last:pb-0 dark:border-gray-800">
@@ -74,8 +74,4 @@
     Use <span class="font-medium">/services/health.json</span> for an uptime monitor — it
     answers <span class="font-medium">503</span> while anything is down.
 </p>
-
-<script>
-    setTimeout(function () { window.location.reload(); }, 30000);
-</script>
 @endsection

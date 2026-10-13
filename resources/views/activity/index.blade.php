@@ -5,16 +5,16 @@
 @section('content')
 <h1 class="text-2xl font-bold mb-6">Activity Log</h1>
 
-<form method="GET" action="{{ route('activity.index') }}" class="flex flex-wrap gap-2 mb-4">
-    <input type="text" name="search" value="{{ request('search') }}" placeholder="Asset, entity, user..." class="border rounded px-3 py-2 flex-1">
-    <select name="action" class="border rounded px-3 py-2">
+<form method="GET" action="{{ route('activity.index') }}" class="flex flex-wrap items-center gap-2 mb-4">
+    <input type="text" name="search" value="{{ request('search') }}" placeholder="Asset, entity, user..." class="border rounded-lg px-3 py-2 flex-1">
+    <select name="action" class="border rounded-lg px-3 py-2">
         <option value="">All actions</option>
         @foreach($actions as $action)
             <option value="{{ $action }}" {{ request('action') === $action ? 'selected' : '' }}>{{ $action }}</option>
         @endforeach
     </select>
-    <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Filter</button>
-    <a href="{{ route('activity.index') }}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Reset</a>
+    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-gray-600 px-4 py-2 text-theme-sm font-medium text-white transition-all duration-200 active:scale-[0.97] hover:bg-gray-700">Filter</button>
+    <a href="{{ route('activity.index') }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Reset</a>
 </form>
 
 @if($logs->count() > 0)
@@ -59,6 +59,6 @@
 
 {{ $logs->links() }}
 @else
-<p class="bg-white p-6 rounded shadow">No activity found.</p>
+<p class="bg-white p-6 rounded-xl shadow">No activity found.</p>
 @endif
 @endsection

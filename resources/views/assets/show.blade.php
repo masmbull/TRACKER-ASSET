@@ -136,7 +136,7 @@
     {{-- Documents --}}
     <div x-show="activeTab === 'documents'" x-transition>
         <x-card>
-            <div class="flex gap-2 mb-4">
+            <div class="flex flex-wrap items-center gap-2 mb-4">
                 @can('generateDocument', $asset)
                     <x-button variant="primary" size="sm" :href="route('documents.generate', $asset)">Generate FAT/BAST</x-button>
                     <x-button variant="secondary" size="sm" :href="route('documents.create', $asset)">+ Add</x-button>

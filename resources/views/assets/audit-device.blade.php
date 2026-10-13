@@ -10,13 +10,13 @@
     truthfully read — serial / hostname / MAC can be typed from the device label below.
 </p>
 
-<div class="bg-white p-6 rounded shadow mb-6">
+<div class="bg-white p-6 rounded-xl shadow mb-6">
     <div class="grid grid-cols-2 gap-2 text-sm mb-4">
         <div><span class="text-gray-500">Registered:</span> {{ $asset->brand }} {{ $asset->model }} · {{ $asset->serial_number }} · {{ $asset->hostname }}</div>
         <div><span class="text-gray-500">Registered OS / RAM / IP:</span> {{ $asset->os_version }} · {{ $asset->ram }} · {{ $asset->static_ip }}</div>
     </div>
 
-    <button type="button" onclick="scanDevice()" class="bg-red-600 hover:bg-red-700 text-white text-lg px-8 py-3 rounded shadow">
+    <button type="button" onclick="scanDevice()" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-8 py-3 text-lg font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">
         Scan Device (1 klik)
     </button>
     <span id="scan-status" class="ml-3 text-sm text-green-600 font-semibold"></span>
@@ -33,7 +33,7 @@
     </table>
 </div>
 
-<form method="POST" action="{{ route('assets.audit.device.submit', $asset) }}" class="bg-white p-6 rounded shadow space-y-4">
+<form method="POST" action="{{ route('assets.audit.device.submit', $asset) }}" class="bg-white p-6 rounded-xl shadow space-y-4">
     @csrf
     <input type="hidden" name="browser_os" id="browser_os">
     <input type="hidden" name="browser_ram" id="browser_ram">
@@ -55,30 +55,30 @@
              pasted from a label can legitimately be rejected. --}}
         <div>
             <label class="block text-sm font-medium">Serial Number (from label)</label>
-            <input type="text" name="manual_serial" value="{{ old('manual_serial') }}" class="w-full border rounded px-3 py-2 @error('manual_serial') border-red-400 @enderror" placeholder="{{ $asset->serial_number }}">
+            <input type="text" name="manual_serial" value="{{ old('manual_serial') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_serial') border-red-400 @enderror" placeholder="{{ $asset->serial_number }}">
             @error('manual_serial') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Hostname</label>
-            <input type="text" name="manual_hostname" value="{{ old('manual_hostname') }}" class="w-full border rounded px-3 py-2 @error('manual_hostname') border-red-400 @enderror" placeholder="{{ $asset->hostname }}">
+            <input type="text" name="manual_hostname" value="{{ old('manual_hostname') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_hostname') border-red-400 @enderror" placeholder="{{ $asset->hostname }}">
             @error('manual_hostname') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">MAC Address</label>
-            <input type="text" name="manual_mac" value="{{ old('manual_mac') }}" class="w-full border rounded px-3 py-2 @error('manual_mac') border-red-400 @enderror" placeholder="{{ $asset->mac_address }}">
+            <input type="text" name="manual_mac" value="{{ old('manual_mac') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_mac') border-red-400 @enderror" placeholder="{{ $asset->mac_address }}">
             @error('manual_mac') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Notes</label>
-        <textarea name="notes" rows="2" class="w-full border rounded px-3 py-2">{{ old('notes') }}</textarea>
+        <textarea name="notes" rows="2" class="w-full border rounded-lg px-3 py-2">{{ old('notes') }}</textarea>
     </div>
 
     <div class="flex gap-2 pt-2">
-        <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded">Submit Audit</button>
-        <a href="{{ route('assets.audit', $asset) }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Manual Form</a>
-        <a href="{{ route('assets.show', $asset) }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-success-500 px-6 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-success-600">Submit Audit</button>
+        <a href="{{ route('assets.audit', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Manual Form</a>
+        <a href="{{ route('assets.show', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Cancel</a>
     </div>
 </form>
 

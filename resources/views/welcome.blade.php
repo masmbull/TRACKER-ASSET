@@ -7,10 +7,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded shadow w-full max-w-lg text-center">
+    <div class="bg-white p-8 rounded-xl shadow w-full max-w-lg text-center">
         <h1 class="text-4xl font-bold text-gray-900 mb-4">TRACKER-ASSET</h1>
         <p class="text-gray-600 mb-6">Web-based Asset Tracker + IT Audit + FAT Generator for MITO Group</p>
-        <a href="/login" class="inline-block bg-red-600 text-white px-8 py-3 rounded hover:bg-red-700">Login</a>
+        <a href="/login" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-8 py-3 font-medium text-white shadow-theme-xs transition-all duration-200 hover:bg-brand-600 active:scale-[0.97]">Login</a>
         <p class="text-sm text-gray-400 mt-6">Local Development Mode</p>
     </div>
 </body>

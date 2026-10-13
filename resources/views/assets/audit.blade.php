@@ -11,7 +11,7 @@
     — browser auto-collects OS/RAM/CPU/GPU and compares automatically.
 </div>
 
-<div class="bg-white p-6 rounded shadow mb-6">
+<div class="bg-white p-6 rounded-xl shadow mb-6">
     <h2 class="text-lg font-semibold mb-4">Registered Data</h2>
     <dl class="grid grid-cols-2 gap-2">
         <dt class="font-medium">Hostname</dt><dd>{{ $asset->hostname }}</dd>
@@ -26,7 +26,7 @@
 </div>
 
 @if($asset->audits->count() > 0)
-<div class="bg-white p-6 rounded shadow mb-6">
+<div class="bg-white p-6 rounded-xl shadow mb-6">
     <h2 class="text-lg font-semibold mb-4">Previous Audits</h2>
     <table class="min-w-full">
         <thead>
@@ -61,7 +61,7 @@
 </div>
 @endif
 
-<form method="POST" action="/assets/{{ $asset->id }}/audit" class="bg-white p-6 rounded shadow space-y-4">
+<form method="POST" action="/assets/{{ $asset->id }}/audit" class="bg-white p-6 rounded-xl shadow space-y-4">
     @csrf
 
     <h2 class="text-lg font-semibold">Enter Actual Device Data</h2>
@@ -70,12 +70,12 @@
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Device Hostname *</label>
-            <input type="text" name="device_hostname" required value="{{ old('device_hostname', $asset->hostname) }}" class="w-full border rounded px-3 py-2 @error('device_hostname') border-red-400 @enderror">
+            <input type="text" name="device_hostname" required value="{{ old('device_hostname', $asset->hostname) }}" class="w-full border rounded-lg px-3 py-2 @error('device_hostname') border-red-400 @enderror">
             @error('device_hostname') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Device Serial Number *</label>
-            <input type="text" name="device_serial" required value="{{ old('device_serial', $asset->serial_number) }}" class="w-full border rounded px-3 py-2 @error('device_serial') border-red-400 @enderror">
+            <input type="text" name="device_serial" required value="{{ old('device_serial', $asset->serial_number) }}" class="w-full border rounded-lg px-3 py-2 @error('device_serial') border-red-400 @enderror">
             @error('device_serial') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
         </div>
     </div>
@@ -83,55 +83,55 @@
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Brand</label>
-            <input type="text" name="device_brand" value="{{ old('device_brand', $asset->brand) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_brand" value="{{ old('device_brand', $asset->brand) }}" class="w-full border rounded-lg px-3 py-2">
         </div>
         <div>
             <label class="block text-sm font-medium">Model</label>
-            <input type="text" name="device_model" value="{{ old('device_model', $asset->model) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_model" value="{{ old('device_model', $asset->model) }}" class="w-full border rounded-lg px-3 py-2">
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Processor</label>
-            <input type="text" name="device_processor" value="{{ old('device_processor') }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_processor" value="{{ old('device_processor') }}" class="w-full border rounded-lg px-3 py-2">
         </div>
         <div>
             <label class="block text-sm font-medium">RAM</label>
-            <input type="text" name="device_ram" value="{{ old('device_ram') }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_ram" value="{{ old('device_ram') }}" class="w-full border rounded-lg px-3 py-2">
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">Storage</label>
-            <input type="text" name="device_storage" value="{{ old('device_storage') }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_storage" value="{{ old('device_storage') }}" class="w-full border rounded-lg px-3 py-2">
         </div>
         <div>
             <label class="block text-sm font-medium">OS</label>
-            <input type="text" name="device_os" value="{{ old('device_os') }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_os" value="{{ old('device_os') }}" class="w-full border rounded-lg px-3 py-2">
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium">MAC Address</label>
-            <input type="text" name="device_mac" value="{{ old('device_mac', $asset->mac_address) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_mac" value="{{ old('device_mac', $asset->mac_address) }}" class="w-full border rounded-lg px-3 py-2">
         </div>
         <div>
             <label class="block text-sm font-medium">IP Address</label>
-            <input type="text" name="device_ip" value="{{ old('device_ip', $asset->static_ip) }}" class="w-full border rounded px-3 py-2">
+            <input type="text" name="device_ip" value="{{ old('device_ip', $asset->static_ip) }}" class="w-full border rounded-lg px-3 py-2">
         </div>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Notes</label>
-        <textarea name="notes" class="w-full border rounded px-3 py-2">{{ old('notes') }}</textarea>
+        <textarea name="notes" class="w-full border rounded-lg px-3 py-2">{{ old('notes') }}</textarea>
     </div>
 
-    <div class="flex gap-2 pt-4">
-        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Submit Audit</button>
-        <a href="/assets/{{ $asset->id }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded">Cancel</a>
+    <div class="flex flex-wrap items-center gap-2 pt-4">
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-6 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">Submit Audit</button>
+        <a href="/assets/{{ $asset->id }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Cancel</a>
     </div>
 </form>
 @endsection

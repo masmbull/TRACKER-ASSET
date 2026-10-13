@@ -5,14 +5,14 @@
 @section('content')
 <h1 class="text-2xl font-bold mb-6">IKE_BAST Inspections</h1>
 
-<form method="GET" action="{{ route('ike-bast.inspection.index') }}" class="bg-white p-4 rounded shadow mb-6 flex flex-wrap gap-3 items-end">
+<form method="GET" action="{{ route('ike-bast.inspection.index') }}" class="bg-white p-4 rounded-xl shadow mb-6 flex flex-wrap gap-3 items-end">
     <div>
         <label class="block text-xs text-gray-500">Search</label>
-        <input type="text" name="search" value="{{ request('search') }}" placeholder="Session no, asset ID, serial..." class="border rounded px-3 py-2">
+        <input type="text" name="search" value="{{ request('search') }}" placeholder="Session no, asset ID, serial..." class="border rounded-lg px-3 py-2">
     </div>
     <div>
         <label class="block text-xs text-gray-500">Status</label>
-        <select name="status" class="border rounded px-3 py-2">
+        <select name="status" class="border rounded-lg px-3 py-2">
             <option value="">All</option>
             @foreach(['draft', 'submitted', 'approved', 'rejected'] as $status)
                 <option value="{{ $status }}" {{ request('status') === $status ? 'selected' : '' }}>{{ ucfirst($status) }}</option>
@@ -21,14 +21,14 @@
     </div>
     <div>
         <label class="block text-xs text-gray-500">Kind</label>
-        <select name="kind" class="border rounded px-3 py-2">
+        <select name="kind" class="border rounded-lg px-3 py-2">
             <option value="">All</option>
             @foreach(['IKE_BAST', 'BAST', 'FAT', 'CUSTOM'] as $kind)
                 <option value="{{ $kind }}" {{ request('kind') === $kind ? 'selected' : '' }}>{{ $kind }}</option>
             @endforeach
         </select>
     </div>
-    <button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded">Apply</button>
+    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-gray-600 px-4 py-2 text-theme-sm font-medium text-white transition-all duration-200 active:scale-[0.97] hover:bg-gray-700">Apply</button>
     <p class="text-xs text-gray-500 self-center">Start a new inspection from the asset detail page.</p>
 </form>
 
@@ -64,6 +64,6 @@
 
 {{ $sessions->links() }}
 @else
-<p class="bg-white p-6 rounded shadow">No inspection sessions found.</p>
+<p class="bg-white p-6 rounded-xl shadow">No inspection sessions found.</p>
 @endif
 @endsection
