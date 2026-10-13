@@ -1,0 +1,149 @@
+name: Deploy
+
+# CI > DEPLOY, split on purpose.
+#
+# This workflow never builds or tests anything. It waits for ci.yml to finish on
+# main, then deploys the exact image CI published for that commit - so a commit
+# that fails either test engine or Pint can never reach the server: the tag this
+# pulls does not exist unless the image job ran, and that job needs all three
+# gates. The two files stay separate because the jobs are separate concerns: CI
+# answers "does this commit work", Deploy answers "put it in front of users".
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # Escape hatch: redeploy the current main without pushing a new commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Enough to log the server in to GHCR and pull the image, and nothing more.
+  # No personal access token to create or watch expire.
+  packages: read
+
+# One deploy at a time, never cancelled mid-flight. Two overlapping runs would
+# race the same compose project and could leave the stack half-replaced.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    # workflow_run also fires for failed runs and for pull requests. Neither
+    # should deploy. The branch filter above already limits this to main; the
+    # event check keeps a PR-triggered CI run from ever reaching the server even
+    # if that filter is ever loosened.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+
+    env:
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/tracker-asset' }}
+
+    steps:
+      - name: Checkout the deployed commit
+        uses: actions/checkout@v4
+        with:
+          # For workflow_run this is the commit CI built, not whatever main points
+          # at now. The compose file has to match the image being deployed.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::repository secret ${name} is not set"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Add the secrets above under Settings > Secrets and variables > Actions. See docs/deployment.md."
+            exit 1
+          fi
+
+      - name: Resolve release
+        id: release
+        run: |
+          sha='${{ github.event.workflow_run.head_sha || github.sha }}'
+          image="ghcr.io/$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare the ssh key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Upload the compose files
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH/docker'"
+
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+            docker-compose.prod.yml \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker-compose.prod.yml"
+
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+            docker/nginx.conf \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker/nginx.conf"
+
+      - name: Log the server in to GHCR
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          # The image is private, so the pull needs credentials. The run's own
+          # token is used (see `permissions: packages: read` above) and piped
+          # through stdin so it never appears in a process list. It is short
+          # lived, but it only has to survive this one pull.
+          printf '%s' '${{ secrets.GITHUB_TOKEN }}' | \
+            ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+              "$DEPLOY_USER@$DEPLOY_HOST" \
+              "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE_TAG: ${{ steps.release.outputs.sha }}
+          IMAGE_REPOSITORY: ${{ steps.release.outputs.image }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_PATH' && IMAGE_TAG='$IMAGE_TAG' IMAGE_REPOSITORY='$IMAGE_REPOSITORY' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          docker compose -f docker-compose.prod.yml pull
+
+          # Re-copy the compiled assets out of the new image before nginx can
+          # serve them, so a build never serves the previous release's CSS/JS.
+          docker compose -f docker-compose.prod.yml run --rm --no-deps assets
+
+          # The app container's entrypoint runs the migrations as it starts.
+          # This recreates app/scheduler/nginx because the image string changed,
+          # which is what makes a deploy actually deploy.
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+          docker compose -f docker-compose.prod.yml ps
+
+          # Reclaim what this release replaced, but nothing from the last week,
+          # so a same-day rollback does not have to re-pull an image.
+          docker image prune -f --filter 'until=168h' >/dev/null
+
+          echo "Deployed ${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+          REMOTE

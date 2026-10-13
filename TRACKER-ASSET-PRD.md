@@ -5,7 +5,7 @@
 **Framework:** Laravel  
 **Database:** PostgreSQL  
 **Local development:** Docker Compose  
-**Production:** Docker Compose on Ubuntu VPS  
+**Production:** Docker Compose on the office Ubuntu server  
 **Authentication:** Microsoft Entra ID / Microsoft 365  
 **Primary users:** IT Support / IT Asset Administrator
 
@@ -194,7 +194,7 @@ Nginx may be included if useful.
 
 ## Production
 
-Ubuntu VPS:
+Office Ubuntu server:
 
 ```text
 Docker
@@ -205,7 +205,7 @@ PostgreSQL
 Redis
 ```
 
-Do not introduce Kubernetes for MVP.
+No Kubernetes anywhere in this project.
 
 ---
 
@@ -367,7 +367,7 @@ Tests
  ↓
 Docker image
  ↓
-VPS deployment
+Deploy to office server (SSH + docker compose)
 ```
 
 ---
@@ -1655,7 +1655,7 @@ build Docker image
  ↓
 push image
  ↓
-deploy VPS
+deploy to office server (SSH + docker compose)
  ↓
 docker compose up -d
 ```
@@ -1853,16 +1853,16 @@ Tracked here so the checklist above is not read as "everything in the PRD ships"
       reference format" — using the `packages: write` scope and the token every
       run already carries, so there is no repository secret to expire. Pull
       requests build without publishing. Ticks only when the first run on main
-      is green: the agent that wrote it had no docker and no access to this
-      private repository's Actions log, and an unobserved green is not
-      verification. The office cluster does not pull from GHCR — `deploy.sh`
-      still builds and pushes to the office registry itself, because GitHub
-      cannot reach `REDACTED_SERVER_IP:5000`.
-- [ ] VPS deploy, the second half of PRD §47 (`push image → deploy VPS → docker
-      compose up -d`), and §48's Compose production target. No VPS is
-      provisioned and there are no credentials to deploy with, so the arrow has
-      nowhere to land. Production in this repository is the office k3s cluster
-      through `./deploy.sh`; tracked here rather than retargeted in silence.
+      is green: an unobserved green is not verification.
+- [ ] Deploy to the office server, the second half of PRD §47 and §48's Compose
+      target. Implemented in `.github/workflows/deploy.yml`, split from CI on
+      purpose: it fires on `workflow_run` once `ci.yml` is green on main and
+      deploys the exact commit CI built — pulling that image from GHCR and
+      recreating the `docker-compose.prod.yml` stack over SSH. Needs the
+      repository secrets (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`) and a
+      filled-in `/opt/tracker-asset/.env` on the server. Ticks only after a real
+      deploy is watched end to end, for the same reason as the item above. No
+      Kubernetes anywhere in this path.
 
 ---
 

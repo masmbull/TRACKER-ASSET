@@ -41,7 +41,7 @@ $required = [
     'pdo_pgsql',
     'bcmath',
     // phpredis (PECL). The only Redis client in the image: config pins
-    // client => phpredis and composer carries no predis. The k8s manifests run
+    // client => phpredis and composer carries no predis. The deployed stack runs
     // sessions, cache and queue on Redis, so this missing is a production
     // failure, not a warning about an optional feature.
     'redis',

@@ -123,15 +123,15 @@ RUN docker-php-ext-install -j"$(nproc)" intl
 # phpredis, from PECL rather than the bundled set.
 #
 # config/database.php pins client => phpredis and composer carries no predis, so
-# this extension is the only Redis client the image can ever have. The k8s
-# manifests run SESSION_DRIVER, CACHE_STORE and QUEUE_CONNECTION all on Redis -
-# two replicas share nothing on disk, so sessions cannot be files - meaning
-# without it every request that touches a session dies with
+# this extension is the only Redis client the image can ever have. The deployed
+# stack runs SESSION_DRIVER, CACHE_STORE and QUEUE_CONNECTION all on Redis -
+# the web and scheduler containers share nothing on disk, so sessions cannot be
+# files - meaning without it every request that touches a session dies with
 # `Class "Redis" not found`. Nothing in this image's history caught it because
 # local development runs cache=file and queue=sync and never calls Redis at all;
 # it surfaced first as the health page's Queue row reporting a bare "Error" for a
 # queue that was fine, and would have surfaced next as a 500 on every login the
-# moment the office cluster came up.
+# moment production came up.
 #
 # `yes ''` answers every prompt pecl asks (igbinary, lzf, zstd, msgpack, lz4)
 # with the default "no". Left alone, pecl blocks on stdin waiting for an answer
@@ -214,8 +214,9 @@ RUN mkdir -p storage/logs storage/app/public storage/framework/cache/data storag
 # the image instead of repeating it on every request. The order is load-bearing.
 RUN composer dump-autoload --optimize --no-dev
 
-# Writable by the unprivileged user Kubernetes runs as. Baking the ownership in
-# matters because an emptyDir/PVC mounted over storage would otherwise hide it.
+# Writable by the unprivileged user the container runs as. Baking the ownership
+# in matters because a named volume mounted over storage would otherwise be
+# created root-owned and hide it.
 RUN chown -R www-data:www-data storage bootstrap/cache
 
 # Laravel writes compiled views and framework cache here. Without a separate
@@ -248,10 +249,10 @@ pm.max_requests = 500\n' \
 # Container start-up: migrations, seeding, then the real process.
 #
 # Copied from the source (which the build ignores nothing of here), made
-# executable, and set as ENTRYPOINT with php-fpm as the default CMD. The compose
-# stack sets RUN_MIGRATIONS=true so a fresh `docker compose up` seeds itself; the
-# Kubernetes manifests do not, so they keep migrating via their own Job and this
-# entrypoint just execs php-fpm. sed strips a possible CRLF: the file is written
+# executable, and set as ENTRYPOINT with php-fpm as the default CMD. The prod
+# compose file sets RUN_MIGRATIONS=true so a fresh `docker compose up` seeds
+# itself; a stack that wants to migrate by hand simply leaves it unset and this
+# entrypoint execs php-fpm. sed strips a possible CRLF: the file is written
 # on Windows and a shell script with \r in it dies on Linux with "not found".
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh

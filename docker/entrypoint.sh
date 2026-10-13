@@ -12,18 +12,17 @@
 # for, in the right order, every time the container starts - so the stack is
 # usable the moment it is up.
 #
-# It is opt-in through RUN_MIGRATIONS. Compose sets it; the Kubernetes manifests
-# do not, so they keep running migrations as a Job exactly as before and this
-# file changes nothing for a cluster. That default matters: the image's CMD is
-# php-fpm, and a cluster with several web replicas must not have every one of
-# them racing the same migration.
+# It is opt-in through RUN_MIGRATIONS. The prod compose file sets it; a stack
+# that migrates by hand leaves it unset and this file changes nothing. That
+# default matters: the image's CMD is php-fpm, and a stack with several web
+# replicas must not have every one of them racing the same migration.
 
 set -e
 
 cd /var/www/html
 
 # The image already creates these, but a volume mounted over storage/ would hide
-# them - the same class of failure the k8s seed-storage init container exists to
+# them - the same class of failure the storage volume seeding exists to
 # prevent. Idempotent and cheap, so it runs unconditionally.
 mkdir -p \
     storage/logs \

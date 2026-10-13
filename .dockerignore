@@ -4,7 +4,7 @@
 
 # Local environment. Copying a .env into the image bakes the developer's
 # APP_KEY and database password into a layer anyone with the image can read,
-# and it would then override whatever the cluster injects at runtime.
+# and it would then override whatever the deployment injects at runtime.
 .env
 .env.*
 !.env.example
@@ -14,14 +14,6 @@
 # image's platform and break composer install in confusing ways.
 vendor/
 node_modules/
-
-# Filled-in Kubernetes credentials. Same reason as .env above: the committed
-# template is harmless, but the copy somebody makes of it to enter a real
-# password must never reach an image layer.
-k8s/secrets.yaml
-
-# Deployment tooling output that is not application source.
-k8s/*-real.yaml
 
 # Local developer state that must never reach a deployed image.
 #
@@ -43,7 +35,7 @@ bootstrap/cache/*.php
 # Dockerfile, so whatever a developer has locally is stale by definition - and
 # public/hot, which `npm run dev` writes, would make Blade's @vite directive
 # point the deployed image at a vite dev server on localhost that does not exist
-# in the cluster. Neither file is committed, so neither belongs in a build
+# in the deployed stack. Neither file is committed, so neither belongs in a build
 # context. Excluding public/build is also what makes the assets stage the only
 # possible source of the assets that ship.
 public/build/

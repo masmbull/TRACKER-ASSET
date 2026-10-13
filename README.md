@@ -83,7 +83,7 @@ The browser-based successor to the legacy Windows `ITAuditMITO` desktop workflow
 | Users management (local, admin only) | ✅ Done |
 | Activity Log page (immutable trail, filter + pagination) | ✅ Done |
 | Microsoft Graph / SharePoint — profile sync done; file storage pending | 🟡 Partial |
-| CI/CD — GitHub Actions (PHPUnit + Pint); CD to VPS pending go-live | 🟡 Partial |
+| CI/CD — GitHub Actions (PHPUnit + Pint + GHCR image); auto-deploy to the office server over SSH | ✅ Done |
 
 ## 🤖 Windows Audit Agent
 
@@ -186,9 +186,10 @@ see [`docs/local-development.md`](docs/local-development.md).
 
 ## 🔄 CI / CD
 
-- [`ci.yml`](.github/workflows/ci.yml) — PHPUnit + Pint on every push / PR
+- [`ci.yml`](.github/workflows/ci.yml) — PHPUnit + Pint on every push / PR, then builds and pushes the image to GHCR
+- [`deploy.yml`](.github/workflows/deploy.yml) — fires when CI is green on `main`, pulls that commit's image onto the server and restarts the stack over SSH
+- [`docker-compose.prod.yml`](docker-compose.prod.yml) — the production stack (GHCR image, nginx, PostgreSQL, Redis, scheduler)
 - [`pint-fix.yml`](.github/workflows/pint-fix.yml) — automatic code-style fixes
-- CD to VPS — pending go-live 🟡
 
 ## 📂 Repository
 

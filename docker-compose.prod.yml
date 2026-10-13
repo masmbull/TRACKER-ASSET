@@ -1,0 +1,157 @@
+# Production stack for the office Ubuntu server.
+#
+# This is the file GitHub Actions deploys - see .github/workflows/deploy.yml.
+# It runs the image CI published to GHCR, tagged by commit, instead of building
+# from source: the server needs no clone and no source tree, only this file,
+# docker/nginx.conf and a filled-in .env beside them.
+#
+# Bring it up by hand with exactly what the workflow runs:
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml run --rm --no-deps assets
+#   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+#
+# The `assets` line is not optional and has to run before `up`: nginx is its own
+# image with no application source in it, so that one-shot service is what puts
+# the compiled CSS and JS where nginx can serve them. Run it on every release,
+# not just the first - Vite's hashed filenames change each build and a stale
+# copy is an unstyled site with no error in any log.
+#
+# Settings come from the .env file in this directory. It must define, at least:
+#
+#   APP_KEY            the output of `php artisan key:generate --show`
+#   APP_URL            https://tracker.growthuptogether.web.id
+#   ASSET_QR_BASE_URL  same as APP_URL, unless phones reach another address
+#   DB_DATABASE, DB_USERNAME, DB_PASSWORD
+#   MAIL_*             a real mailer, or nothing ever sends
+#
+# The image is private on GHCR; the deploy workflow logs the server in before it
+# pulls. A manual pull needs `docker login ghcr.io` first.
+name: tracker-asset
+
+services:
+  app:
+    image: ${IMAGE_REPOSITORY:-ghcr.io/masmbull/tracker-asset}:${IMAGE_TAG:-latest}
+    container_name: tracker-asset-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      # The entrypoint migrates and seeds on boot, both idempotent. This is also
+      # how a deploy applies migrations: the new app container runs them once as
+      # it starts, before php-fpm answers anything. Only this service sets it -
+      # the scheduler shares the image and would otherwise race the same
+      # migration on every restart.
+      - RUN_MIGRATIONS=true
+      - RUN_SEED=${RUN_SEED:-true}
+    volumes:
+      - storage:/var/www/html/storage
+    # No published port. This container speaks FastCGI on 9000, not HTTP;
+    # nginx is the thing that answers HTTP.
+    expose:
+      - "9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Not optional: without it agent:resolve-stale-commands never runs, so a
+  # command queued for a revoked or expired token stays pending forever, and
+  # audit:sweep never re-verifies the register. Separate from `app` because the
+  # image's CMD is php-fpm - overriding the app command would take the web
+  # server down with it.
+  scheduler:
+    image: ${IMAGE_REPOSITORY:-ghcr.io/masmbull/tracker-asset}:${IMAGE_TAG:-latest}
+    container_name: tracker-asset-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: php artisan schedule:work
+
+  # One-shot, run explicitly by the deploy workflow (see the header) rather than
+  # by `up -d`, so it re-copies on every release. Copies the compiled assets out
+  # of the application image into the volume nginx mounts read-only.
+  assets:
+    image: ${IMAGE_REPOSITORY:-ghcr.io/masmbull/tracker-asset}:${IMAGE_TAG:-latest}
+    working_dir: /var/www/html
+    command: >-
+      sh -c "rm -rf /app-public/* /app-public/.[!.]*;
+             cp -R /var/www/html/public/. /app-public/"
+    volumes:
+      - app_public:/app-public
+    restart: "no"
+
+  # The HTTP front end. Turns an HTTP request into a FastCGI request for `app`,
+  # and serves the compiled CSS/JS out of the assets volume.
+  nginx:
+    image: nginx:alpine
+    container_name: tracker-asset-nginx
+    restart: unless-stopped
+    ports:
+      # The only published port. Point Cloudflare - or whatever reverse proxy
+      # terminates TLS for tracker.growthuptogether.web.id - at this one. Set
+      # HTTP_PORT in .env if something else already owns 80.
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - app_public:/var/www/html/public:ro
+      # Read-only, so a direct hit on public/storage can be served if that
+      # symlink exists. Laravel's own downloads go through PHP routes and do
+      # not need it, so this is an optimisation rather than a requirement.
+      - storage:/var/www/html/storage:ro
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: tracker-asset-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_DATABASE:-tracker_asset}
+      - POSTGRES_USER=${DB_USERNAME:-tracker}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No published port: the database is reachable only on the compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-tracker} -d ${DB_DATABASE:-tracker_asset}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tracker-asset-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
+  # Uploads, generated PDFs and the agent binary. Read-write in `app`, read-only
+  # in nginx.
+  storage:
+  # Compiled front-end assets, repopulated from the image by the `assets`
+  # service on every deploy.
+  app_public:

@@ -64,7 +64,7 @@ Laravel Application
 ## Environment
 
 - **Local:** Docker Compose (Windows + Docker Desktop)
-- **Production:** Docker Compose on Ubuntu VPS behind Nginx/HTTPS
+- **Production:** Docker Compose on the office Ubuntu server behind Nginx/HTTPS
 
 ## Performance Targets
 

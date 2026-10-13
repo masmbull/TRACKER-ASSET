@@ -134,20 +134,20 @@ jobs:
       - name: Run Pint (dirty check)
         run: vendor/bin/pint --test
 
-  # PRD §47, the half that was missing: composer install -> tests -> build
-  # Docker image -> push image.
+  # PRD §47: composer install -> tests -> build Docker image -> push image.
   #
-  # It lives in this workflow instead of its own because the order is the point.
-  # A workflow can only `needs` jobs in the same run, so the chain in §47 is
-  # enforced by the file rather than by convention: a commit that fails either
-  # engine, or the style gate, never gets an image. An image nobody has tested
-  # should not exist under a tag someone can pull.
+  # It lives in this workflow instead of a deploy workflow because the order is
+  # the point. A workflow can only `needs` jobs in the same run, so the chain in
+  # §47 is enforced by the file rather than by convention: a commit that fails
+  # either engine, or the style gate, never gets an image. An image nobody has
+  # tested should not exist under a tag someone can pull.
   #
-  # The deploy arrow after this stops on purpose. The office deployment is
-  # ./deploy.sh - build, push to the office registry, apply to the k3s cluster -
-  # and PRD §52 keeps the VPS half of §47 open rather than quietly retargeting
-  # it. What this job publishes is the proof that this commit builds, addressed
-  # by the commit hash that makes it a known quantity.
+  # The deploy arrow after this lives in deploy.yml, on purpose. It fires on
+  # workflow_run once this workflow finishes successfully on main, so the
+  # separation is real: this file proves and publishes a commit, and that one
+  # only ever pulls the image this job just pushed - addressed by the same
+  # commit hash. What this job publishes is the proof that this commit builds,
+  # tagged by the commit that makes it a known quantity.
   image:
     runs-on: ubuntu-latest
     name: Docker image (GHCR)
@@ -198,8 +198,8 @@ jobs:
           # A Dockerfile that no longer builds is then caught before merge, and
           # no half-reviewed branch puts a tag on the registry.
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          # The commit hash is the real tag, for the same reason deploy.sh tags
-          # by commit: it changes exactly when the code does, which is what makes
+          # The commit hash is the real tag, for the same reason deploy.yml
+          # deploys by commit: it changes exactly when the code does, which is what makes
           # "which build is running?" answerable. `latest` rides along for a
           # human reading the package page; nothing should deploy it.
           tags: |

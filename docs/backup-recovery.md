@@ -5,9 +5,9 @@
 | Item | Where | Priority |
 |---|---|---|
 | PostgreSQL database | Docker volume `pgdata` | Critical (the single source of truth) |
-| Uploaded files | `storage/app/attachments` | High |
-| Generated documents | `storage/app/documents` | High |
-| Imported staging files | `storage/app/imports` | Low (safe to drop) |
+| Uploaded files | `storage` volume (`app/attachments`) | High |
+| Generated documents | `storage` volume (`app/documents`) | High |
+| Imported staging files | `storage` volume (`app/imports`) | Low (safe to drop) |
 | `.env` | host / secrets manager | Critical (contains app key + DB credentials) |
 
 ## Backup Procedures
@@ -15,20 +15,26 @@
 ### PostgreSQL (daily)
 
 ```bash
-# Inside the container
-docker compose exec -T postgres pg_dump -U tracker tracker_asset | gzip > backup_$(date +%F).sql.gz
+# On the server, from /opt/tracker-asset
+docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U tracker tracker_asset | gzip > backup_$(date +%F).sql.gz
 ```
 
-Schedule via cron on the VPS (e.g. 01:00 daily), keep **30 days** retention:
+Schedule via cron on the server (e.g. 01:00 daily), keep **30 days** retention:
 
 ```bash
-0 1 * * * cd /opt/tracker-asset && docker compose exec -T postgres pg_dump -U tracker tracker_asset | gzip > /backups/db/backup_$(date +\%F).sql.gz && find /backups/db -name '*.sql.gz' -mtime +30 -delete
+0 1 * * * cd /opt/tracker-asset && docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U tracker tracker_asset | gzip > /backups/db/backup_$(date +\%F).sql.gz && find /backups/db -name '*.sql.gz' -mtime +30 -delete
 ```
 
 ### Uploaded files & documents (daily)
 
+The uploads live in the `storage` volume, not on the host, so they are read out
+through a throwaway container that mounts both the volume and the backup target:
+
 ```bash
-tar -czf /backups/files/storage_$(date +%F).tar.gz storage/app/attachments storage/app/documents
+docker run --rm \
+  -v tracker-asset_storage:/storage \
+  -v /backups/files:/backup \
+  alpine tar -czf "/backup/storage_$(date +%F).tar.gz" -C /storage app/attachments app/documents
 ```
 
 ### Off-site copy
@@ -40,18 +46,21 @@ Copy `/backups` to object storage (S3 / Backblaze / SharePoint) with versioning 
 ### Full database restore
 
 ```bash
-gunzip -c backup_2026-09-22.sql.gz | docker compose exec -T postgres psql -U tracker tracker_asset
+gunzip -c backup_2026-09-22.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U tracker tracker_asset
 ```
 
 ### Files restore
 
 ```bash
-tar -xzf /backups/files/storage_2026-09-22.tar.gz -C /opt/tracker-asset
+docker run --rm \
+  -v tracker-asset_storage:/storage \
+  -v /backups/files:/backup \
+  alpine tar -xzf /backup/storage_2026-09-22.tar.gz -C /storage
 ```
 
 ### Post-restore checklist
 
-1. `docker compose exec app php artisan migrate --force` (apply any pending migrations)
+1. `docker compose -f docker-compose.prod.yml exec app php artisan migrate --force` (apply any pending migrations)
 2. Verify login works (local admin account)
 3. Spot-check: asset count, one asset detail, one generated FAT document opens
 4. Verify `storage/app/documents` PDFs open from the preview page
