@@ -1,48 +1,53 @@
 using System;
-using System.IO;
-using System.Runtime.InteropServices;
+using System.Linq;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Windows;
-using System.Windows.Interop;
 
 namespace TrackerAgent;
 
 public partial class StatusWindow : Window
 {
-    public StatusWindow(string version, string serverUrl, string deviceId, string installedAt)
+    public StatusWindow(string serverUrl, string installedAt)
     {
         InitializeComponent();
 
-        VersionText.Text = $"v{version}";
         ServerText.Text = serverUrl;
-        
-        // Show first 8 chars + ellipsis for device ID
-        var shortId = deviceId.Length >= 8
-            ? deviceId[..8] + "…"
-            : deviceId;
-        DeviceIdText.Text = shortId;
 
-        // Parse installed date
         if (DateTime.TryParse(installedAt, out var installed))
         {
             InstalledText.Text = installed.ToString("yyyy-MM-dd HH:mm");
         }
 
-        // Show install path
-        var installDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TRACKER");
-        PathText.Text = installDir;
+        UserText.Text = Environment.UserName;
+        DeviceText.Text = Environment.MachineName;
+        IpText.Text = LocalIpAddress();
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
-    protected override void OnSourceInitialized(EventArgs e)
+    /// <summary>
+    /// The machine's own IPv4 address: the first up, non-loopback address on an
+    /// interface that is actually connected. Read here rather than from the
+    /// server so the window still shows something useful before the first
+    /// heartbeat has been reported.
+    /// </summary>
+    private static string LocalIpAddress()
     {
-        base.OnSourceInitialized(e);
-        var hwnd  = new WindowInteropHelper(this).Handle;
-        var value = 1; // DWMWA_USE_IMMERSIVE_DARK_MODE
-        DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
+        try
+        {
+            var address = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.OperationalStatus == OperationalStatus.Up
+                    && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(nic => nic.GetIPProperties().UnicastAddresses)
+                .Select(ua => ua.Address)
+                .FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+
+            return address?.ToString() ?? "—";
+        }
+        catch
+        {
+            return "—";
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

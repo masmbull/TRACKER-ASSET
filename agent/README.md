@@ -141,8 +141,9 @@ token to type and the only UI while it works is an animated progress bar.
 4. Shows "Installation complete" and closes itself. If no server answers, a single
    **Retry** button is offered.
 
-Once configured, later launches go straight to the tray icon (Scan Now / Check for
-Updates / Exit).
+Once configured, later launches go straight to the tray icon (Status / Scan Now /
+Check for Updates). There is no Exit item: the agent is meant to stay resident, and
+it is removed only through the uninstall command on the fleet page.
 
 ## Zero-Config Download (config trailer)
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
+use App\Models\AgentCommand;
 use App\Models\AgentTelemetry;
 use App\Models\Asset;
 use App\Models\AssetAudit;
@@ -11,6 +12,7 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\ScriptPayload;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -231,6 +233,68 @@ class LiveFleetTest extends TestCase
         ]);
     }
 
+    /**
+     * The form sends only a body now: the type, the file name and the SHA-256
+     * are derived server-side, so a pasted script cannot disagree with a
+     * hand-picked type or carry a wrong hand-typed hash.
+     */
+    public function test_script_type_and_hash_are_derived_from_the_body(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $body = 'Write-Host "deploy"; Get-Service spooler';
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => $body,
+        ])->assertRedirect();
+
+        $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
+
+        $this->assertSame('powershell', $command->payload['script_type']);
+        $this->assertSame('tracker-script.ps1', $command->payload['script_name']);
+        $this->assertSame(hash('sha256', $body), $command->payload['sha256']);
+    }
+
+    /**
+     * The extension must match the type the agent will actually execute, or the
+     * agent doubles it up ("tracker-script.bat.ps1") for an aliased type.
+     */
+    public function test_default_name_matches_the_executed_type(): void
+    {
+        $this->assertSame('tracker-script.ps1', ScriptPayload::defaultName('ps1'));
+        $this->assertSame('tracker-script.ps1', ScriptPayload::defaultName('powershell'));
+        $this->assertSame('tracker-script.bat', ScriptPayload::defaultName('bat'));
+        $this->assertSame('tracker-script.exe', ScriptPayload::defaultName('exe'));
+    }
+
+    public function test_cmd_body_is_detected_as_batch(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => "@echo off\r\nif exist C:\\Temp goto clean\r\n%~dp0run.bat",
+        ])->assertRedirect();
+
+        $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
+
+        $this->assertSame('cmd', $command->payload['script_type']);
+        $this->assertSame('tracker-script.bat', $command->payload['script_name']);
+    }
+
+    public function test_binary_body_is_rejected(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => "MZ\x00\x90\x00\x03\x00\x00\x00",
+        ])->assertSessionHasErrors('script_body');
+
+        $this->assertDatabaseCount('agent_commands', 0);
+    }
+
     public function test_internal_script_api_can_enqueue_a_targeted_command(): void
     {
         config()->set('services.internal.script_token', 'internal-script-secret');
@@ -262,6 +326,56 @@ class LiveFleetTest extends TestCase
             'agent_token_id' => $this->agentToken->id,
             'status' => 'pending',
         ]);
+    }
+
+    /**
+     * A caller that still posts a hand-typed hash or type must be verified
+     * against the body, not trusted: honouring them let the API skip the binary
+     * rejection and hand the agent a hash that did not describe the script.
+     */
+    public function test_internal_script_api_rejects_a_sha256_that_does_not_match_the_body(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => 'Write-Host "hello"',
+                'sha256' => str_repeat('0', 64),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('sha256');
+
+        $this->assertDatabaseCount('agent_commands', 0);
+    }
+
+    public function test_internal_script_api_rejects_a_type_that_disagrees_with_the_body(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => '@echo off'."\r\n".'pause',
+                'script_type' => 'powershell',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('script_type');
+    }
+
+    public function test_internal_script_api_accepts_a_matching_type_alias(): void
+    {
+        config()->set('services.internal.script_token', 'internal-script-secret');
+
+        $this->withHeader('Authorization', 'Bearer internal-script-secret')
+            ->postJson('/api/internal/agent/commands/script', [
+                'target' => 'all',
+                'script_body' => 'Write-Host "hello"',
+                'script_type' => 'ps1',
+            ])
+            ->assertStatus(202);
+
+        $this->assertDatabaseHas('agent_commands', ['command' => 'script', 'status' => 'pending']);
     }
 
     public function test_admin_can_queue_script_push_to_multiple_specific_devices(): void

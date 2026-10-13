@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tracker-asset-v2';
+const CACHE_NAME = 'tracker-asset-v4';
 const APP_SHELL = [
     '/',
     '/login',
@@ -33,6 +33,18 @@ self.addEventListener('fetch', (event) => {
 
     const requestUrl = new URL(event.request.url);
     if (requestUrl.origin !== self.location.origin) {
+        return;
+    }
+
+    if (event.request.mode === 'navigate') {
+        // Network-first, and never cached. Authenticated pages share a cache key
+        // by URL only, so storing them here would replay one user's fleet page or
+        // access-control screen to the next session on a shared machine. Only the
+        // offline fallback is cached; every real page comes from the network.
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match('/offline.html'))
+        );
+
         return;
     }
 

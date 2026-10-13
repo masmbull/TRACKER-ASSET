@@ -8,6 +8,7 @@ use App\Models\AgentFingerprint;
 use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
+use App\Services\ScriptPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -697,7 +698,7 @@ class AgentFleetController extends Controller
             ->limit(50)
             ->get();
 
-        $tokens = AgentApiToken::orderBy('name')->get();
+        $tokens = AgentApiToken::with('telemetry')->orderBy('name')->get();
 
         return view('agent.commands', compact('commands', 'tokens'));
     }
@@ -711,13 +712,10 @@ class AgentFleetController extends Controller
             'agent_token_id' => ['nullable', 'required_if:target,device', 'exists:agent_api_tokens,id'],
             'agent_token_ids' => ['nullable', 'required_if:target,devices', 'array'],
             'agent_token_ids.*' => ['integer', 'exists:agent_api_tokens,id'],
-            'script_name' => ['required', 'string', 'max:255'],
-            'script_type' => ['required', 'in:powershell,cmd,batch,ps1,bat,exe'],
             'script_body' => ['required', 'string'],
             'working_directory' => ['nullable', 'string', 'max:255'],
             'run_as' => ['nullable', 'in:current-user,admin,system'],
             'timeout_seconds' => ['nullable', 'integer', 'min:10', 'max:3600'],
-            'sha256' => ['nullable', 'string', 'max:128'],
             'trigger' => ['nullable', 'in:once,reboot'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -729,14 +727,22 @@ class AgentFleetController extends Controller
             default => [null],
         };
 
+        // The type and the integrity hash are derived from the script itself
+        // rather than asked of the operator: a hand-picked type next to a pasted
+        // body is a second source of truth that can disagree with the first, and
+        // a hand-typed SHA-256 is worse than useless because it is usually
+        // wrong. The body is the single input; everything else follows from it.
+        $scriptType = ScriptPayload::detectType($validated['script_body']);
+        $scriptName = ScriptPayload::defaultName($scriptType);
+
         $payload = [
-            'script_name' => $validated['script_name'],
-            'script_type' => $validated['script_type'],
+            'script_name' => $scriptName,
+            'script_type' => $scriptType,
             'script_body' => $validated['script_body'],
             'working_directory' => $validated['working_directory'] ?? null,
             'run_as' => $validated['run_as'] ?? 'current-user',
             'timeout_seconds' => $validated['timeout_seconds'] ?? 300,
-            'sha256' => $validated['sha256'] ?? null,
+            'sha256' => ScriptPayload::hash($validated['script_body']),
             'trigger' => $validated['trigger'] ?? 'once',
             'notes' => $validated['notes'] ?? null,
             'created_by' => $request->user()?->name ?? 'system',

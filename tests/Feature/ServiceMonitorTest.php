@@ -231,6 +231,32 @@ class ServiceMonitorTest extends TestCase
     }
 
     /**
+     * A name that does not resolve is not a mail server that is down.
+     *
+     * `mailpit` is the host shipped in .env.example, and it resolves only inside
+     * docker compose - so on a developer machine this probe reported the mail
+     * row as "not accepting connections", which reads as "start your mail
+     * server" for the one case where starting it changes nothing. The two faults
+     * have different fixes, so the row has to say which one it found.
+     */
+    public function test_a_mail_host_that_does_not_resolve_says_so(): void
+    {
+        config([
+            'mail.default' => 'smtp',
+            'mail.mailers.smtp.host' => 'no-such-mail-host.invalid',
+            'mail.mailers.smtp.port' => 1025,
+        ]);
+
+        $report = app(ServiceHealthChecker::class)->check();
+        $mail = collect($report['services'])->firstWhere('name', 'Mail');
+
+        $this->assertSame('down', $mail['status']);
+        $this->assertStringContainsString('does not resolve', $mail['detail']);
+        $this->assertStringContainsString('no-such-mail-host.invalid', $mail['detail']);
+        $this->assertStringNotContainsString('not accepting connections', $mail['detail']);
+    }
+
+    /**
      * The database probe used to hardcode `select version()`, which is MySQL
      * syntax and throws on SQLite - reporting a healthy database as down. The
      * suite runs entirely on SQLite, so this is the regression that matters.

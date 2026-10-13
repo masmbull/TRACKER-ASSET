@@ -120,19 +120,19 @@
 
         <aside
             :class="[
-                'sidebar z-[9999] flex h-screen w-[280px] max-w-[85vw] flex-col overflow-y-auto border-r border-gray-200 bg-white px-5 fixed top-0 left-0 transition-transform duration-200 ease-out xl:static xl:w-auto xl:max-w-none dark:border-gray-800 dark:bg-black',
+                'sidebar z-[9999] flex h-screen max-w-[85vw] flex-col overflow-y-auto border-r border-gray-200 bg-white px-5 fixed top-0 left-0 transition-all duration-200 ease-out xl:static dark:border-gray-800 dark:bg-black',
                 window.innerWidth >= 1280
-                    ? (sidebarExpanded ? 'translate-x-0' : '-translate-x-full')
+                    ? 'translate-x-0'
                     : (sidebarToggle ? 'translate-x-0' : '-translate-x-full')
             ]"
             x-cloak
             @click.outside="if(window.innerWidth < 1280) sidebarToggle = false"
-            :data-collapsed="window.innerWidth >= 1280 ? !sidebarExpanded : true"
+            :data-collapsed="window.innerWidth >= 1280 ? !sidebarExpanded : false"
         >
             <!-- Sidebar Header -->
             <div class="sidebar-header flex items-center justify-between gap-2 pt-8 pb-7">
                 <a href="/" class="flex items-center justify-center gap-2 overflow-hidden">
-                    <span class="logo" x-show="true">
+                    <span class="logo" x-show="window.innerWidth < 1280 || sidebarExpanded">
                         <div class="flex items-center gap-2">
                             <img src="{{ asset('images/mito-icon.png') }}" alt="MITO Electronic" width="32" height="32" class="w-8 h-8 rounded-lg flex-shrink-0">
                             <span class="brand-text text-lg font-bold text-gray-800 dark:text-white whitespace-nowrap">TRACKER-ASSET</span>
