@@ -8,8 +8,14 @@ services:
     working_dir: /var/www/html
     volumes:
       - .:/var/www/html
+    # nginx (below) is what actually serves HTTP: it maps 80:80 and proxies to
+    # this container's php-fpm on 9000. 8000 is published only so the documented
+    # `docker compose exec app php artisan serve --host 0.0.0.0 --port 8000` has
+    # a port to answer on - php-fpm itself does not listen there.
     ports:
       - "8000:8000"
+    expose:
+      - "9000"
     depends_on:
       - postgres
       - redis
@@ -23,6 +29,11 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # The entrypoint waits for postgres, migrates, and seeds (idempotent), so
+      # a fresh `docker compose up -d --build` comes up with the admin account
+      # already present instead of an empty database nobody can log into.
+      - RUN_MIGRATIONS=true
+      - RUN_SEED=true
 
   # Scheduler. Not optional: without it agent:resolve-stale-commands (every 5
   # min) and audit:sweep (weekly) never run, so a command queued for a revoked

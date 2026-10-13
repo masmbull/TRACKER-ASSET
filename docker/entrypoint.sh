@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# Container start-up for the Docker Compose stack.
+#
+# The compose file brings up php-fpm behind nginx, but nothing in it ever runs
+# the migrations or the seeders: a fresh `docker compose up -d --build` left an
+# empty database with no users, so every login failed with "credentials do not
+# match" and nothing said why. The README tells an operator to run migrate and
+# db:seed by hand afterwards, and that step is what gets missed.
+#
+# This script closes that gap. It runs the same two commands the README asks
+# for, in the right order, every time the container starts - so the stack is
+# usable the moment it is up.
+#
+# It is opt-in through RUN_MIGRATIONS. Compose sets it; the Kubernetes manifests
+# do not, so they keep running migrations as a Job exactly as before and this
+# file changes nothing for a cluster. That default matters: the image's CMD is
+# php-fpm, and a cluster with several web replicas must not have every one of
+# them racing the same migration.
+
+set -e
+
+cd /var/www/html
+
+# The image already creates these, but a volume mounted over storage/ would hide
+# them - the same class of failure the k8s seed-storage init container exists to
+# prevent. Idempotent and cheap, so it runs unconditionally.
+mkdir -p \
+    storage/logs \
+    storage/app/public \
+    storage/app/agent \
+    storage/framework/cache/data \
+    storage/framework/sessions \
+    storage/framework/views \
+    bootstrap/cache
+
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+    # Wait for the database rather than dying on the first refused connection.
+    # Compose starts app and postgres together, and postgres is routinely not
+    # accepting connections yet for the first few seconds.
+    attempt=1
+    max_attempts="${DB_WAIT_ATTEMPTS:-30}"
+
+    until php artisan migrate --force; do
+        if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "[entrypoint] database did not accept migrations after ${max_attempts} attempts - giving up" >&2
+            exit 1
+        fi
+
+        echo "[entrypoint] database not ready (attempt ${attempt}/${max_attempts}); retrying in ${DB_WAIT_SECONDS:-2}s" >&2
+        attempt=$((attempt + 1))
+        sleep "${DB_WAIT_SECONDS:-2}"
+    done
+
+    echo "[entrypoint] migrations applied"
+
+    # Seeding is what actually makes a login possible: it is the only thing that
+    # creates the admin account. Every seeder uses firstOrCreate/updateOrCreate,
+    # so running it on every boot is safe and never duplicates rows.
+    #
+    # A failure here is reported but not fatal - a demo-data seeder that chokes
+    # on a missing spreadsheet must not stop the web server from coming up.
+    if [ "${RUN_SEED:-true}" = "true" ]; then
+        if php artisan db:seed --force; then
+            echo "[entrypoint] database seeded"
+        else
+            echo "[entrypoint] seeding failed; continuing - the app is up but may have no users" >&2
+        fi
+    fi
+fi
+
+# Hand off to the real process. `exec` so php-fpm (or `php artisan schedule:work`
+# for the scheduler service) becomes PID 1 and receives signals directly.
+exec "$@"
