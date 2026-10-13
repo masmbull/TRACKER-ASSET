@@ -22,9 +22,15 @@
                 } else {
                     document.documentElement.classList.remove('dark');
                 }
+                // Splash shows once per session: skip it before first paint
+                // when already seen, so repeat visits stay instant.
+                if (sessionStorage.getItem('mito-splash-seen') === '1') {
+                    document.documentElement.classList.add('mito-splash-seen');
+                }
             } catch (e) {}
         })();
     </script>
+    <style>.mito-splash-seen #mito-splash{display:none!important}</style>
 </head>
 <body
     x-data="{
@@ -45,8 +51,17 @@
     :class="{'bg-gray-900': darkMode}"
     class="font-outfit bg-gray-50"
 >
-    <!-- Slim top progress bar: the only loading indicator. Shown during
-         navigations, async posts and soft polls (see app.js). -->
+    <!-- Session splash: MITO brand loader, once per browser session.
+         Faded out by app.js shortly after first paint (see markSplashSeen). -->
+    <div id="mito-splash" class="fixed inset-0 z-[1000000] flex items-center justify-center bg-white dark:bg-black" aria-hidden="true">
+        <div class="animate-scale-in flex flex-col items-center gap-4">
+            <x-mito-loader size="xl" />
+            <p class="text-theme-sm font-semibold tracking-widest text-gray-400 uppercase dark:text-gray-500">Tracker-Asset</p>
+        </div>
+    </div>
+
+    <!-- Slim top progress bar: shown during navigations, async posts and
+         soft polls (see app.js). -->
     <div id="top-progress" aria-hidden="true"></div>
 
     <!-- Toast stack: non-blocking notices, filled by app.js. -->
@@ -391,7 +406,9 @@
     <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-sm" role="presentation" aria-live="polite">
         <section class="animate-scale-in w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
             <div class="flex items-start gap-4">
-                <div id="ajax-action-spinner" class="mt-0.5 h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" aria-hidden="true"></div>
+                <div id="ajax-action-spinner" class="mt-0.5 shrink-0" aria-hidden="true">
+                    <x-mito-loader size="md" />
+                </div>
                 <div class="min-w-0 flex-1">
                     <h2 id="ajax-action-title" class="text-lg font-semibold text-gray-900 dark:text-white">Working</h2>
                     <p id="ajax-action-message" class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">Please wait.</p>

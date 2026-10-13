@@ -1004,6 +1004,11 @@
     transition: opacity 0.2s ease, transform 0.2s ease;
   }
 
+  /* MITO logo loader: brand mark with a sweeping ring. */
+  .mito-loader-ring {
+    animation: spin 0.9s linear infinite;
+  }
+
   /* Button busy state: spinner slot shown by app.js. */
   .btn-spinner {
     width: 1rem;
@@ -1021,6 +1026,7 @@
     .animate-slide-in-right,
     .skeleton,
     .pulse-dot,
+    .mito-loader-ring,
     #top-progress::after {
       animation: none;
     }

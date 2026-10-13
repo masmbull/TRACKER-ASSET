@@ -15,12 +15,22 @@
                 } else {
                     document.documentElement.classList.remove('dark');
                 }
+                if (sessionStorage.getItem('mito-splash-seen') === '1') {
+                    document.documentElement.classList.add('mito-splash-seen');
+                }
             } catch (e) {}
         })();
     </script>
+    <style>.mito-splash-seen #mito-splash{display:none!important}</style>
 </head>
 <body class="h-full bg-gray-50 font-outfit">
     <div id="top-progress" aria-hidden="true"></div>
+    <div id="mito-splash" class="fixed inset-0 z-[1000000] flex items-center justify-center bg-white dark:bg-black" aria-hidden="true">
+        <div class="animate-scale-in flex flex-col items-center gap-4">
+            <x-mito-loader size="xl" />
+            <p class="text-theme-sm font-semibold tracking-widest text-gray-400 uppercase">Tracker-Asset</p>
+        </div>
+    </div>
     <div class="flex min-h-full items-center justify-center p-4">
 
         <div class="animate-fade-up relative w-full max-w-md">

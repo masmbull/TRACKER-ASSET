@@ -70,6 +70,34 @@ export const markIdle = () => {
     }
 };
 
+// --- Session splash -----------------------------------------------------------
+// Branded MITO loader, shown once per browser session on first paint and
+// skipped synchronously in <head> on repeat visits. Fades fast: one short
+// brand beat, then out of the way.
+document.addEventListener('DOMContentLoaded', () => {
+    const splash = document.getElementById('mito-splash');
+    if (!splash) {
+        return;
+    }
+    if (document.documentElement.classList.contains('mito-splash-seen')) {
+        splash.remove();
+        return;
+    }
+    window.setTimeout(() => {
+        if (!splash.isConnected) {
+            return;
+        }
+        splash.style.transition = 'opacity 0.25s ease';
+        splash.style.opacity = '0';
+        window.setTimeout(() => splash.remove(), 260);
+        try {
+            sessionStorage.setItem('mito-splash-seen', '1');
+        } catch {
+            // Private mode: splash simply shows again next visit.
+        }
+    }, 550);
+});
+
 // --- Toasts -----------------------------------------------------------------
 // Non-blocking notices. Success toasts dismiss themselves; error toasts stay
 // until dismissed so the message is still there when the user looks back.
