@@ -349,8 +349,8 @@
         @endphp
         {{-- 5xl on desktop: three balanced columns of readings. On smaller
              screens the columns collapse to two, then one. --}}
-        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="5xl">
-            <div class="max-h-[70vh] overflow-y-auto pr-1">
+        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="full">
+            <div class="pr-1">
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                     @if($t?->asset)
                         <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">

@@ -85,7 +85,26 @@
                 @can('manageAttachments', $asset)
                     <x-button variant="secondary" size="sm" :href="route('ike-bast.inspection.create', $asset)">IKE_BAST Inspection</x-button>
                 @endcan
-                <x-button variant="secondary" size="sm" :href="route('assets.qr', $asset)">QR Code</x-button>
+                @can('update', $asset)
+                    @if($asset->hasQr())
+                        <a href="{{ route('assets.public.pdf', $asset->qr_token) }}" class="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">
+                            Download QR PDF
+                        </a>
+                        <a href="{{ route('assets.qr', $asset) }}" class="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">
+                            Download QR
+                        </a>
+                        <form method="POST" action="{{ route('assets.qr.generate', $asset) }}" onsubmit="return confirm('Re-create the QR for {{ $asset->asset_id }}? Any label already printed for it will stop working.');">
+                            @csrf
+                            <input type="hidden" name="regenerate" value="1">
+                            <x-button type="submit" variant="secondary" size="sm">Re-create QR</x-button>
+                        </form>
+                    @else
+                        <form method="POST" action="{{ route('assets.qr.generate', $asset) }}">
+                            @csrf
+                            <x-button type="submit" variant="secondary" size="sm">Buat QR untuk asset ini</x-button>
+                        </form>
+                    @endif
+                @endcan
                 @can('audit', $asset)
                     <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'scan-again-modal')">Scan Again</x-button>
                 @endcan

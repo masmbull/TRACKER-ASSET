@@ -41,6 +41,14 @@ Route::get('/agent/{token}/download', [AgentTokenController::class, 'download'])
 Route::get('/agent/releases/{release}/download', [AgentReleaseController::class, 'download'])
     ->name('agent.releases.download');
 
+// The page an asset QR opens when scanned (PRD §41). Outside auth on purpose:
+// the code is stuck on a machine and is scanned by whoever is holding it - an
+// auditor, a new hire, a courier - who has no account on this system. The
+// unguessable token, not the numeric id, is what keeps it from being a public
+// index of the register.
+Route::get('/a/{token}', [QrController::class, 'publicAsset'])->name('assets.public');
+Route::get('/a/{token}/pdf', [QrController::class, 'publicPdf'])->name('assets.public.pdf');
+
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -72,6 +80,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/assets/qr/custom', [QrController::class, 'custom'])->name('assets.qr.custom');
     Route::get('/assets/qr/history/{customQrHistory}/download', [QrController::class, 'downloadHistory'])->name('assets.qr.history.download');
     Route::get('/assets/{asset}/qr', [QrController::class, 'show'])->name('assets.qr');
+    // Issue or rotate the public scan target behind a label. POST-only: it
+    // writes a token, and a GET that mints one would fire on a prefetch or a
+    // crawler and silently rotate the code out from under a printed sticker.
+    Route::post('/assets/{asset}/qr/generate', [QrController::class, 'generate'])->name('assets.qr.generate');
 
     Route::resource('assets', AssetController::class);
 

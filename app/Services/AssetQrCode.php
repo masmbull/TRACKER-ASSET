@@ -47,12 +47,22 @@ class AssetQrCode
     /**
      * The address a scan should open.
      *
+     * Prefers the asset's public token URL: the label exists to be scanned by
+     * whoever is holding the machine, and /assets/{id} is behind the login - a
+     * scan landed on a sign-in page for everyone without an account. When the
+     * asset has no token yet, it falls back to the authenticated detail URL so a
+     * label is never blank.
+     *
      * Built from the configured base rather than the current request, so a label
      * generated on a development machine does not encode "localhost" and become
      * dead to the phone that scans it.
      */
     public function targetUrl(Asset $asset): string
     {
+        if ($public = $asset->qrPublicUrl()) {
+            return $public;
+        }
+
         return rtrim((string) ($this->config['base_url'] ?? ''), '/').'/assets/'.$asset->id;
     }
 

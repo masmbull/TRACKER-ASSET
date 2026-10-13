@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\CustomQrHistory;
 use App\Models\Location;
 use App\Services\AssetQrCode;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -70,6 +71,66 @@ class QrController extends Controller
             'Content-Disposition' => 'attachment; filename="mito-custom-qr-'.$customQrHistory->id.'.svg"',
             'Cache-Control' => 'private, no-store',
         ]);
+    }
+
+    /**
+     * Issue (or rotate) the scan target for one asset, then show its label.
+     *
+     * "Create QR" and "Re-create QR" are the same action with one difference:
+     * whether an existing token is allowed to survive. Creating when one already
+     * exists is a no-op that shows the existing label, so a double-click does not
+     * silently invalidate a sticker someone already printed; re-creating mints a
+     * new token on purpose.
+     */
+    public function generate(Request $request, Asset $asset)
+    {
+        $this->authorize('update', $asset);
+
+        if (! $asset->hasQr() || $request->boolean('regenerate')) {
+            $asset->mintQrToken();
+        }
+
+        return redirect()
+            ->route('assets.show', ['asset' => $asset, 'tab' => 'documents'])
+            ->with('success', $request->boolean('regenerate')
+                ? "QR for {$asset->asset_id} re-created. Previously printed labels no longer work."
+                : "QR for {$asset->asset_id} created.");
+    }
+
+    /**
+     * The public page a scan opens: a read-only asset document, no login (PRD §41).
+     *
+     * Resolved by the unguessable qr_token, never the numeric id, so scanning one
+     * label cannot be turned into browsing the whole register. Deliberately a
+     * document, not the app: the person scanning is standing at the machine with a
+     * phone, and what they need is what this asset is and who it belongs to - not
+     * a sidebar and an edit button.
+     */
+    public function publicAsset(string $token)
+    {
+        $asset = Asset::with(['company', 'category', 'status', 'location', 'currentUser', 'adminItPic'])
+            ->where('qr_token', $token)
+            ->firstOrFail();
+
+        return view('assets.public', [
+            'asset' => $asset,
+            'issuedAt' => $asset->qr_generated_at,
+        ]);
+    }
+
+    /** The same public document as a downloadable PDF. */
+    public function publicPdf(string $token): Response
+    {
+        $asset = Asset::with(['company', 'category', 'status', 'location', 'currentUser', 'adminItPic'])
+            ->where('qr_token', $token)
+            ->firstOrFail();
+
+        $pdf = Pdf::loadView('assets.public-pdf', [
+            'asset' => $asset,
+            'issuedAt' => $asset->qr_generated_at,
+        ])->setPaper('a4');
+
+        return $pdf->download('asset-'.($asset->asset_id ?: $asset->id).'.pdf');
     }
 
     /**

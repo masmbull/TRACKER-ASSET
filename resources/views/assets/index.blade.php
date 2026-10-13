@@ -79,7 +79,7 @@
 
 @if($assets->count() > 0)
     <x-card>
-        <x-table :headers="['Asset ID', 'Category', 'Brand/Model', 'Serial', 'Hostname', 'Location', 'User', 'Status', 'Actions']">
+        <x-table :headers="['Asset ID', 'Category', 'Brand/Model', 'Serial', 'Hostname', 'Location', 'User', 'Status', 'QR', 'Actions']">
             @foreach($assets as $asset)
                 <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                     <td class="py-3 px-4"><a href="{{ route('assets.show', $asset) }}" class="text-theme-sm font-semibold text-brand-500 hover:text-brand-600">{{ $asset->asset_id }}</a></td>
@@ -94,6 +94,28 @@
                             $badgeMap = ['Active' => 'success', 'Available' => 'brand', 'Assigned' => 'warning', 'Repair' => 'orange', 'Retired' => 'gray', 'Disposed' => 'error'];
                         @endphp
                         <x-badge :variant="$badgeMap[$asset->status?->name] ?? 'gray'">{{ $asset->status?->name }}</x-badge>
+                    </td>
+                    <td class="py-3 px-4">
+                        @can('update', $asset)
+                            @if($asset->hasQr())
+                                <div class="flex items-center gap-2 whitespace-nowrap">
+                                    <a href="{{ route('assets.public.pdf', $asset->qr_token) }}" class="text-theme-xs font-medium text-brand-500 hover:text-brand-600" title="Download the asset document PDF this QR opens">PDF</a>
+                                    <a href="{{ route('assets.qr', $asset) }}" class="text-theme-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400" title="Download the QR image">QR</a>
+                                    <form method="POST" action="{{ route('assets.qr.generate', $asset) }}" onsubmit="return confirm('Re-create the QR for {{ $asset->asset_id }}? Any label already printed for it will stop working.');">
+                                        @csrf
+                                        <input type="hidden" name="regenerate" value="1">
+                                        <button type="submit" class="text-theme-xs font-medium text-warning-600 hover:text-warning-700" title="Mint a new token; old labels stop working">Re-create</button>
+                                    </form>
+                                </div>
+                            @else
+                                <form method="POST" action="{{ route('assets.qr.generate', $asset) }}">
+                                    @csrf
+                                    <button type="submit" class="text-theme-xs font-medium text-brand-500 hover:text-brand-600">+ Create QR</button>
+                                </form>
+                            @endif
+                        @else
+                            <span class="text-theme-xs text-gray-300">—</span>
+                        @endcan
                     </td>
                     <td class="py-3 px-4">
                         <div class="flex items-center gap-2">

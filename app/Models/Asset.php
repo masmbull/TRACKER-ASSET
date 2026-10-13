@@ -17,7 +17,7 @@ class Asset extends Model
         'purchase_year', 'vendor', 'purchase_price', 'useful_life_years',
         'asset_status_id', 'warranty_until', 'deploy_date', 'software_license',
         'mac_address', 'static_ip', 'current_user_id', 'admin_it_pic',
-        'repair_notes', 'retire_date', 'qr_code', 'barcode', 'is_active',
+        'repair_notes', 'retire_date', 'qr_code', 'qr_token', 'qr_generated_at', 'barcode', 'is_active',
     ];
 
     protected function casts(): array
@@ -30,6 +30,7 @@ class Asset extends Model
             'purchase_year' => 'integer',
             'useful_life_years' => 'integer',
             'is_active' => 'boolean',
+            'qr_generated_at' => 'datetime',
         ];
     }
 
@@ -172,5 +173,41 @@ class Asset extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class, 'entity_id')->where('entity_type', 'assets');
+    }
+
+    /** Whether a public scan target exists for this asset yet. */
+    public function hasQr(): bool
+    {
+        return filled($this->qr_token);
+    }
+
+    /**
+     * Issue a fresh public token, replacing any previous one.
+     *
+     * The "re-create" action: rotating the token invalidates every label already
+     * printed for the old one, which is the point when a sticker has been lost,
+     * copied, or used to reach a page it should not. 32 random bytes is far past
+     * guessable, and the URL-safe encoding keeps the token clean inside a QR and
+     * a link.
+     */
+    public function mintQrToken(): string
+    {
+        $this->qr_token = bin2hex(random_bytes(16));
+        $this->qr_generated_at = now();
+        $this->save();
+
+        return $this->qr_token;
+    }
+
+    /** The public, login-free URL a scan of this asset's QR opens. */
+    public function qrPublicUrl(): ?string
+    {
+        if (! $this->hasQr()) {
+            return null;
+        }
+
+        $base = rtrim((string) (config('assets.qr.base_url') ?: url('/')), '/');
+
+        return $base.'/a/'.$this->qr_token;
     }
 }
