@@ -155,13 +155,14 @@ class AssetQrCodeTest extends TestCase
 
     /**
      * The regression this whole feature is built on: the raster back end needs
-     * Imagick, which is not installed, so the old PNG route threw for every role.
+     * Imagick, which may not be installed, so the old PNG route threw for every
+     * role. The endpoint must serve an SVG whether or not Imagick is present,
+     * so the environment is not asserted here - a runner that happens to carry
+     * the extension would otherwise fail a test that is about not needing it.
      */
     public function test_qr_does_not_require_the_imagick_extension(): void
     {
         $asset = Asset::factory()->create();
-
-        $this->assertFalse(extension_loaded('imagick'), 'Only meaningful while Imagick is absent.');
 
         $this->actingAs($this->user)->get("/assets/{$asset->id}/qr")->assertOk();
     }
