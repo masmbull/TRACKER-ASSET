@@ -42,6 +42,36 @@ required on the target machine). `build.bat` also copies it to
 `storage\app\agent\TrackerAgent.exe` so the web UI download link serves the build
 you just compiled.
 
+## Shipping a Release
+
+`build.bat` writes one shared file; the release registry is what makes a *version*
+downloadable, rollback-able and push-able. Two ways to register a build:
+
+**Web UI (recommended):** open **/agent/releases**, click **Upload Build**, enter the
+version and attach the `.exe`. Size and SHA-256 are read from the file, and the build
+becomes the current release immediately. Then **Push to fleet** queues an update on
+every device that is not already on it.
+
+**Artisan (same effect, scriptable):**
+
+```powershell
+php artisan agent:release 1.4.0 --notes="Fixed RAM reporting" --file=agent\TrackerAgent.exe
+php artisan agent:release --list
+```
+
+Each release stores its own copy under `storage\app\agent\releases\<version>-<sha12>.exe`,
+so **Activate** on the releases page is a real rollback: an older stored build becomes
+the one the download button and updates serve, with no rebuild and no file copy.
+
+The download routes serve the *current release's* stored file; if a release has no
+stored binary (any row created before per-release storage, or `agent:release` without
+`--file`), they fall back to the legacy shared `storage\app\agent\TrackerAgent.exe`.
+
+> Uploading ~160 MB through the web form needs PHP `upload_max_filesize` /
+> `post_max_size` and nginx `client_max_body_size` raised above it. The bundled
+> Docker image and `docker/nginx.conf` already set limits for this; a hand-built
+> PHP host must do the same or the upload is rejected before it reaches Laravel.
+
 ## Usage
 
 ### One-shot audit

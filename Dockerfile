@@ -246,6 +246,24 @@ pm.max_spare_servers = 8\n\
 pm.max_requests = 500\n' \
     > /usr/local/etc/php-fpm.d/zz-tracker-pool.conf
 
+# Upload limits, raised from PHP's 2 MB default.
+#
+# The agent binary is ~160 MB and the Releases page accepts it as a normal
+# multipart upload. At the default the request dies before Laravel sees a byte:
+# PHP discards the body, $_FILES is empty, and the form reports "the binary
+# field is required" for a file the operator just selected - a failure that
+# names the wrong thing and sends people looking at the form.
+#
+# 300M covers the ~160 MB binary plus multipart overhead. memory_limit is raised
+# separately because post_max_size is not the only ceiling that matters, and
+# max_file_uploads leaves the default. Baked into the image so a rebuild cannot
+# silently drop it.
+RUN printf 'upload_max_filesize=300M\n\
+post_max_size=310M\n\
+memory_limit=512M\n\
+max_execution_time=120\n' \
+    > /usr/local/etc/php/conf.d/zz-tracker-uploads.ini
+
 # Container start-up: migrations, seeding, then the real process.
 #
 # Copied from the source (which the build ignores nothing of here), made

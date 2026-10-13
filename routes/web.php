@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AgentDevicePromotionController;
 use App\Http\Controllers\AgentFleetController;
+use App\Http\Controllers\AgentReleaseController;
 use App\Http\Controllers\AgentTokenController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetImportController;
@@ -33,6 +34,12 @@ Route::get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallbac
 // Public agent download (for installer) - outside auth middleware
 Route::get('/agent/download', [AgentTokenController::class, 'downloadLatest'])->name('agent.download.latest');
 Route::get('/agent/{token}/download', [AgentTokenController::class, 'download'])->name('agent.download');
+
+// A specific released build, so an update command can pin the exact version
+// rather than always pulling "latest". Public for the same reason as the route
+// above: an agent re-pulling during an update is not a logged-in browser.
+Route::get('/agent/releases/{release}/download', [AgentReleaseController::class, 'download'])
+    ->name('agent.releases.download');
 
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
@@ -110,6 +117,16 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:manage-agents')->group(function () {
         Route::get('/agent', [AgentTokenController::class, 'index'])->name('agent.index');
         Route::post('/agent/{token}/revoke', [AgentTokenController::class, 'revoke'])->name('agent.revoke');
+
+        // Release registry. Declared before the `/agent/{token}/...` routes below
+        // so "releases" can never be read as a token id, and the per-release
+        // download is public the same way the fleet-wide one is (see the route
+        // outside this group) - an updating agent has no session.
+        Route::get('/agent/releases', [AgentReleaseController::class, 'index'])->name('agent.releases');
+        Route::post('/agent/releases', [AgentReleaseController::class, 'store'])->name('agent.releases.store');
+        Route::post('/agent/releases/{release}/activate', [AgentReleaseController::class, 'activate'])->name('agent.releases.activate');
+        Route::post('/agent/releases/{release}/push', [AgentReleaseController::class, 'push'])->name('agent.releases.push');
+        Route::delete('/agent/releases/{release}', [AgentReleaseController::class, 'destroy'])->name('agent.releases.destroy');
 
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/fleet/refresh', [AgentFleetController::class, 'refresh'])->name('agent.fleet.refresh');

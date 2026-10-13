@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\AgentApiToken;
 use App\Models\AgentRelease;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Register the build the download button is now serving.
@@ -22,8 +23,9 @@ use Illuminate\Console\Command;
 class AgentReleaseCommand extends Command
 {
     protected $signature = 'agent:release
-                            {version : Version string, e.g. 1.2.0}
+                            {version? : Version string, e.g. 1.2.0 (omit with --list)}
                             {--notes= : What changed in this build}
+                            {--file= : Path to a built TrackerAgent.exe to store as this release}
                             {--list : Show the release history and exit}';
 
     protected $description = 'Record a TrackerAgent.exe build as the current release';
@@ -40,17 +42,18 @@ class AgentReleaseCommand extends Command
                 ->map(fn (AgentRelease $r) => [
                     $r->version,
                     $r->is_current ? 'current' : '',
+                    $r->hasBinary() ? ($r->sizeLabel() ?? 'yes') : 'no file',
                     $r->released_at?->format('Y-m-d H:i') ?? '-',
-                    mb_substr((string) $r->notes, 0, 50),
+                    mb_substr((string) $r->notes, 0, 40),
                 ])->all();
 
             if ($rows === []) {
-                $this->warn('No releases recorded. Run: php artisan agent:release <version>');
+                $this->warn('No releases recorded. Ship one with: php artisan agent:release <version> --file=<path-to-exe>');
 
                 return self::SUCCESS;
             }
 
-            $this->table(['Version', 'State', 'Released', 'Notes'], $rows);
+            $this->table(['Version', 'State', 'Binary', 'Released', 'Notes'], $rows);
 
             $behind = AgentApiToken::query()
                 ->whereNotNull('agent_version')
@@ -67,17 +70,71 @@ class AgentReleaseCommand extends Command
 
         $version = trim((string) $this->argument('version'));
 
+        if ($version === '') {
+            $this->error('A version is required (or pass --list). Example: php artisan agent:release 1.4.0 --file=agent/TrackerAgent.exe');
+
+            return self::FAILURE;
+        }
+
         if (! preg_match('/\d+(?:\.\d+)*/', $version)) {
             $this->error("\"{$version}\" has no version number in it. Expected something like 1.2.0.");
 
             return self::FAILURE;
         }
 
-        $release = AgentRelease::ship($version, $this->option('notes'));
+        $file = $this->option('file');
 
-        $this->info("Release {$release->version} is now current.");
+        // A file is optional only to keep the old metadata-only call working for
+        // environments that ship the binary by hand. When one is given it is the
+        // release: size and hash are read from it, and it is copied into
+        // per-release storage so this row - not a mutable shared file - owns the
+        // bytes. Without a file the row is metadata pointing at the legacy path.
+        if ($file !== null && $file !== '') {
+            if (! is_file($file)) {
+                $this->error("No such file: {$file}");
+
+                return self::FAILURE;
+            }
+
+            $handle = fopen($file, 'rb');
+            $magic = $handle ? fread($handle, 2) : '';
+            if ($handle) {
+                fclose($handle);
+            }
+
+            if ($magic !== 'MZ') {
+                $this->error("{$file} is not a Windows executable (no MZ header). Build TrackerAgent.exe first.");
+
+                return self::FAILURE;
+            }
+
+            if (AgentRelease::where('version', $version)->exists()) {
+                $this->error("Release {$version} already exists. Bump <Version> in the .csproj.");
+
+                return self::FAILURE;
+            }
+
+            $size = (int) filesize($file);
+            $sha = (string) hash_file('sha256', $file);
+            $stored = 'agent/releases/'.$version.'-'.substr($sha, 0, 12).'.exe';
+
+            Storage::disk('local')->put($stored, fopen($file, 'rb'));
+
+            $release = AgentRelease::ship($version, $this->option('notes'));
+            $release->update(['file_path' => $stored, 'file_size' => $size, 'sha256' => $sha]);
+
+            $this->info("Release {$release->version} is now current.");
+            $this->line("Stored binary: {$stored} (".number_format($size / 1024 / 1024, 1).' MB)');
+            $this->line('SHA-256: '.$sha);
+        } else {
+            $release = AgentRelease::ship($version, $this->option('notes'));
+
+            $this->info("Release {$release->version} is now current (no binary attached).");
+            $this->comment('The download route falls back to storage/app/agent/TrackerAgent.exe.');
+        }
+
         $this->line('Previous release: '.(AgentRelease::previous()?->version ?? 'none on record'));
-        $this->comment('Devices already reporting an older version will show as out of date on /agent/fleet.');
+        $this->comment('Push it to the fleet from /agent/releases, or run: php artisan agent:release --list');
 
         return self::SUCCESS;
     }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * One shipped build of TrackerAgent.exe.
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class AgentRelease extends Model
 {
-    protected $fillable = ['version', 'notes', 'released_at', 'is_current'];
+    protected $fillable = ['version', 'notes', 'released_at', 'is_current', 'file_path', 'file_size', 'sha256'];
 
     protected function casts(): array
     {
@@ -116,5 +117,42 @@ class AgentRelease extends Model
     public function isDeviceBehind(?string $runningVersion): ?bool
     {
         return static::isBehind($runningVersion);
+    }
+
+    /**
+     * Absolute path to this release's binary, or null if it has none.
+     *
+     * Returns null rather than a path that does not exist on purpose: callers
+     * use this to decide between serving a real file and falling back to the
+     * legacy shared binary, and a path that LARAVEL would fail to open is not
+     * a usable answer.
+     */
+    public function absolutePath(): ?string
+    {
+        if (blank($this->file_path)) {
+            return null;
+        }
+
+        return Storage::disk('local')->path($this->file_path);
+    }
+
+    /** Whether the recorded binary is actually present on disk. */
+    public function hasBinary(): bool
+    {
+        $path = $this->absolutePath();
+
+        return $path !== null && is_file($path);
+    }
+
+    /** Human-readable size for the releases table, e.g. "154.6 MB". */
+    public function sizeLabel(): ?string
+    {
+        if (! $this->file_size) {
+            return null;
+        }
+
+        return $this->file_size >= 1024 * 1024
+            ? number_format($this->file_size / 1024 / 1024, 1).' MB'
+            : number_format($this->file_size / 1024, 0).' KB';
     }
 }

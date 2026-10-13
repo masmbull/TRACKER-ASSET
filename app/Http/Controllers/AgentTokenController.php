@@ -54,24 +54,35 @@ class AgentTokenController extends Controller
 
     private function streamBinary(Request $request)
     {
-        $exePath = storage_path('app/agent/TrackerAgent.exe');
-        if (! file_exists($exePath)) {
+        // The current release owns its own file; fall back to the legacy shared
+        // binary for any release row that predates per-release storage, so an
+        // environment mid-migration still serves what it did before.
+        $current = AgentRelease::current();
+        $exePath = ($current && $current->hasBinary())
+            ? $current->absolutePath()
+            : storage_path('app/agent/TrackerAgent.exe');
+
+        if (! is_file($exePath)) {
             return back()->with('error', 'Agent executable not found. Build the agent first.');
         }
 
         return response()->streamDownload(function () use ($exePath, $request) {
-            $this->streamFile($exePath);
-            echo self::configTrailer($request);
+            self::streamBinaryFile($exePath);
+            echo self::buildConfigTrailer($request);
         }, 'TrackerAgent.exe', [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
         ]);
     }
 
     /**
-     * Stream the binary in 1 MB chunks: the self-contained agent is ~70 MB and
+     * Stream the binary in 1 MB chunks: the self-contained agent is ~160 MB and
      * must never be loaded into PHP memory.
+     *
+     * Public and static so the per-release download route in
+     * AgentReleaseController can serve a specific stored build through the exact
+     * same code path - one streaming implementation, not two that can drift.
      */
-    private function streamFile(string $path): void
+    public static function streamBinaryFile(string $path): void
     {
         $handle = fopen($path, 'rb');
 
@@ -96,8 +107,12 @@ class AgentTokenController extends Controller
      *
      * Verified against the .NET 8 single-file host: it locates its bundle via an
      * absolute offset (not an end-of-file footer), so trailing bytes are ignored.
+     *
+     * Public and static so the per-release download route appends the identical
+     * trailer; a second copy of this format string is exactly how a trailer and
+     * the reader that parses it drift apart.
      */
-    private static function configTrailer(Request $request): string
+    public static function buildConfigTrailer(Request $request): string
     {
         $urls = array_values(array_unique(array_filter(array_map(
             fn (?string $url) => rtrim((string) $url, '/'),
