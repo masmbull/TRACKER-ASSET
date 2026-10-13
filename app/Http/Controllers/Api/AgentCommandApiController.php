@@ -36,7 +36,7 @@ class AgentCommandApiController extends Controller
      */
     public const IN_PROGRESS_GRACE_MINUTES = AgentCommand::STALL_GRACE_MINUTES;
 
-    private const MAX_INBOX_WAIT_SECONDS = 15;
+    private const MAX_INBOX_WAIT_SECONDS = 5;
 
     public function inbox(Request $request)
     {
