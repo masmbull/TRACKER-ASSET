@@ -197,8 +197,7 @@ public partial class App : System.Windows.Application
             Dispatcher.Invoke(() =>
             {
                 var window = new StatusWindow(
-                    InstallCheck.ReadVersion(InstallCheck.InstalledExe)?.ToString() ?? "unknown",
-                    config.ServerUrl, config.DeviceId, config.InstalledAt);
+                    config.ServerUrl, config.InstalledAt);
                 window.Show();
                 window.Activate();
             }));
