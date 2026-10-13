@@ -1,36 +1,7 @@
 @extends('documents.pdf.layout')
 
-@section('title', 'FORM ACCEPTANCE TEST (FAT)')
+@section('title', 'Form Transfer Fixed Asset IT')
 
 @section('content')
-<p class="lead">Dengan ini dilakukan pemeriksaan penerimaan (acceptance test) terhadap aset berikut:</p>
-
-@include('documents.pdf._asset', ['showAssignment' => true])
-
-@include('documents.pdf._parties')
-
-@if($document['transfer'])
-<table>
-    <tr><th colspan="2">Referensi Transfer</th></tr>
-    <tr><td class="label">No. Transfer</td><td>{{ $document['transfer']['number'] }}</td></tr>
-    <tr><td class="label">Tanggal</td><td>{{ $document['transfer']['date'] ?? '-' }}</td></tr>
-    <tr><td class="label">Dari</td><td>{{ $document['transfer']['from_user'] ?? '-' }} ({{ $document['transfer']['from_location'] ?? '-' }})</td></tr>
-    <tr><td class="label">Kepada</td><td>{{ $document['transfer']['to_user'] ?? '-' }} ({{ $document['transfer']['to_location'] ?? '-' }})</td></tr>
-    <tr><td class="label">Kondisi / Aksesoris</td><td>{{ $document['transfer']['condition'] ?? '-' }} / {{ $document['transfer']['accessories'] ?? '-' }}</td></tr>
-</table>
-@endif
-
-@if(!empty($document['checklist']))
-<table>
-    <tr><th style="width:7%">No</th><th>Item Pemeriksaan</th><th style="width:18%">Hasil</th></tr>
-    @foreach($document['checklist'] as $index => $check)
-        @php($result = $check['result'] ?? 'na')
-        <tr>
-            <td>{{ $index + 1 }}</td>
-            <td>{{ $check['item'] }}</td>
-            <td class="{{ $result === 'fail' ? 'fail' : ($result === 'pass' ? 'pass' : '') }}">{{ ['pass' => 'PASS', 'fail' => 'FAIL', 'na' => 'N/A'][$result] ?? 'N/A' }}</td>
-        </tr>
-    @endforeach
-</table>
-@endif
+@include('documents.pdf._form', ['variant' => 'fat'])
 @endsection

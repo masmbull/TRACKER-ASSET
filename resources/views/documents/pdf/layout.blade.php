@@ -2,77 +2,76 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
+{{--
+    Shared shell for every generated document.
+
+    Reproduces the official paper form "Template Form Fixed Transfer Asset IT
+    v1 (2026)": the four company names in the letterhead, then the document's own
+    sections (rendered by the type template), then the signature block.
+
+    The layout owns the letterhead and nothing else. It used to also paint a
+    four-column "Yang Menyerahkan / Yang Menerima / Mengetahui / IT" signature
+    table onto every document, on top of the two signature blocks each template
+    already drew - so a BAST arrived with six places to sign and no indication
+    which four were real. Signatures belong to the form, not the shell.
+--}}
 <style>
-    @page { margin: 2cm 1.8cm; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #111827; line-height: 1.5; }
-    .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 16px; }
-    .header table { border: none; width: 100%; margin-bottom: 6px; }
-    .header td { border: none; vertical-align: middle; padding: 0; }
-    .logo-cell { width: 150px; padding: 7px 10px; background: #ed1c24; }
-    .logo-cell img { width: 130px; display: block; }
-    .title-cell { padding-left: 14px; }
-    .header h1 { font-size: 16px; margin: 0; color: #1e40af; }
-    .meta { font-size: 10px; color: #334155; margin-top: 1px; }
-    .meta strong { color: #111827; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-    th, td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; vertical-align: top; }
-    th { background: #f1f5f9; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #334155; }
-    .label { width: 36%; color: #475569; }
-    /* Inline field name inside a value cell, e.g. "Entity: PT Mito". */
-    .field { color: #475569; }
-    .field-value { display: block; }
-    .lead { margin: 0 0 12px; }
+    @page { margin: 1cm 1.3cm; }
+    body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111827; line-height: 1.28; }
+    .letterhead { border-bottom: 2px solid #1e40af; padding-bottom: 5px; margin-bottom: 6px; }
+    .letterhead table { border: none; width: 100%; margin: 0; }
+    .letterhead td { border: none; vertical-align: middle; padding: 0; }
+    .logo-cell { width: 120px; padding: 4px 7px; background: #ed1c24; }
+    .logo-cell img { width: 104px; display: block; }
+    .entities { padding-left: 11px; }
+    .entities .legal { font-size: 8.5px; font-weight: bold; color: #0f172a; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { font-size: 12px; margin: 0; color: #1e40af; text-transform: uppercase; }
+    .doc-title .sub { font-size: 8px; color: #475569; margin-top: 1px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    th, td { border: 1px solid #cbd5e1; padding: 2px 6px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; font-size: 7.5px; text-transform: uppercase; letter-spacing: .04em; color: #334155; }
+    .section-head { background: #e2e8f0; font-weight: bold; font-size: 8.5px; }
+    .label { width: 34%; color: #475569; }
+    .cols-2 { width: 50%; }
+    .spec-line { margin: 0; }
     .pass { color: #027a48; font-weight: bold; }
     .fail { color: #b42318; font-weight: bold; }
-    .signatures { width: 100%; margin-top: 26px; border: none; }
-    .signatures td { border: none; text-align: center; padding: 8px 6px; }
-    .sig-role { font-size: 9px; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
-    .sig-line { border-bottom: 1px solid #111827; height: 52px; margin: 6px 0; }
-    .sig-name { font-weight: bold; font-size: 10px; }
-    .footer { margin-top: 22px; font-size: 8px; color: #64748b; text-align: center; }
+    .statement { padding: 5px 8px; }
+    .sign { width: 100%; margin-top: 3px; border: none; }
+    .sign td { border: none; width: 50%; padding: 0 8px 0 0; vertical-align: top; }
+    .sign-box { border: 1px solid #cbd5e1; }
+    .sign-box th { background: #e2e8f0; }
+    .sign-row { height: 26px; }
+    .footer { margin-top: 6px; font-size: 7px; color: #64748b; text-align: center; }
 </style>
 </head>
 <body>
 @php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-white.png'))))
-<div class="header">
+<div class="letterhead">
     <table>
         <tr>
             <td class="logo-cell">
                 <img src="{{ $logoUri }}" alt="MITO Electronic">
             </td>
-            <td class="title-cell">
+            <td class="entities">
+                @foreach((array) config('documents.entities', []) as $entity)
+                    <div class="legal">{{ $entity }}</div>
+                @endforeach
+            </td>
+            <td class="doc-title">
                 <h1>@yield('title')</h1>
+                <div class="sub">No. {{ $document['number'] }}</div>
+                <div class="sub">Tanggal: {{ $document['date_long'] ?? $document['date'] }}</div>
             </td>
         </tr>
     </table>
-    <div class="meta">No. Dokumen: <strong>{{ $document['number'] }}</strong></div>
-    <div class="meta">Tanggal: {{ $document['date'] }}</div>
-    <div class="meta">Perusahaan: {{ $document['company'] ?? '-' }}</div>
 </div>
 
 @yield('content')
 
-@if(!empty($document['notes']))
-<table>
-    <tr><th>Catatan</th></tr>
-    <tr><td>{{ $document['notes'] }}</td></tr>
-</table>
-@endif
-
-<table class="signatures">
-    <tr>
-        @foreach([['menyerahkan', 'Yang Menyerahkan'], ['menerima', 'Yang Menerima'], ['mengetahui', 'Mengetahui'], ['it', 'IT']] as $sig)
-            <td style="width:25%">
-                <div class="sig-role">{{ $sig[1] }}</div>
-                <div class="sig-line"></div>
-                <div class="sig-name">{{ $document['signatories'][$sig[0]] ?? '—' }}</div>
-            </td>
-        @endforeach
-    </tr>
-</table>
-
 <div class="footer">
-    Dokumen ini dihasilkan otomatis oleh {{ config('app.name') }} pada {{ now()->format('Y-m-d H:i') }} WIB.
+    Dokumen ini dihasilkan otomatis oleh {{ config('app.name') }} pada {{ now()->translatedFormat('d M Y H:i') }} WIB.
 </div>
 </body>
 </html>

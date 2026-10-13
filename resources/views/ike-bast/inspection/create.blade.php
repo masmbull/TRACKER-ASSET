@@ -1,139 +1,154 @@
 @extends('layouts.app')
 
-@section('title', 'IKE_BAST Inspection')
+@section('title', 'New Inspection')
 
 @section('content')
-<h1 class="text-2xl font-bold mb-2">IKE_BAST Inspection Table</h1>
-<p class="text-sm text-gray-500 mb-6">
-    Acceptance / receiving inspection for asset <strong>{{ $asset->asset_id }}</strong>
-    ({{ $asset->brand }} {{ $asset->model }}) — {{ $asset->company?->name }}
-</p>
+<div class="mx-auto max-w-6xl space-y-6" x-data="inspectionForm()">
+    <x-page-header title="New Inspection" :subtitle="'IKE / BAST receiving inspection for ' . $asset->asset_id . ' — ' . $asset->brand . ' ' . $asset->model">
+        <x-slot:actions>
+            <x-button variant="secondary" size="sm" :href="route('assets.show', $asset)">Back to Asset</x-button>
+        </x-slot:actions>
+    </x-page-header>
 
-<div class="bg-white p-6 rounded-xl shadow mb-6">
-    <h2 class="text-lg font-semibold mb-3">Asset Reference</h2>
-    <dl class="grid grid-cols-2 gap-2 text-sm">
-        <dt class="font-medium">Serial Number</dt><dd>{{ $asset->serial_number }}</dd>
-        <dt class="font-medium">Hostname</dt><dd>{{ $asset->hostname }}</dd>
-        <dt class="font-medium">Location</dt><dd>{{ $asset->location?->name }}</dd>
-        <dt class="font-medium">Current User</dt><dd>{{ $asset->currentUser?->name }}</dd>
-    </dl>
-</div>
+    <x-card title="Asset Reference">
+        <dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-theme-sm sm:grid-cols-2">
+            <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+                <dt class="text-gray-500">Serial Number</dt>
+                <dd class="font-medium text-gray-800 dark:text-gray-200">{{ $asset->serial_number ?? '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+                <dt class="text-gray-500">Hostname</dt>
+                <dd class="font-medium text-gray-800 dark:text-gray-200">{{ $asset->hostname ?? '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+                <dt class="text-gray-500">Location</dt>
+                <dd class="font-medium text-gray-800 dark:text-gray-200">{{ $asset->location?->name ?? '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+                <dt class="text-gray-500">Current User</dt>
+                <dd class="font-medium text-gray-800 dark:text-gray-200">{{ $asset->currentUser?->name ?? '—' }}</dd>
+            </div>
+        </dl>
+    </x-card>
 
-<form method="POST" action="{{ route('ike-bast.inspection.store') }}" class="bg-white p-6 rounded-xl shadow space-y-4">
-    @csrf
-    <input type="hidden" name="asset_id" value="{{ $asset->id }}">
+    <form method="POST" action="{{ route('ike-bast.inspection.store') }}" class="space-y-6">
+        @csrf
+        <input type="hidden" name="asset_id" value="{{ $asset->id }}">
 
-    <div class="grid grid-cols-3 gap-4">
-        <div>
-            <label class="block text-sm font-medium">Document Kind</label>
-            <select name="kind" class="w-full border rounded-lg px-3 py-2">
-                @foreach(['IKE_BAST', 'BAST', 'FAT', 'CUSTOM'] as $kind)
-                    <option value="{{ $kind }}" {{ old('kind', $defaultKind) === $kind ? 'selected' : '' }}>{{ $kind }}</option>
-                @endforeach
-            </select>
+        <x-card title="Inspection Header">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Kind</label>
+                    <select name="kind" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        @foreach(['IKE_BAST', 'BAST', 'FAT', 'CUSTOM'] as $kind)
+                            <option value="{{ $kind }}" {{ old('kind', $defaultKind) === $kind ? 'selected' : '' }}>{{ $kind }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Inspection Date</label>
+                    <input type="date" name="inspection_date" value="{{ old('inspection_date', now()->toDateString()) }}"
+                           class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Linked Transfer</label>
+                    <select name="transfer_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <option value="">None</option>
+                        @foreach($asset->transfers as $transfer)
+                            <option value="{{ $transfer->id }}" {{ (string) old('transfer_id') === (string) $transfer->id ? 'selected' : '' }}>
+                                {{ $transfer->transfer_number }} ({{ $transfer->transfer_date?->format('d M Y') }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+        </x-card>
+
+        <x-card padding="p-0">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+                <h3 class="text-theme-base font-semibold text-gray-800 dark:text-white/90">Inspection Line Items</h3>
+                <x-button type="button" variant="secondary" size="sm" @click="addRow()">+ Add Item</x-button>
+            </div>
+
+            @error('lines') <p class="px-5 pt-3 text-theme-sm text-error-500">{{ $message }}</p> @enderror
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-theme-sm">
+                    <thead>
+                        <tr class="border-b border-gray-100 bg-gray-50 text-theme-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">
+                            <th class="px-3 py-2.5 text-left">#</th>
+                            <th class="px-3 py-2.5 text-left">Item</th>
+                            <th class="px-3 py-2.5 text-left">Item Code</th>
+                            <th class="px-3 py-2.5 text-left">Barcode</th>
+                            <th class="px-3 py-2.5 text-left">Serial</th>
+                            <th class="px-3 py-2.5 text-left">Unit</th>
+                            <th class="px-3 py-2.5 text-left">Qty Plan</th>
+                            <th class="px-3 py-2.5 text-left">Qty Recv</th>
+                            <th class="px-3 py-2.5 text-left">Condition</th>
+                            <th class="px-3 py-2.5 text-left">Test</th>
+                            <th class="px-3 py-2.5 text-center">Defect</th>
+                            <th class="px-3 py-2.5 text-left">Remarks</th>
+                            <th class="px-3 py-2.5"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(row, i) in rows" :key="row.key">
+                            <tr class="border-b border-gray-100 dark:border-gray-800">
+                                <td class="px-3 py-2 text-gray-500" x-text="i + 1"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][item_desc]`" x-model="row.item_desc" class="w-40 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][item_code]`" x-model="row.item_code" class="w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][barcode]`" x-model="row.barcode" class="w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][serial_number]`" x-model="row.serial_number" class="w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][unit]`" x-model="row.unit" class="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="number" step="0.01" :name="`lines[${i}][qty_planned]`" x-model="row.qty_planned" class="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="number" step="0.01" :name="`lines[${i}][qty_received]`" x-model="row.qty_received" class="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][physical_condition]`" x-model="row.physical_condition" class="w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2">
+                                    <select :name="`lines[${i}][test_result]`" x-model="row.test_result" class="rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900">
+                                        <option value="na">N/A</option>
+                                        <option value="pass">PASS</option>
+                                        <option value="fail">FAIL</option>
+                                    </select>
+                                </td>
+                                <td class="px-3 py-2 text-center">
+                                    <input type="checkbox" :name="`lines[${i}][is_defective]`" value="1" x-model="row.is_defective">
+                                </td>
+                                <td class="px-3 py-2"><input type="text" :name="`lines[${i}][remarks]`" x-model="row.remarks" class="w-40 rounded-lg border border-gray-200 px-2 py-1.5 text-theme-sm dark:border-gray-700 dark:bg-gray-900"></td>
+                                <td class="px-3 py-2 text-right">
+                                    <button type="button" @click="removeRow(i)" x-show="rows.length > 1" class="text-theme-xs font-medium text-error-500 hover:text-error-600">Remove</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </x-card>
+
+        <x-card title="Notes">
+            <textarea name="notes" rows="3" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ old('notes') }}</textarea>
+        </x-card>
+
+        <div class="flex justify-end gap-3">
+            <a href="{{ route('assets.show', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</a>
+            <x-button type="submit" variant="primary">Save Inspection</x-button>
         </div>
-        <div>
-            <label class="block text-sm font-medium">Inspection Date</label>
-            <input type="date" name="inspection_date" value="{{ old('inspection_date', now()->toDateString()) }}" class="w-full border rounded-lg px-3 py-2">
-        </div>
-        <div>
-            <label class="block text-sm font-medium">Linked Transfer</label>
-            <select name="transfer_id" class="w-full border rounded-lg px-3 py-2">
-                <option value="">None</option>
-                @foreach($asset->transfers as $transfer)
-                    <option value="{{ $transfer->id }}" {{ (string) old('transfer_id') === (string) $transfer->id ? 'selected' : '' }}>{{ $transfer->transfer_number }} ({{ $transfer->transfer_date?->format('Y-m-d') }})</option>
-                @endforeach
-            </select>
-        </div>
-    </div>
-
-    @error('lines')
-        <p class="text-red-600 text-sm">{{ $message }}</p>
-    @enderror
-
-<div>
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 class="text-lg font-semibold">Inspection Line Items</h2>
-        <button type="button" onclick="addInspectionRow()" class="inline-flex items-center justify-center rounded-lg bg-gray-200 px-3 py-1 text-sm font-medium text-gray-800 transition-all duration-200 active:scale-[0.97] hover:bg-gray-300">+ Add Row</button>
-    </div>
-
-    <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-            <thead>
-                <tr class="border-b bg-gray-50">
-                    <th class="text-left py-2 px-2">#</th>
-                    <th class="text-left py-2 px-2">Item Description</th>
-                    <th class="text-left py-2 px-2">Item Code</th>
-                    <th class="text-left py-2 px-2">Barcode</th>
-                    <th class="text-left py-2 px-2">Serial Number</th>
-                    <th class="text-left py-2 px-2">Unit</th>
-                    <th class="text-left py-2 px-2">Qty Planned</th>
-                    <th class="text-left py-2 px-2">Qty Received</th>
-                    <th class="text-left py-2 px-2">Physical Condition</th>
-                    <th class="text-left py-2 px-2">Test Result</th>
-                    <th class="text-left py-2 px-2">Defective</th>
-                    <th class="text-left py-2 px-2">Remarks</th>
-                </tr>
-            </thead>
-            <tbody id="inspection-rows">
-                <tr class="border-b">
-                    <td class="py-2 px-2">1</td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][item_desc]" value="{{ old('lines.0.item_desc', $asset->category?->name) }}" class="border rounded-lg px-2 py-1 w-40"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][item_code]" value="{{ old('lines.0.item_code', $asset->asset_id) }}" class="border rounded-lg px-2 py-1 w-28"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][barcode]" value="{{ old('lines.0.barcode', $asset->barcode) }}" class="border rounded-lg px-2 py-1 w-28"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][serial_number]" value="{{ old('lines.0.serial_number', $asset->serial_number) }}" class="border rounded-lg px-2 py-1 w-32"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][unit]" value="{{ old('lines.0.unit', 'Unit') }}" class="border rounded-lg px-2 py-1 w-16"></td>
-                    <td class="py-2 px-2"><input type="number" step="0.01" name="lines[0][qty_planned]" value="{{ old('lines.0.qty_planned', 1) }}" class="border rounded-lg px-2 py-1 w-20"></td>
-                    <td class="py-2 px-2"><input type="number" step="0.01" name="lines[0][qty_received]" value="{{ old('lines.0.qty_received', 1) }}" class="border rounded-lg px-2 py-1 w-20"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][physical_condition]" value="{{ old('lines.0.physical_condition') }}" class="border rounded-lg px-2 py-1 w-32"></td>
-                    <td class="py-2 px-2">
-                        <select name="lines[0][test_result]" class="border rounded-lg px-2 py-1">
-                            <option value="na" {{ old('lines.0.test_result') === 'na' ? 'selected' : '' }}>N/A</option>
-                            <option value="pass" {{ old('lines.0.test_result') === 'pass' ? 'selected' : '' }}>PASS</option>
-                            <option value="fail" {{ old('lines.0.test_result') === 'fail' ? 'selected' : '' }}>FAIL</option>
-                        </select>
-                    </td>
-                    <td class="py-2 px-2 text-center"><input type="checkbox" name="lines[0][is_defective]" value="1"></td>
-                    <td class="py-2 px-2"><input type="text" name="lines[0][remarks]" value="{{ old('lines.0.remarks') }}" class="border rounded-lg px-2 py-1 w-40"></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    </form>
 </div>
 
 <script>
-    let inspectionRowIndex = 1;
+    function inspectionForm() {
+        const blank = () => ({
+            key: Math.random().toString(36).slice(2),
+            item_desc: '', item_code: '', barcode: '', serial_number: '',
+            unit: 'Unit', qty_planned: 1, qty_received: 1,
+            physical_condition: '', test_result: 'na', is_defective: false, remarks: '',
+        });
 
-    function addInspectionRow() {
-        const tbody = document.getElementById('inspection-rows');
-        const i = inspectionRowIndex++;
-        const row = document.createElement('tr');
-        row.className = 'border-b';
-        row.innerHTML =
-            '<td class="py-2 px-2">' + (i + 1) + '</td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][item_desc]" class="border rounded-lg px-2 py-1 w-40"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][item_code]" class="border rounded-lg px-2 py-1 w-28"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][barcode]" class="border rounded-lg px-2 py-1 w-28"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][serial_number]" class="border rounded-lg px-2 py-1 w-32"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][unit]" class="border rounded-lg px-2 py-1 w-16"></td>' +
-            '<td class="py-2 px-2"><input type="number" step="0.01" name="lines[' + i + '][qty_planned]" class="border rounded-lg px-2 py-1 w-20"></td>' +
-            '<td class="py-2 px-2"><input type="number" step="0.01" name="lines[' + i + '][qty_received]" class="border rounded-lg px-2 py-1 w-20"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][physical_condition]" class="border rounded-lg px-2 py-1 w-32"></td>' +
-            '<td class="py-2 px-2"><select name="lines[' + i + '][test_result]" class="border rounded-lg px-2 py-1"><option value="na">N/A</option><option value="pass">PASS</option><option value="fail">FAIL</option></select></td>' +
-            '<td class="py-2 px-2 text-center"><input type="checkbox" name="lines[' + i + '][is_defective]" value="1"></td>' +
-            '<td class="py-2 px-2"><input type="text" name="lines[' + i + '][remarks]" class="border rounded-lg px-2 py-1 w-40"></td>';
-        tbody.appendChild(row);
+        return {
+            rows: [{ ...blank(), item_desc: @js($asset->category?->name), item_code: @js($asset->asset_id), barcode: @js($asset->barcode), serial_number: @js($asset->serial_number) }],
+            addRow() { this.rows.push(blank()); },
+            removeRow(i) { if (this.rows.length > 1) this.rows.splice(i, 1); },
+        };
     }
 </script>
-
-    <div>
-        <label class="block text-sm font-medium">Notes</label>
-        <textarea name="notes" rows="3" class="w-full border rounded-lg px-3 py-2">{{ old('notes') }}</textarea>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-2 pt-4">
-        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-6 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">Save Inspection</button>
-        <a href="{{ route('assets.show', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Cancel</a>
-    </div>
-</form>
 @endsection

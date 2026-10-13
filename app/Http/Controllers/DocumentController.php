@@ -109,6 +109,8 @@ class DocumentController extends Controller
             // FAT list under a "Checklist FAT" heading on it is a lie about the
             // document being produced.
             'checklist' => (array) config('documents.checklists.'.$selected, []),
+            // Per-item completeness for this type, rendered as Ada / Tidak Ada.
+            'kelengkapan' => (array) config('documents.kelengkapan.'.$selected, []),
             'copy' => $this->copyFor($selected),
             // Entity is a choice from master data, not free text. Typing "PT Mito"
             // against "PT. Mito" makes the sender and receiver look like different
@@ -154,10 +156,12 @@ class DocumentController extends Controller
             'sender_division' => 'nullable|string|max:150',
             'sender_email' => 'nullable|email|max:150',
             'sender_phone' => 'nullable|string|max:100',
+            'receiver_employee_id' => 'nullable|string|max:100',
             'receiver_entity' => 'nullable|string|max:150',
             'receiver_location' => 'nullable|string|max:150',
             'receiver_division' => 'nullable|string|max:150',
             'receiver_email' => 'nullable|email|max:150',
+            'receiver_phone' => 'nullable|string|max:100',
             'asset_type' => 'nullable|string|max:150',
             'asset_brand_model' => 'nullable|string|max:150',
             'asset_serial_number' => 'nullable|string|max:150',
@@ -166,6 +170,8 @@ class DocumentController extends Controller
             'asset_ram' => 'nullable|string|max:80',
             'asset_storage' => 'nullable|string|max:80',
             'asset_accessories' => 'nullable|string|max:255',
+            'kelengkapan' => 'nullable|array',
+            'kelengkapan.*' => 'nullable|in:ada,tidak',
             'signatory_menyerahkan' => 'nullable|string|max:150',
             'signatory_menerima' => 'nullable|string|max:150',
             'signatory_mengetahui' => 'nullable|string|max:150',

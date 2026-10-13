@@ -71,6 +71,47 @@ return [
     // Signature roles on the document — typed name MVP (PRD §35).
     'signatories' => ['Yang Menyerahkan', 'Yang Menerima', 'Mengetahui', 'IT'],
 
+    /*
+    | The legal entities printed in the letterhead, exactly as the official
+    | "Template Form Fixed Transfer Asset IT v1 (2026)" lists them. These are
+    | fixed on the paper form - the same four names on every sheet - so they are
+    | configuration, not master data lookup. The per-document "Entitas" field is a
+    | different thing: which of these the sender or receiver belongs to.
+    */
+    'entities' => [
+        'PT. Mahakarya Sukses Indonesia',
+        'PT. Stein Perkasa Internasional',
+        'PT. Mitra Elektro Perkasa',
+        'PT. Perkasa Injeksi Indonesia',
+    ],
+
+    /*
+    | Physical completeness items, per document type, as "Ada / Tidak Ada".
+    |
+    | Structured rather than a free-text accessories box, because the paper form
+    | asks each item separately and a signed handover is the record of exactly
+    | what came in the box. A single textarea cannot say "charger yes, mouse no"
+    | in a way anybody can check later.
+    */
+    'kelengkapan' => [
+        'FAT' => ['Laptop/PC', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+        'BAST' => ['Laptop', 'Charger', 'Mouse', 'Tas Laptop', 'Keyboard External', 'Accessories Lain'],
+        'TRANSFER' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+        'RETURN' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+        'ASSIGNMENT' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+    ],
+
+    // Wording carried on the face of the document, per type. The generic
+    // template draws its heading from here so a RETURN does not arrive headed
+    // "Form Transfer Fixed Asset IT".
+    'labels' => [
+        'FAT' => 'Form Transfer Fixed Asset IT',
+        'BAST' => 'Berita Acara Serah Terima Aset IT',
+        'TRANSFER' => 'Berita Acara Transfer Aset IT',
+        'RETURN' => 'Berita Acara Pengembalian Aset IT',
+        'ASSIGNMENT' => 'Form Penyerahan Aset IT',
+    ],
+
     // Generated PDFs live here (local MVP; SharePoint later, PRD §37).
     'storage_path' => 'documents',
 ];

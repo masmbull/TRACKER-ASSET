@@ -8,6 +8,7 @@ use App\Models\AssetTransfer;
 use App\Models\Document;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -83,10 +84,19 @@ class DocumentGenerationService
      */
     public function buildPayload(Asset $asset, string $type, array $input, ?AssetTransfer $transfer): array
     {
+        // Dates are rendered in Indonesian on the face of the document. The paper
+        // form writes "14 September 2026"; the PDF used to print the raw ISO
+        // string ("2026-09-14") from the column, which is a storage format, not
+        // something to sign. Formatted once here so every template reads the same.
+        $handoverDate = $input['handover_date'] ?? $input['document_date'] ?? now()->toDateString();
+        $receivedDate = $input['received_date'] ?? null;
+
         return [
+            'type' => $type,
             'title' => $this->titleFor($type, $asset),
             'template_id' => $input['template_id'] ?? null,
             'date' => $input['document_date'] ?? now()->toDateString(),
+            'date_long' => $this->longDate($input['document_date'] ?? now()->toDateString()),
             'asset' => [
                 'asset_id' => $asset->asset_id,
                 'category' => $asset->category?->name,
@@ -109,7 +119,7 @@ class DocumentGenerationService
                 'accessories' => $input['asset_accessories'] ?? null,
             ],
             'company' => $asset->company?->name,
-            'location' => $asset->location?->name,
+            'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
             'current_user' => $asset->currentUser?->name,
             'parties' => $this->partiesForPayload($asset, $input, $transfer, $type),
             'transfer' => $transfer ? [
@@ -125,10 +135,15 @@ class DocumentGenerationService
                 'accessories' => $transfer->accessories,
             ] : null,
             'handover' => [
-                'date' => $input['handover_date'] ?? $input['document_date'] ?? now()->toDateString(),
-                'received_date' => $input['received_date'] ?? null,
+                'date' => $handoverDate,
+                'date_long' => $this->longDate($handoverDate),
+                'received_date' => $receivedDate,
+                'received_long' => $receivedDate ? $this->longDate($receivedDate) : null,
                 'purpose' => $input['purpose'] ?? null,
             ],
+            // The date the signature block is dated with. Separate from the
+            // handover date only so a signed-it-later copy has somewhere to say so.
+            'signature_date' => $this->longDate($input['received_date'] ?? $handoverDate),
             'signatories' => [
                 'menyerahkan' => $input['signatory_menyerahkan'] ?? null,
                 'menerima' => $input['signatory_menerima'] ?? null,
@@ -136,9 +151,53 @@ class DocumentGenerationService
                 'it' => $input['signatory_it'] ?? null,
             ],
             'checklist' => $this->checklistFor($type, $input),
+            // Completeness answers keyed by the item label, so the document prints
+            // "Charger: Ada" and not a bare list of keys.
+            'kelengkapan' => $this->kelengkapanFor($type, $input),
             'notes' => $input['notes'] ?? null,
-            'statement' => $input['statement'] ?? null,
+            'statement' => $input['statement'] ?? $this->statementFor($type),
         ];
+    }
+
+    /** Indonesian long form date, e.g. "14 September 2026", or the raw value if unparseable. */
+    private function longDate(?string $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->locale('id')->translatedFormat('d F Y');
+        } catch (\Throwable) {
+            return $value;
+        }
+    }
+
+    /**
+     * Physical completeness, per item, per type. Empty answers become "-" rather
+     * than "Tidak Ada", so a document does not claim an accessory is missing just
+     * because nobody ticked the box.
+     */
+    private function kelengkapanFor(string $type, array $input): array
+    {
+        $items = (array) config('documents.kelengkapan.'.$type, []);
+        $answers = (array) ($input['kelengkapan'] ?? []);
+
+        $result = [];
+
+        foreach ($items as $index => $label) {
+            $answer = $answers[$index] ?? null;
+
+            $result[$label] = in_array($answer, ['ada', 'tidak'], true) ? $answer : '';
+        }
+
+        return $result;
+    }
+
+    /** Default statement wording for a type, so E. Pernyataan is never blank. */
+    private function statementFor(string $type): string
+    {
+        return (string) config('documents.copy.'.$type.'.statement', config('documents.copy.FAT.statement', ''));
     }
 
     /**
@@ -260,14 +319,7 @@ class DocumentGenerationService
 
     private function titleFor(string $type, Asset $asset): string
     {
-        $label = match ($type) {
-            'FAT' => 'Form Acceptance Test',
-            'BAST' => 'Berita Acara Serah Terima',
-            'TRANSFER' => 'Asset Transfer',
-            'RETURN' => 'Asset Return',
-            'ASSIGNMENT' => 'Asset Assignment',
-            default => $type,
-        };
+        $label = config('documents.labels.'.$type, $type);
 
         return "{$label} — {$asset->asset_id}";
     }

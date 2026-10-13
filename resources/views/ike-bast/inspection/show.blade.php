@@ -1,92 +1,103 @@
 @extends('layouts.app')
 
-@section('title', 'IKE_BAST ' . $session->session_number)
+@section('title', $session->session_number)
 
 @section('content')
-<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-    <div>
-        <h1 class="text-2xl font-bold">{{ $session->session_number }}</h1>
-        <p class="text-sm text-gray-500">
-            {{ $session->kind }} inspection — status
-            <span class="px-2 py-1 text-xs rounded bg-gray-200">{{ $session->status }}</span>
-        </p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2">
-        <a href="{{ route('ike-bast.inspection.print', $session) }}" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">Print</a>
+<x-page-header :title="$session->session_number" :subtitle="$session->kind . ' inspection · ' . ucfirst($session->status)">
+    <x-slot:actions>
+        <a href="{{ route('ike-bast.inspection.print', $session) }}" target="_blank" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5z"/></svg>
+            Print
+        </a>
         @if($session->asset)
-            <a href="{{ route('assets.show', $session->asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Back to Asset</a>
+            <x-button variant="secondary" size="md" :href="route('assets.show', $session->asset)">Back to Asset</x-button>
         @endif
-    </div>
-</div>
+    </x-slot:actions>
+</x-page-header>
 
-<div class="bg-white p-6 rounded-xl shadow mb-6">
-    <dl class="grid grid-cols-2 gap-2 text-sm">
-        <dt class="font-medium">Asset</dt><dd>{{ $session->asset?->asset_id }} — {{ $session->asset?->brand }} {{ $session->asset?->model }}</dd>
-        <dt class="font-medium">Serial Number</dt><dd>{{ $session->asset?->serial_number }}</dd>
-        <dt class="font-medium">Inspection Date</dt><dd>{{ $session->inspection_date?->format('Y-m-d') ?? '-' }}</dd>
-        <dt class="font-medium">Inspected By</dt><dd>{{ $session->creator?->name }}</dd>
-        <dt class="font-medium">Linked Transfer</dt><dd>{{ $session->transfer?->transfer_number ?? '-' }}</dd>
-        <dt class="font-medium">Notes</dt><dd>{{ $session->notes ?? '-' }}</dd>
+<x-card class="mb-6" title="Inspection Detail">
+    <dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-theme-sm sm:grid-cols-2">
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Asset</dt>
+            <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->asset?->asset_id ?? '—' }} — {{ $session->asset?->brand }} {{ $session->asset?->model }}</dd>
+        </div>
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Serial Number</dt>
+            <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->asset?->serial_number ?? '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Inspection Date</dt>
+            <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->inspection_date?->format('d M Y') ?? '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Inspected By</dt>
+            <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->creator?->name ?? '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Linked Transfer</dt>
+            <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->transfer?->transfer_number ?? '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4 border-b border-gray-100 py-2 dark:border-gray-800">
+            <dt class="text-gray-500">Status</dt>
+            <dd class="text-right">
+                <x-badge :variant="match($session->status) {
+                    'approved' => 'success',
+                    'rejected' => 'error',
+                    'submitted' => 'brand',
+                    default => 'gray',
+                }" dot>{{ ucfirst($session->status) }}</x-badge>
+            </dd>
+        </div>
+        @if($session->notes)
+            <div class="sm:col-span-2 flex justify-between gap-4 py-2">
+                <dt class="text-gray-500">Notes</dt>
+                <dd class="text-right font-medium text-gray-800 dark:text-gray-200">{{ $session->notes }}</dd>
+            </div>
+        @endif
     </dl>
-</div>
+</x-card>
 
-<div class="bg-white p-6 rounded-xl shadow mb-6 overflow-x-auto">
-    <h2 class="text-lg font-semibold mb-4">Inspection Line Items</h2>
-    <table class="min-w-full text-sm">
-        <thead>
-            <tr class="border-b bg-gray-50">
-                <th class="text-left py-2 px-2">#</th>
-                <th class="text-left py-2 px-2">Item Description</th>
-                <th class="text-left py-2 px-2">Item Code</th>
-                <th class="text-left py-2 px-2">Barcode</th>
-                <th class="text-left py-2 px-2">Serial Number</th>
-                <th class="text-left py-2 px-2">Unit</th>
-                <th class="text-left py-2 px-2">Qty Planned</th>
-                <th class="text-left py-2 px-2">Qty Received</th>
-                <th class="text-left py-2 px-2">Condition</th>
-                <th class="text-left py-2 px-2">Test</th>
-                <th class="text-left py-2 px-2">Defective</th>
-                <th class="text-left py-2 px-2">Remarks</th>
+<x-card class="mb-6" padding="p-0" title="Inspection Line Items">
+    <x-table :headers="['#', 'Item', 'Item Code', 'Serial', 'Qty Plan', 'Qty Recv', 'Condition', 'Test', 'Remarks']" emptyText="No line items recorded.">
+        @foreach($session->lines as $line)
+            <tr class="transition-colors hover:bg-gray-50 dark:hover:bg-white/5">
+                <td class="py-3 px-4 text-theme-sm text-gray-500">{{ $line->seq }}</td>
+                <td class="py-3 px-4 text-theme-sm font-medium text-gray-800 dark:text-gray-200">{{ $line->item_desc ?? '—' }}</td>
+                <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ $line->item_code ?? '—' }}</td>
+                <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ $line->serial_number ?? '—' }}</td>
+                <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ $line->qty_planned ?? '—' }}</td>
+                <td class="py-3 px-4 text-theme-sm {{ $line->qty_received < $line->qty_planned ? 'font-medium text-warning-600' : 'text-gray-600 dark:text-gray-400' }}">{{ $line->qty_received ?? '—' }}</td>
+                <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ $line->physical_condition ?? '—' }}</td>
+                <td class="py-3 px-4">
+                    <x-badge :variant="match($line->test_result) {
+                        'pass' => 'success',
+                        'fail' => 'error',
+                        default => 'gray',
+                    }">{{ strtoupper($line->test_result ?? 'na') }}</x-badge>
+                </td>
+                <td class="py-3 px-4 text-theme-sm text-gray-500">{{ $line->remarks ?? '—' }}{{ $line->is_defective ? ' (defective)' : '' }}</td>
             </tr>
-        </thead>
-        <tbody>
-            @forelse($session->lines as $line)
-                <tr class="border-b">
-                    <td class="py-2 px-2">{{ $line->seq }}</td>
-                    <td class="py-2 px-2">{{ $line->item_desc ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->item_code ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->barcode ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->serial_number ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->unit ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->qty_planned ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->qty_received ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ $line->physical_condition ?? '-' }}</td>
-                    <td class="py-2 px-2">{{ strtoupper($line->test_result) }}</td>
-                    <td class="py-2 px-2">{{ $line->is_defective ? 'YES' : 'NO' }}</td>
-                    <td class="py-2 px-2">{{ $line->remarks ?? '-' }}</td>
-                </tr>
-            @empty
-                <tr><td colspan="12" class="py-2 text-gray-500">No lines.</td></tr>
-            @endforelse
-        </tbody>
-    </table>
-</div>
+        @endforeach
+    </x-table>
+</x-card>
 
 @can('manageAttachments', $session->asset)
-<div class="bg-white p-6 rounded-xl shadow">
-    <h2 class="text-lg font-semibold mb-3">Approval</h2>
-    <div class="flex flex-wrap items-center gap-2">
-        <form method="POST" action="{{ route('ike-bast.inspection.approve', $session) }}">
-            @csrf
-            <input type="hidden" name="status" value="approved">
-            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-success-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-success-600">Approve</button>
-        </form>
-        <form method="POST" action="{{ route('ike-bast.inspection.approve', $session) }}">
-            @csrf
-            <input type="hidden" name="status" value="rejected">
-            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-error-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-error-600">Reject</button>
-        </form>
-    </div>
-</div>
+    @if(! in_array($session->status, ['approved', 'rejected'], true))
+        <x-card title="Approval">
+            <p class="mb-3 text-theme-sm text-gray-500">Sign off this inspection, or send it back.</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <form method="POST" action="{{ route('ike-bast.inspection.approve', $session) }}">
+                    @csrf
+                    <input type="hidden" name="status" value="approved">
+                    <x-button type="submit" variant="primary">Approve</x-button>
+                </form>
+                <form method="POST" action="{{ route('ike-bast.inspection.approve', $session) }}">
+                    @csrf
+                    <input type="hidden" name="status" value="rejected">
+                    <x-button type="submit" variant="danger">Reject</x-button>
+                </form>
+            </div>
+        </x-card>
+    @endif
 @endcan
 @endsection

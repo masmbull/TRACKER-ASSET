@@ -150,6 +150,10 @@
                         <input type="text" name="signatory_menerima" value="{{ old('signatory_menerima', $asset->currentUser?->name) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">NIK / ID Karyawan</label>
+                        <input type="text" name="receiver_employee_id" value="{{ old('receiver_employee_id', $asset->currentUser?->employee_id ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    </div>
+                    <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Entitas Penerima *</label>
                         {{-- Was free text defaulting to "Company / Location" mashed
                              together with a slash. Two master-data concepts in one
@@ -213,15 +217,36 @@
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Storage</label>
                         <input type="text" value="{{ old('asset_storage', $asset->storage) }}" name="asset_storage" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
-                    <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Kelengkapan Asset</label>
-                        <input type="text" value="{{ old('asset_accessories', '') }}" name="asset_accessories" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" placeholder="Charger, mouse, tas, dll">
-                    </div>
                     <div class="md:col-span-2">
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Catatan</label>
                         <textarea name="notes" rows="3" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">{{ old('notes') }}</textarea>
                     </div>
                 </div>
+
+                {{-- Kelengkapan asset, item per item, the way the paper form asks.
+                     A single free-text "Kelengkapan Asset" box could not record
+                     "charger yes, mouse no" in any checkable way, and the printed
+                     form asks each item as Ada / Tidak Ada. --}}
+                @if(!empty($kelengkapan))
+                    <div class="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+                        <h4 class="mb-3 text-theme-sm font-semibold text-gray-800 dark:text-white">Kelengkapan Asset</h4>
+                        <div class="space-y-2">
+                            @foreach($kelengkapan as $index => $item)
+                                <div class="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/50 md:flex-row md:items-center md:justify-between">
+                                    <span class="text-theme-sm text-gray-700 dark:text-gray-300">{{ $item }}</span>
+                                    <div class="flex gap-3 text-theme-xs">
+                                        @foreach(['ada' => 'Ada', 'tidak' => 'Tidak Ada'] as $value => $label)
+                                            <label class="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-200">
+                                                <input type="radio" name="kelengkapan[{{ $index }}]" value="{{ $value }}" {{ old("kelengkapan.{$index}", 'ada') === $value ? 'checked' : '' }}>
+                                                {{ $label }}
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             </div>
 
             <div class="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
