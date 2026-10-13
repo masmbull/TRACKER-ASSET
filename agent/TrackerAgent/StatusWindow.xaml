@@ -91,6 +91,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="18"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="18"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Grid.Column="0">
@@ -119,8 +121,13 @@
                         <TextBlock x:Name="DeviceText" Text="—" Style="{StaticResource FieldValue}"/>
                     </StackPanel>
                     <StackPanel Grid.Row="4" Grid.Column="2">
-                        <TextBlock Text="IP ADDRESS" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="IP LOCAL" Style="{StaticResource FieldLabel}"/>
                         <TextBlock x:Name="IpText" Text="—" Style="{StaticResource FieldValue}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="6" Grid.Column="0">
+                        <TextBlock Text="IP PUBLIC" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock x:Name="PublicIpText" Text="checking…" Style="{StaticResource FieldValue}"/>
                     </StackPanel>
                 </Grid>
 
