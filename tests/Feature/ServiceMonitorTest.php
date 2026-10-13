@@ -30,13 +30,13 @@ class ServiceMonitorTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
-        // Soft live region with a visible countdown, animated latency bars
+        // Soft live region with a visible countdown, glowing status cards
         // and a re-check that patches in place: no location.reload anywhere.
         $this->actingAs($admin)->get(route('services.index'))
             ->assertOk()
             ->assertSee('data-live-region="services"', false)
             ->assertSee('data-refresh-countdown', false)
-            ->assertSee('latency-fill', false)
+            ->assertSee('status-glow-ok', false)
             ->assertSee('services-recheck', false)
             ->assertDontSee('window.location.reload', false);
     }

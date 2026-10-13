@@ -476,18 +476,20 @@
     opacity: 0.6;
   }
   
-  /* Primary = Red */
-  .bg-brand-600, .bg-brand-500, .bg-blue-600, .bg-blue-500, 
-  button[type="submit"]:not([class*="bg-"]),
+  /* Primary = Red. Scoped to utilities that actually carry a background:
+     a bare `button[type="submit"]` selector used to sit here and painted
+     every text-style submit (fleet Scan, commands Scan Now, audit
+     apply-scan) into an unreadable red block, so it was removed. A submit
+     that should look primary carries bg-brand-500 like everything else. */
+  .bg-brand-600, .bg-brand-500, .bg-blue-600, .bg-blue-500,
   .bg-success-600, .bg-success-500, .bg-green-600, .bg-green-500,
   .bg-warning-600, .bg-warning-500, .bg-orange-600, .bg-orange-500 {
     background: var(--primary-red);
     color: #FFFFFF;
     border-color: var(--primary-red);
   }
-  
-  .bg-brand-600:hover, .bg-brand-500:hover, 
-  button[type="submit"]:not([class*="bg-"]):hover {
+
+  .bg-brand-600:hover, .bg-brand-500:hover {
     background: var(--primary-red-dark);
   }
   
@@ -751,24 +753,29 @@
     padding-right: 0;
   }
   
+  // Collapsed = icon rail. The markup carries both marks and Alpine swaps
+  // them with x-show, so these rules must agree with that: full logo hidden,
+  // icon-only mark shown. (They used to say the opposite, which left the
+  // header empty when collapsed - Alpine hid the logo inline while the
+  // stylesheet kept the icon hidden.)
   .sidebar[data-collapsed="true"] .logo {
-    display: flex;
+    display: none;
   }
   .sidebar[data-collapsed="true"] .logo-icon {
-    display: none;
+    display: flex;
+    justify-content: center;
   }
   .sidebar[data-collapsed="true"] .brand-text {
-    display: inline;
-  }
-  .sidebar[data-collapsed="true"] .sidebar-header {
-    justify-content: space-between;
-    gap: 0;
-  }
-  .sidebar[data-collapsed="true"] .menu-group-title {
     display: none;
   }
-  .sidebar[data-collapsed="true"] .menu-group-icon {
-    display: block;
+  .sidebar[data-collapsed="true"] .sidebar-header {
+    justify-content: center;
+    gap: 6px;
+  }
+  // Group labels would leave empty gaps: their text is already hidden by the
+  // markup, so the heading itself goes too.
+  .sidebar[data-collapsed="true"] nav > h3 {
+    display: none;
   }
   .sidebar[data-collapsed="true"] .menu-item-text {
     display: none;
@@ -870,10 +877,6 @@
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(0.85); }
-}
-
-@keyframes grow-x {
-  from { width: 0; }
 }
 
 @keyframes glow-ok {
@@ -978,11 +981,6 @@
     animation: glow-down 1.2s ease-in-out infinite;
   }
 
-  /* Service monitor: latency bar grows from zero on every render. */
-  .latency-fill {
-    animation: grow-x 0.7s cubic-bezier(0.21, 0.9, 0.35, 1) both;
-  }
-
   /* Slim top progress bar shown during navigation + async posts. */
   #top-progress {
     position: fixed;
@@ -1056,7 +1054,6 @@
     .pulse-dot,
     .status-glow-ok,
     .status-glow-down,
-    .latency-fill,
     .mito-loader-ring,
     #top-progress::after {
       animation: none;

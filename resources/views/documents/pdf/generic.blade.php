@@ -3,16 +3,7 @@
 @section('title', strtoupper($document['title']))
 
 @section('content')
-<table>
-    <tr><th colspan="2">Informasi Aset</th></tr>
-    <tr><td class="label">Asset ID</td><td>{{ $document['asset']['asset_id'] }}</td></tr>
-    <tr><td class="label">Kategori</td><td>{{ $document['asset']['category'] ?? '-' }}</td></tr>
-    <tr><td class="label">Merk / Model</td><td>{{ trim(($document['asset']['brand'] ?? '') . ' ' . ($document['asset']['model'] ?? '')) ?: '-' }}</td></tr>
-    <tr><td class="label">Serial Number</td><td>{{ $document['asset']['serial_number'] ?? '-' }}</td></tr>
-    <tr><td class="label">Hostname</td><td>{{ $document['asset']['hostname'] ?? '-' }}</td></tr>
-    <tr><td class="label">Lokasi</td><td>{{ $document['location'] ?? '-' }}</td></tr>
-    <tr><td class="label">Pengguna Saat Ini</td><td>{{ $document['current_user'] ?? '-' }}</td></tr>
-</table>
+@include('documents.pdf._asset', ['showAssignment' => true])
 
 @include('documents.pdf._parties')
 

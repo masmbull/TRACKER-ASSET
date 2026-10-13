@@ -8,15 +8,7 @@
     dari pihak yang menyerahkan kepada pihak yang menerima, dengan perincian sebagai berikut:
 </p>
 
-<table>
-    <tr><th colspan="2">Informasi Aset</th></tr>
-    <tr><td class="label">Asset ID</td><td>{{ $document['asset']['asset_id'] }}</td></tr>
-    <tr><td class="label">Kategori</td><td>{{ $document['asset']['category'] ?? '-' }}</td></tr>
-    <tr><td class="label">Merk / Model</td><td>{{ trim(($document['asset']['brand'] ?? '') . ' ' . ($document['asset']['model'] ?? '')) ?: '-' }}</td></tr>
-    <tr><td class="label">Serial Number</td><td>{{ $document['asset']['serial_number'] ?? '-' }}</td></tr>
-    <tr><td class="label">Hostname</td><td>{{ $document['asset']['hostname'] ?? '-' }}</td></tr>
-    <tr><td class="label">Spesifikasi</td><td>{{ collect([$document['asset']['processor'] ?? null, $document['asset']['ram'] ?? null, $document['asset']['storage'] ?? null, $document['asset']['os_version'] ?? null])->filter()->implode(' / ') ?: '-' }}</td></tr>
-</table>
+@include('documents.pdf._asset')
 
 @include('documents.pdf._parties')
 

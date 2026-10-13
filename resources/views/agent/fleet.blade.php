@@ -221,15 +221,15 @@
                             @endif
                         </td>
                         <td class="py-3 px-3">
-                            <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                            <div class="flex flex-wrap items-center justify-end gap-1">
                                 <button type="button"
-                                        class="whitespace-nowrap text-theme-sm font-medium text-brand-500 hover:text-brand-600"
+                                        class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-brand-600 transition-all duration-200 hover:bg-brand-50 active:scale-95 dark:text-brand-300 dark:hover:bg-brand-500/10"
                                         @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>
 
                                 @if($device->isUsable())
-                                    <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action>
+                                    <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
                                         @csrf
-                                        <button type="submit" class="whitespace-nowrap text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Scan</button>
+                                        <button type="submit" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-gray-600 transition-all duration-200 hover:bg-gray-100 active:scale-95 dark:text-gray-300 dark:hover:bg-white/5">Scan</button>
                                     </form>
                                     {{-- Per-device update. Until this existed, moving one
                                          laptop onto a new build meant Update All, which
@@ -238,7 +238,7 @@
                                          device is actually behind: offering it on a
                                          current device invites a pointless restart. --}}
                                     @if($device->isOutdated() === true)
-                                        <button type="button" class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</button>
+                                        <button type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-warning-600 transition-all duration-200 hover:bg-warning-50 active:scale-95 dark:text-warning-300 dark:hover:bg-warning-500/10" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</button>
                                     @endif
                                 @endif
 
@@ -293,7 +293,7 @@
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
                                     <button type="button"
-                                            class="whitespace-nowrap text-theme-sm font-medium text-error-500 hover:text-error-600"
+                                            class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-error-500 transition-all duration-200 hover:bg-error-50 active:scale-95 dark:text-error-400 dark:hover:bg-error-500/10"
                                             @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</button>
                                 @endif
                             </div>
@@ -347,10 +347,9 @@
             $deviceFindings = $findingsByToken[$device->id] ?? [];
             $audit = $t?->asset_id ? ($latestAudits[$t->asset_id] ?? null) : null;
         @endphp
-        {{-- 2xl, not xl: this modal carries two side-by-side columns of readings,
-             and at xl a value like the Windows edition wrapped onto three lines
-             for every device. The scroll container stays for the very tall case. --}}
-        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="2xl">
+        {{-- 5xl on desktop: three balanced columns of readings. On smaller
+             screens the columns collapse to two, then one. --}}
+        <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="5xl">
             <div class="max-h-[70vh] overflow-y-auto pr-1">
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                     @if($t?->asset)
@@ -379,65 +378,30 @@
                     </div>
                 @endif
 
-                {{-- Two explicit columns.
-                     Neither of the previous approaches worked. A plain grid gave
-                     every section its own cell, so a 10-row Security section
-                     next to a 2-row Software one left the columns badly uneven.
-                     CSS `columns` balanced the height but then let a section
-                     split across the break, cutting "Security" in half.
-
-                     So the split is done here: sections are dealt round-robin
-                     into two column lists, which keeps the reading order (Device,
-                     Hardware, Storage...) intact while keeping the two columns
-                     close to the same height.
-
-                     The value cell carries min-w-0 because a flex item defaults
-                     to min-width:auto: without it a long value like "Microsoft
-                     Windows 11 Home Single Language 10.0.26200" refuses to
-                     shrink, spills out of its column and lands on top of the
-                     neighbouring label. break-words handles a single token with
-                     no spaces in it. --}}
-                @php
-                    // The sections arrive keyed by name, so a string is used as
-                    // the index - `$index % 2` on "Device" is a TypeError, not a
-                    // silent slip. Re-key them numerically, keeping the names
-                    // alongside for the headings.
-                    $names = array_keys($rowsByDevice[$device->id] ?? []);
-                    $left = [];
-                    $right = [];
-                    foreach (array_values($rowsByDevice[$device->id] ?? []) as $index => $fields) {
-                        if ($index % 2 === 0) {
-                            $left[$index] = $fields;
-                        } else {
-                            $right[$index] = $fields;
-                        }
-                    }
-                @endphp
-
-                <div class="grid gap-x-10 sm:grid-cols-2">
-                    @foreach([$left, $right] as $column)
-                        <div class="space-y-5">
-                            @foreach($column as $index => $fields)
-                                <section>
-                                    <h4 class="mb-2 border-b border-gray-100 pb-1.5 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                                        {{ $names[$index] }}
-                                    </h4>
-                                    <dl class="space-y-1 text-theme-xs">
-                                        @foreach($fields as $label => $value)
-                                            <div class="flex items-baseline gap-3">
-                                                <dt class="w-24 shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
-                                                <dd class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
-                                                    {{ $value !== null && $value !== '' ? $value : '—' }}
-                                                </dd>
-                                            </div>
-                                        @endforeach
-                                    </dl>
-                                </section>
-                            @endforeach
-                        </div>
+                {{-- Balanced newspaper columns: sections flow in reading order
+                     (Device, Hardware, Storage...) and the browser equalises the
+                     column heights. `break-inside-avoid` keeps a section from
+                     splitting across a break, which is what the previous plain
+                     CSS-columns attempt got wrong. --}}
+                <div class="columns-1 gap-8 sm:columns-2 xl:columns-3">
+                    @foreach(($rowsByDevice[$device->id] ?? []) as $section => $fields)
+                        <section class="mb-5 break-inside-avoid">
+                            <h4 class="mb-2 border-b border-gray-100 pb-1.5 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                                {{ $section }}
+                            </h4>
+                            <dl class="space-y-1 text-theme-xs">
+                                @foreach($fields as $label => $value)
+                                    <div class="flex items-baseline gap-3">
+                                        <dt class="w-24 shrink-0 text-gray-500 dark:text-gray-400">{{ $label }}</dt>
+                                        <dd class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
+                                            {{ $value !== null && $value !== '' ? $value : '—' }}
+                                        </dd>
+                                    </div>
+                                @endforeach
+                            </dl>
+                        </section>
                     @endforeach
                 </div>
-                </dl>
 
                 @if($audit)
                     {{-- The agent reports a difference and stops there; it never
@@ -473,7 +437,7 @@
                                     </ul>
                                     <form method="POST" action="{{ route('audit.apply-scan', $audit) }}" class="mt-2">
                                         @csrf
-                                        <button type="submit" class="text-theme-xs font-semibold text-warning-700 hover:text-warning-800 dark:text-warning-300">
+                                        <button type="submit" class="mt-2 inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-bold text-warning-700 transition-all duration-200 hover:bg-warning-100 active:scale-95 dark:text-warning-300 dark:hover:bg-warning-500/20">
                                             Update {{ $audit->asset->asset_id }} from this scan →
                                         </button>
                                     </form>

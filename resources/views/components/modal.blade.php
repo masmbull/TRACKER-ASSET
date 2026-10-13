@@ -27,6 +27,8 @@
                  'max-w-lg' => $maxWidth === 'lg',
                  'max-w-xl' => $maxWidth === 'xl',
                  'max-w-2xl' => $maxWidth === '2xl',
+                 'max-w-3xl' => $maxWidth === '3xl',
+                 'max-w-5xl' => $maxWidth === '5xl',
              ])>
             @if($title)
             <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">

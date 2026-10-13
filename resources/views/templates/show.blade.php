@@ -35,7 +35,7 @@
              Menyerahkan"), so they stay in the same order as the paper form. --}}
         @foreach($groups as $section => $fields)
             <x-card>
-                <div class="mb-4 flex items-center justify-between gap-3">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">{{ $section }}</h3>
                     <span class="shrink-0 text-theme-xs text-gray-400">{{ count($fields) }} fields</span>
                 </div>

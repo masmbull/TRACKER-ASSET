@@ -10,9 +10,9 @@
 </x-page-header>
 
 @if(session('success'))
-    <div class="mb-6 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-theme-sm text-success-700 dark:border-success-500/20 dark:bg-success-500/10 dark:text-success-300">
-        {{ session('success') }}
-    </div>
+    {{-- Rendered as a toast by the layout instead: the old banner duplicated it
+         and pushed the table down on every redirect back here. --}}
+    <div data-flash-toast="{{ session('success') }}" data-flash-type="success" class="hidden"></div>
 @endif
 
 <x-card>
@@ -26,12 +26,12 @@
                             <p class="text-theme-xs text-gray-400">{{ $template->created_at?->diffForHumans() }}</p>
                         </td>
                         <td class="py-3 px-4">
-                            <span class="inline-flex rounded-full bg-brand-50 px-2 py-1 text-theme-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">{{ $template->document_type }}</span>
+                            <x-badge variant="brand">{{ $template->document_type }}</x-badge>
                         </td>
                         <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">{{ is_array($template->template_content) ? count($template->template_content) : 0 }} fields</td>
                         <td class="py-3 px-4">
-                            <button type="button" @click="$dispatch('open-modal', 'toggle-template-{{ $template->id }}')" class="inline-flex items-center justify-center rounded-full px-2.5 py-1 text-theme-xs font-medium {{ $template->is_active ? 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300' }}">
-                                {{ $template->is_active ? 'Active' : 'Inactive' }}
+                            <button type="button" @click="$dispatch('open-modal', 'toggle-template-{{ $template->id }}')" class="inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-theme-xs font-medium transition-all duration-200 active:scale-95 {{ $template->is_active ? 'bg-success-100 text-success-700 hover:bg-success-200 dark:bg-success-500/10 dark:text-success-300' : 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300' }}">
+                                <span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ $template->is_active ? 'Active' : 'Inactive' }}
                             </button>
                         </td>
                         <td class="py-3 px-4">

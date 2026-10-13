@@ -11,29 +11,9 @@
     </x-page-header>
 
     <x-card>
-        {{-- Validation errors were never rendered on any document view, so a
-             rejected submission bounced back to a form that looked exactly like a
-             successful one. Fill in the form, press Generate, and nothing happens
-             with no explanation. --}}
-        @if($errors->any())
-            <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10" role="alert">
-                <p class="text-theme-sm font-medium text-red-700 dark:text-red-300">
-                    Dokumen belum dibuat. Perbaiki yang berikut:
-                </p>
-                <ul class="mt-2 list-disc space-y-1 ps-5 text-theme-sm text-red-700 dark:text-red-300">
-                    @foreach($errors->all() as $message)
-                        <li>{{ $message }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
-
-        @if(session('success'))
-            <div class="mb-6 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 dark:border-green-500/30 dark:bg-green-500/10" role="status">
-                <p class="text-theme-sm font-medium text-green-700 dark:text-green-300">{{ session('success') }}</p>
-            </div>
-        @endif
-
+        {{-- Errors and success travel through the layout (global error box +
+             toasts), so this page renders none of its own: the old boxes
+             doubled every notice. --}}
         <div class="mb-6 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10">
             <p class="text-theme-sm font-medium text-brand-700 dark:text-brand-300">Data terisi otomatis dari registrasi aset. Tidak perlu copy/paste.</p>
         </div>

@@ -3,7 +3,7 @@
 @section('title', 'Services')
 
 @section('content')
-<x-page-header title="Services" subtitle="Every backing service this app depends on, checked live.">
+<x-page-header title="Services" subtitle="Real-time health of every service this app depends on.">
     <x-slot:actions>
         <div class="flex flex-wrap items-center gap-2">
             <a href="{{ route('services.health') }}" class="text-theme-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">JSON</a>
@@ -35,27 +35,27 @@
 </div>
 
 <x-card data-live-region="services" class="{{ $down > 0 ? 'border-error-300 dark:border-error-500/30' : '' }}">
-    <div class="stagger space-y-2">
+    <div class="stagger grid grid-cols-1 gap-3 md:grid-cols-2">
         @foreach($services as $service)
             @php
                 $isOk = $service['status'] === 'ok';
                 $isSkipped = $service['status'] === 'skipped';
-                // Bar scale: 1000 ms fills the track. Inline background, not a
-                // bg-* utility, so the enterprise bar override cannot flatten
-                // every bar to the same red.
-                $latWidth = max(min(($service['ms'] ?? 0) / 10, 100), 4);
-                $latColor = ($service['ms'] ?? 0) >= 500 ? '#f79009' : (($service['ms'] ?? 0) >= 200 ? '#0ba5ec' : '#12b76a');
             @endphp
-            <div class="animate-fade-up flex flex-wrap items-start justify-between gap-3 rounded-xl border-b border-gray-100 px-3 py-3 transition-colors duration-200 last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
-                <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span @class([
-                            'h-2.5 w-2.5 flex-shrink-0 rounded-full',
-                            'bg-success-500 status-glow-ok' => $isOk,
-                            'bg-gray-400' => $isSkipped,
-                            'bg-error-500 status-glow-down' => ! $isOk && ! $isSkipped,
-                        ])></span>
-                        <p class="text-theme-sm font-medium text-gray-800 dark:text-white">{{ $service['name'] }}</p>
+            <div @class([
+                'animate-fade-up rounded-xl border border-l-4 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-theme-md dark:bg-white/[0.02]',
+                'border-gray-200 border-l-success-500 dark:border-gray-800 dark:border-l-success-500' => $isOk,
+                'border-gray-200 border-l-gray-300 dark:border-gray-800 dark:border-l-gray-500' => $isSkipped,
+                'border-gray-200 border-l-error-500 dark:border-gray-800 dark:border-l-error-500' => ! $isOk && ! $isSkipped,
+            ])>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span @class([
+                        'h-2.5 w-2.5 flex-shrink-0 rounded-full',
+                        'bg-success-500 status-glow-ok' => $isOk,
+                        'bg-gray-400' => $isSkipped,
+                        'bg-error-500 status-glow-down' => ! $isOk && ! $isSkipped,
+                    ])></span>
+                    <p class="text-theme-sm font-semibold text-gray-800 dark:text-white">{{ $service['name'] }}</p>
+                    <span class="ml-auto">
                         @if($isSkipped)
                             <x-badge variant="gray">not checked</x-badge>
                         @elseif(! $isOk)
@@ -63,19 +63,14 @@
                         @elseif($service['ms'] >= 500)
                             {{-- Slow is not down, but an operator should see it before
                                  it becomes an outage. --}}
-                            <x-badge variant="warning">slow {{ $service['ms'] }} ms</x-badge>
+                            <x-badge variant="warning">slow · {{ $service['ms'] }} ms</x-badge>
                         @else
                             <x-badge variant="success">{{ $service['ms'] }} ms</x-badge>
                         @endif
-                    </div>
-                    <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ $service['purpose'] }}</p>
-                    @if($isOk)
-                        <div class="mt-2 h-1 w-full max-w-xs overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-                            <div class="latency-fill h-full rounded-full" style="width: {{ $latWidth }}%; background: {{ $latColor }}"></div>
-                        </div>
-                    @endif
+                    </span>
                 </div>
-                <p class="min-w-0 max-w-md break-words text-right text-theme-xs text-gray-600 dark:text-gray-300">
+                <p class="mt-1.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ $service['purpose'] }}</p>
+                <p class="mt-2 border-t border-gray-100 pt-2 text-theme-xs break-words text-gray-600 dark:border-gray-800 dark:text-gray-300">
                     {{ $service['detail'] }}
                 </p>
             </div>
@@ -126,7 +121,7 @@
                 const fresh = doc.querySelector('[data-live-region="services"]');
                 if (fresh) {
                     // Fresh nodes replay their entrance animations on insert,
-                    // so every refresh cascades the rows again.
+                    // so every refresh cascades the cards again.
                     region.innerHTML = fresh.innerHTML;
                 }
                 if (stamp) {
