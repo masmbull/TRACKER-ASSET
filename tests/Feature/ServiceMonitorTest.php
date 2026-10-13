@@ -26,6 +26,21 @@ class ServiceMonitorTest extends TestCase
             ->assertSee('Health endpoint');
     }
 
+    public function test_services_page_animates_without_full_reloads(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        // Soft live region with a visible countdown, animated latency bars
+        // and a re-check that patches in place: no location.reload anywhere.
+        $this->actingAs($admin)->get(route('services.index'))
+            ->assertOk()
+            ->assertSee('data-live-region="services"', false)
+            ->assertSee('data-refresh-countdown', false)
+            ->assertSee('latency-fill', false)
+            ->assertSee('services-recheck', false)
+            ->assertDontSee('window.location.reload', false);
+    }
+
     /**
      * The checks reveal the database driver, mail host and cache backend. That
      * is deployment detail, not asset data, and a technician has no reason to
