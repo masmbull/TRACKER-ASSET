@@ -245,4 +245,16 @@ pm.max_spare_servers = 8\n\
 pm.max_requests = 500\n' \
     > /usr/local/etc/php-fpm.d/zz-tracker-pool.conf
 
+# Container start-up: migrations, seeding, then the real process.
+#
+# Copied from the source (which the build ignores nothing of here), made
+# executable, and set as ENTRYPOINT with php-fpm as the default CMD. The compose
+# stack sets RUN_MIGRATIONS=true so a fresh `docker compose up` seeds itself; the
+# Kubernetes manifests do not, so they keep migrating via their own Job and this
+# entrypoint just execs php-fpm. sed strips a possible CRLF: the file is written
+# on Windows and a shell script with \r in it dies on Linux with "not found".
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["php-fpm"]
