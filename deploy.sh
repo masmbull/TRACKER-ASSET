@@ -45,7 +45,13 @@ echo "==> [4/7] Publish built assets onto the host (bind mount shadows the image
 if [ -d public/build ]; then
     rm -rf public/build
 fi
-CID=$(${COMPOSE} create "${APP_SERVICE}")
+# Copy from a throwaway container made from the IMAGE, not the running one.
+# The running container bind-mounts the repo over /var/www/html, which shadows
+# the image's public/build too - so the built assets are invisible from there and
+# the path "does not exist". A bare `docker create <image>` has no compose mounts,
+# so the image layer is visible. The image is read off the running container.
+IMG=$(docker inspect --format '{{.Config.Image}}' "$(${COMPOSE} ps -q "${APP_SERVICE}")")
+CID=$(docker create "$IMG")
 docker cp "$CID:/var/www/html/public/build" "$(pwd)/public/build"
 docker rm "$CID" >/dev/null
 echo "    serving $(grep -oE 'assets/app-[A-Za-z0-9_-]+\.js' public/build/manifest.json | head -1)"
