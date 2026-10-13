@@ -32,7 +32,15 @@ COMPOSE="docker compose -f ${COMPOSE_FILE}"
 APP_SERVICE="${APP_SERVICE:-app}"
 
 echo "==> [1/7] Pull latest main (git via the container: storage/ is www-data-owned)"
-${COMPOSE} exec -u root -T "${APP_SERVICE}" sh -c 'cd /var/www/html && git fetch origin && git checkout main && git pull --ff-only origin main'
+# core.fileMode=false before the pull.
+#
+# The deploy chowns storage/ to www-data and a hand-run `chmod -R 775` once left
+# every tracked .gitignore under it at mode 755. With fileMode on, git reads that
+# as "these files changed" and the NEXT pull aborts with "local changes would be
+# overwritten" - a refusal that names files nobody edited. File modes on this
+# checkout carry no meaning (the container is root and mounts the tree), so the
+# comparison is simply turned off.
+${COMPOSE} exec -u root -T "${APP_SERVICE}" sh -c 'cd /var/www/html && git config core.fileMode false && git fetch origin && git checkout main && git pull --ff-only origin main'
 echo "    now at $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 
 echo "==> [2/7] Rebuild image (asset stage compiles CSS/JS)"
