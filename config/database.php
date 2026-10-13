@@ -33,7 +33,24 @@ return [
         'default' => [
             'url' => env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
+            'username' => env('REDIS_USERNAME'),
+            'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+        ],
+        // Laravel ships two Redis connections - `default` and `cache` - and the
+        // cache config resolves REDIS_CACHE_CONNECTION to `cache` by default.
+        // Only `default` was declared here, so any deployment with
+        // CACHE_STORE=redis died on "Redis connection [cache] not configured":
+        // the store asked for a connection the file never defined. Local
+        // development never saw it because it caches to file.
+        'cache' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'username' => env('REDIS_USERNAME'),
+            'password' => env('REDIS_PASSWORD'),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_CACHE_DB', '1'),
         ],
     ],
 ];
