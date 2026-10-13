@@ -205,7 +205,7 @@ COPY --from=assets /app/public/build ./public/build
 # skip package discovery at build time, and bootstrap/cache/packages.php would
 # then have to be written on the first request instead, which fails outright if
 # bootstrap/cache is not writable at runtime.
-RUN mkdir -p storage/logs storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache \
+RUN mkdir -p storage/logs storage/app/public storage/app/private/documents storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
 # Composer autoloader is regenerated after the real source is in place, so the

@@ -29,6 +29,12 @@ storage/logs/
 storage/app/imports/
 storage/app/documents/
 storage/app/attachments/
+# The `local` disk's root. Generated PDFs land in storage/app/private/documents
+# (Storage::put writes through the local disk, not straight to storage/app),
+# so excluding only storage/app/documents above missed the directory the build
+# actually choked on: "open /opt/.../storage/app/private/documents: permission
+# denied". It is php-fpm-owned runtime state and belongs in no build context.
+storage/app/private/
 bootstrap/cache/*.php
 
 # Front-end build state. public/build is compiled in the assets stage of the
