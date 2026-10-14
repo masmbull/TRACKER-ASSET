@@ -96,7 +96,10 @@ public partial class ScanWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
-            ScanProgressFill.Width = percent / 100.0 * 400;
+            // Sized from the track itself, not a fixed 400px that no longer matched
+            // the bar's container and left it visibly short of the end.
+            var track = ScanProgressTrack.ActualWidth;
+            ScanProgressFill.Width = Math.Max(0, Math.Round(track * percent / 100.0));
             PercentText.Text       = $"{percent}%";
             StatusText.Text        = message;
         });

@@ -121,7 +121,12 @@ public partial class InstallerWindow : Window
                 ? _targetProgress
                 : _displayedProgress + Math.Max(1, (int)Math.Ceiling(remaining * 0.18));
 
-            ProgressFill.Width = (int)(_displayedProgress / 100.0 * 400);
+            // Width taken from the track itself, not a hard-coded 400: the bar used
+            // to stop short of the end because the constant no longer matched the
+            // track it was drawn into, so the install looked stuck at ~85% even
+            // when it had finished.
+            var track = ProgressTrack.ActualWidth;
+            ProgressFill.Width = Math.Max(0, Math.Round(track * _displayedProgress / 100.0));
             PercentText.Text = $"{_displayedProgress}%";
         };
         _progressTimer.Start();
