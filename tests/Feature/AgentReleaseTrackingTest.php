@@ -213,6 +213,31 @@ class AgentReleaseTrackingTest extends TestCase
     }
 
     /**
+     * Both update actions must hand the browser the queued command's id, or the
+     * progress modal never opens: the async-action handler only watches a command
+     * when the JSON carries `command_id`. Without it the Update button looked
+     * inert - the command was queued and ran, but the operator saw nothing move.
+     */
+    public function test_update_actions_return_a_command_id_for_the_progress_modal(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $target = $this->makeToken('MITO-0001', '1.0.0');
+
+        $one = $this->actingAs($admin)
+            ->postJson(route('agent.updateOne', $target));
+
+        $one->assertOk();
+        $oneId = $one->json('command_id');
+        $this->assertNotNull($oneId, 'a per-device update must expose its command id');
+        $this->assertDatabaseHas('agent_commands', ['id' => $oneId, 'command' => 'update']);
+
+        $all = $this->actingAs($admin)->postJson(route('agent.updateAll'));
+
+        $all->assertOk();
+        $this->assertNotNull($all->json('command_id'), 'update-all must expose its command id');
+    }
+
+    /**
      * @return string the assigned device number
      */
     private function registerDevice(string $hardwareId): string

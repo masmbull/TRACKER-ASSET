@@ -848,7 +848,7 @@ class AgentFleetController extends Controller
      */
     public function updateAll(Request $request): JsonResponse|RedirectResponse
     {
-        $this->enqueue(null, 'update', ['url' => URL::route('agent.download.latest')]);
+        $command = $this->enqueue(null, 'update', ['url' => URL::route('agent.download.latest')]);
 
         $current = AgentApiToken::query()
             ->where('is_active', true)
@@ -861,7 +861,7 @@ class AgentFleetController extends Controller
             ? " {$current} already on the release will be left alone."
             : '';
 
-        return $this->actionResponse($request, "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.");
+        return $this->actionResponse($request, "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.", commandId: $command->id);
     }
 
     /**
@@ -879,9 +879,9 @@ class AgentFleetController extends Controller
      */
     public function updateOne(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
     {
-        $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
+        $command = $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
 
-        return $this->actionResponse($request, "Update queued for {$token->name} — it re-pulls the latest binary and restarts.");
+        return $this->actionResponse($request, "Update queued for {$token->name} — it re-pulls the latest binary and restarts.", commandId: $command->id);
     }
 
     /**
