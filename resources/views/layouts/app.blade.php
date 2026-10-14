@@ -482,6 +482,7 @@
             };
 
             let pollTimer = null;
+            let pollStartedAt = 0;
 
             const setProgressBar = (percent, stage, stalled, failed) => {
                 const clamped = Math.max(5, Math.min(100, Number(percent) || 0));
@@ -493,6 +494,32 @@
                     stageEl.textContent = stage;
                 }
                 stageEl.classList.toggle('text-error-500', Boolean(stalled));
+            };
+
+            /**
+             * Keep the bar visibly busy between reported stages.
+             *
+             * The agent reports a stage, then can spend tens of seconds inside it
+             * (WMI hardware sweep, registry fingerprint walk). A frozen bar reads
+             * as a hung job, so while the command is in flight the fill gets moving
+             * stripes and the stage line carries a live elapsed counter - motion
+             * that is honest, because the job really is still running.
+             */
+            const setBusy = (busy) => {
+                barEl.classList.toggle('progress-stripes', Boolean(busy));
+                if (!busy) {
+                    window.clearInterval(busyTimer);
+                    busyTimer = null;
+                }
+            };
+            let busyTimer = null;
+            const startElapsedTicker = (baseLabel) => {
+                window.clearInterval(busyTimer);
+                const base = baseLabel.replace(/\s*·\s*\d+s$/, '');
+                busyTimer = window.setInterval(() => {
+                    const secs = Math.round((Date.now() - pollStartedAt) / 1000);
+                    stageEl.textContent = base + ' · ' + secs + 's';
+                }, 1000);
             };
 
             /**
@@ -510,7 +537,10 @@
                 spinner.classList.add('hidden');
                 progressWrap.classList.remove('hidden');
                 title.textContent = 'Working';
+                pollStartedAt = Date.now();
                 setProgressBar(0, 'Waiting for the device…', false, false);
+                setBusy(true);
+                startElapsedTicker('Waiting for the device…');
 
                 window.clearInterval(pollTimer);
                 pollTimer = window.setInterval(async () => {
@@ -527,6 +557,7 @@
                         if (state.done || state.failed) {
                             window.clearInterval(pollTimer);
                             pollTimer = null;
+                            setBusy(false);
                             setProgressBar(state.done ? 100 : (state.progress ?? 100), state.failed ? 'Failed' : 'Completed', false, state.failed);
                             modal.dataset.busy = 'false';
                             modal.removeAttribute('aria-busy');
@@ -541,6 +572,8 @@
                         }
 
                         setProgressBar(state.progress, state.label || 'In progress…', state.stalled, false);
+                        setBusy(!state.stalled);
+                        startElapsedTicker(state.label || 'In progress…');
                     } catch {
                         // Silence; the next tick retries.
                     }

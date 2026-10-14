@@ -934,6 +934,17 @@
   to { transform: translateX(250%); }
 }
 
+/* Indeterminate stripes for the async-action progress bar.
+   Between two reported stages the agent can be busy for tens of seconds (a WMI
+   hardware sweep, then a registry fingerprint walk). A bar sitting still at one
+   percentage reads as a hung job even though work is happening, so while a stage
+   is in flight the fill carries moving stripes that say "busy" without inventing
+   a number the agent has not reported. */
+@keyframes progress-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -955,6 +966,19 @@
 
   .animate-slide-in-right {
     animation: slide-in-right 0.25s cubic-bezier(0.21, 0.9, 0.35, 1) both;
+  }
+
+  /* Applied to the async-action progress fill while a stage is running, so the
+     bar visibly moves even when the reported percentage is static. */
+  .progress-stripes {
+    background-image: linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.28) 25%, transparent 25%,
+      transparent 50%, rgba(255, 255, 255, 0.28) 50%,
+      rgba(255, 255, 255, 0.28) 75%, transparent 75%, transparent
+    );
+    background-size: 28px 28px;
+    animation: progress-stripes 0.7s linear infinite;
   }
 
   /* Stagger: children enter one after another. Cap at 8 so long tables
