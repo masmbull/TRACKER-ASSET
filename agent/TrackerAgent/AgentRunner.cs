@@ -416,7 +416,7 @@ public static class AgentRunner
             //
             ReportScanProgress(url, token, commandId, 65, "Collecting deep inventory…");
 
-            if (!SendFingerprint(url, token))
+            if (!SendFingerprint(url, token, commandId))
             {
                 return 1;
             }
@@ -917,11 +917,19 @@ public static class AgentRunner
     /// must still keep reporting telemetry. The collector itself swallows
     /// per-reader failures for the same reason.
     /// </remarks>
-    static bool SendFingerprint(string url, string token)
+    static bool SendFingerprint(string url, string token, long? commandId = null)
     {
         try
         {
+            // The registry walk is the single longest step of a scan - tens of
+            // seconds on a loaded machine - and it used to sit silent after one
+            // "collecting deep inventory" note. Reporting either side of it keeps
+            // the progress bar moving through the wait instead of parking at 65%.
+            ReportScanProgress(url, token, commandId, 72, "Reading installed software…");
+
             var payload = FingerprintCollector.Collect();
+
+            ReportScanProgress(url, token, commandId, 90, "Uploading inventory…");
 
             // Reuse the same device id the daemon registers with. The collector
             // deliberately does not derive one itself: reading a different
