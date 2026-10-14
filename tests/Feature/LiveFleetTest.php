@@ -13,6 +13,7 @@ use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
 use App\Services\ScriptPayload;
+use App\Support\ScriptPresets;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -254,6 +255,36 @@ class LiveFleetTest extends TestCase
         $this->assertSame('powershell', $command->payload['script_type']);
         $this->assertSame('tracker-script.ps1', $command->payload['script_name']);
         $this->assertSame(hash('sha256', $body), $command->payload['sha256']);
+    }
+
+    /**
+     * Every preset must survive the pipeline as a runnable batch script: detect
+     * as `cmd`, keep the matching `.bat` name, and queue as a pending command.
+     * A preset the server reads as binary or PowerShell would be a one-click
+     * button that quietly ships the wrong file to the fleet.
+     */
+    public function test_presets_queue_as_runnable_batch_scripts(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        foreach ([
+            'disable-usb' => ScriptPresets::DISABLE_USB,
+            'enable-usb' => ScriptPresets::ENABLE_USB,
+        ] as $key => $body) {
+            $this->assertSame('cmd', ScriptPayload::detectType($body), "preset {$key} must read as cmd");
+
+            $this->actingAs($admin)->post(route('agent.commands.script'), [
+                'target' => 'all',
+                'script_body' => $body,
+                'run_as' => 'system',
+            ])->assertRedirect();
+
+            $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
+
+            $this->assertSame('cmd', $command->payload['script_type']);
+            $this->assertSame('tracker-script.bat', $command->payload['script_name']);
+            $this->assertSame(hash('sha256', $body), $command->payload['sha256']);
+        }
     }
 
     /**

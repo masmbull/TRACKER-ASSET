@@ -126,6 +126,30 @@
               deviceSearch: '',
               selected: [],
               devices: @js($tokens->filter(fn ($t) => $t->isUsable())->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'host' => $t->telemetry?->hostname, 'online' => (bool) ($t->last_used_at && $t->last_used_at->gt(now()->subSeconds(90)))])->values()),
+              presets: {
+                  'disable-usb': {
+                      label: 'Disable USB storage',
+                      body: @js(\App\Support\ScriptPresets::DISABLE_USB),
+                      runAs: 'system',
+                      workingDir: 'C:\\\\Temp\\\\Scripts',
+                      notes: 'Blocks USB mass storage by setting the USBSTOR service to disabled.',
+                  },
+                  'enable-usb': {
+                      label: 'Enable USB storage',
+                      body: @js(\App\Support\ScriptPresets::ENABLE_USB),
+                      runAs: 'system',
+                      workingDir: 'C:\\\\Temp\\\\Scripts',
+                      notes: 'Restores USB mass storage by setting the USBSTOR service back to manual.',
+                  },
+              },
+              applyPreset(key) {
+                  const p = this.presets[key];
+                  if (!p) { return; }
+                  this.body = p.body;
+                  this.runAs = p.runAs;
+                  this.workingDir = p.workingDir;
+                  this.notes = p.notes;
+              },
               get filteredDevices() {
                   const q = this.deviceSearch.trim().toLowerCase();
                   if (!q) return this.devices;
@@ -178,6 +202,19 @@
                     </template>
                 </span>
             </div>
+
+            {{-- Ready-made scripts, so the common jobs are one click instead of a
+                 paste. A preset only fills the form (body, run-as, notes); the
+                 operator still sees the exact body and target before queueing. --}}
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+                <span class="text-theme-xs font-medium text-gray-400">Presets:</span>
+                <template x-for="(p, key) in presets" :key="key">
+                    <button type="button" @click="applyPreset(key)"
+                            class="rounded-lg border border-gray-200 px-2.5 py-1 text-theme-xs font-medium text-gray-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                            x-text="p.label"></button>
+                </template>
+            </div>
+
             <textarea name="script_body" x-model="body" rows="12" required
                       class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                       placeholder="Paste the script here. The type and its SHA-256 are detected automatically."></textarea>
