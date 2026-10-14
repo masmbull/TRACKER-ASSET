@@ -243,17 +243,12 @@
                                 </li>
                             @endif
                             @if(Gate::allows('manage-agents'))
-                                @php $isActive = $route === 'agent.index'; @endphp
-                                <li>
-                                    <a href="{{ route('agent.index') }}"
-                                       @click="selectedMenu = 'agent.index'"
-                                       data-tooltip="Audit Agents"
-                                       class="menu-item group {{ $isActive ? 'menu-item-active' : 'menu-item-inactive' }}">
-                                        <svg class="{{ $isActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' }}" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM4.5 12C4.5 7.85786 7.85786 4.5 12 4.5C16.1421 4.5 19.5 7.85786 19.5 12C19.5 16.1421 16.1421 19.5 12 19.5C7.85786 19.5 4.5 16.1421 4.5 12ZM12 7C8.13401 7 5 10.134 5 14C5 14.2761 5.22386 14.5 5.5 14.5H18.5C18.7761 14.5 19 14.2761 19 14C19 10.134 15.866 7 12 7Z" fill="currentColor"/></svg>
-                                        <span class="menu-item-text" :class="window.innerWidth >= 1280 ? (sidebarExpanded ? '' : 'hidden') : ''">Audit Agents</span>
-                                    </a>
-                                </li>
-                                @php $isActive = $route === 'agent.fleet'; @endphp
+                                {{-- One entry for agents. The token list and the
+                                     fleet readings were two sidebar items for one
+                                     job - a machine's token is just how the fleet
+                                     page identifies it - so Tokens is now a tab on
+                                     the fleet page rather than its own destination. --}}
+                                @php $isActive = in_array($route, ['agent.fleet', 'agent.index'], true) || $isSection('agent.*'); @endphp
                                 <li>
                                     <a href="{{ route('agent.fleet') }}"
                                        @click="selectedMenu = 'agent.fleet'"

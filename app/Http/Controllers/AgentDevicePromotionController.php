@@ -188,6 +188,14 @@ class AgentDevicePromotionController extends Controller
 
         $changed = app(AuditComparisonService::class)->applyToAsset($asset, $actual);
 
+        // The audit has now been acted on, so its stale difference must not keep
+        // prompting. Leaving `mismatches` in place meant the warning panel - and
+        // the "Update ... from this scan" button - reappeared on the very next
+        // page load, which reads as if the click did nothing. Clearing it makes
+        // the panel say "in sync" until the device reports a genuinely new
+        // difference.
+        $audit->forceFill(['mismatches' => null, 'result' => 'MATCH'])->save();
+
         ActivityLog::create([
             'actor_id' => Auth::id(),
             'action' => 'UPDATE',

@@ -91,7 +91,7 @@
                     @php
                         $telemetry = $device->telemetry;
                         $fp = $device->fingerprint;
-                        $audit = $telemetry?->asset_id ? ($latestAudits[$telemetry->asset_id] ?? null) : null;
+                        $audit = $telemetry?->asset_id ? ($latestAudits[$device->id] ?? null) : null;
                         // An agent older than the heartbeat never re-reports readings, but
                         // it still polls the inbox, so a recent last_used_at is proof of
                         // life. Without this every un-updated machine would show "stale"
@@ -345,7 +345,7 @@
             $t = $device->telemetry;
             $fp = $device->fingerprint;
             $deviceFindings = $findingsByToken[$device->id] ?? [];
-            $audit = $t?->asset_id ? ($latestAudits[$t->asset_id] ?? null) : null;
+            $audit = $t?->asset_id ? ($latestAudits[$device->id] ?? null) : null;
         @endphp
         {{-- 5xl on desktop: three balanced columns of readings. On smaller
              screens the columns collapse to two, then one. --}}

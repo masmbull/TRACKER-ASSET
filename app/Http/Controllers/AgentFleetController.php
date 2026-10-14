@@ -162,17 +162,23 @@ class AgentFleetController extends Controller
             ->orderBy('name')
             ->get();
 
-        $assetIds = $devices->map(fn (AgentApiToken $token) => $token->telemetry?->asset_id)
-            ->filter()
-            ->all();
+        $deviceIds = $devices->pluck('id')->all();
 
-        // Latest audit per asset (ordered desc, then unique keeps the newest).
+        // Latest audit per DEVICE, not per asset.
+        //
+        // This used to key by asset_id, which is wrong the moment two agents
+        // report the same machine - a reinstall mints a new token, and the old and
+        // new rows both point at one asset. Every device's detail modal then showed
+        // whichever of them scanned last, so opening device A could show device
+        // B's readings: different RAM, different serial, and an "update the
+        // register" button carrying the wrong machine's values. Keying by the
+        // reporting token means a modal only ever shows what *this* device sent.
         $latestAudits = AssetAudit::query()
-            ->whereIn('asset_id', $assetIds)
+            ->whereIn('agent_token_id', $deviceIds)
             ->orderByDesc('audit_date')
             ->get()
-            ->unique('asset_id')
-            ->keyBy('asset_id');
+            ->unique('agent_token_id')
+            ->keyBy('agent_token_id');
 
         // Scans still waiting for a decision, per device.
         //
