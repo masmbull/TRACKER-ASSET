@@ -120,6 +120,8 @@ public static class AgentRunner
         int pollSeconds = 10;
         bool uninstall = false;
         bool update = false;
+        bool installService = false;
+        bool removeService = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -133,6 +135,8 @@ public static class AgentRunner
                 case "--poll": pollSeconds = Math.Max(1, int.Parse(NextArg(args, ref i))); break;
                 case "--uninstall": uninstall = true; break;
                 case "--update": update = true; break;
+                case "--install-service": installService = true; break;
+                case "--remove-service": removeService = true; break;
             }
         }
 
@@ -183,6 +187,27 @@ public static class AgentRunner
         if (args.Any(a => a.Equals("--status", StringComparison.OrdinalIgnoreCase)))
         {
             return PrintStatus();
+        }
+
+        // Install the daemon as a one-shot SYSTEM scheduled task, so the agent
+        // runs with machine rights and a pushed `run_as: system` script can write
+        // HKLM. This is the whole point of the flag: the tray runs as the logged
+        // in user, and a standard user cannot create the SYSTEM task that
+        // RunScriptElevated needs - so the elevation has to be arranged once, at
+        // install time, by an administrator.
+        //
+        // Reached from InstallerWindow after the user grants UAC. Refuses when it
+        // is not elevated, because schtasks /RU SYSTEM is itself an admin action
+        // and a silent failure here would leave the machine looking installed
+        // while every system-level script kept dying.
+        if (installService)
+        {
+            return InstallSystemTask(serverUrl, token, assetId, pollSeconds);
+        }
+
+        if (removeService)
+        {
+            return RemoveSystemTask();
         }
 
         if (update)
@@ -248,6 +273,23 @@ public static class AgentRunner
 
     static string NextArg(string[] args, ref int i) =>
         i + 1 < args.Length ? args[++i] : throw new ArgumentException($"Missing value for {args[i - 1]}");
+
+    /// <summary>
+    /// Exposes the CLI-flag decision to the offline harness.
+    ///
+    /// The real list lives in App.OnStartup (a WPF type the harness cannot load
+    /// without a message pump), so this mirrors it for the one question the
+    /// harness asks: is this argument a CLI mode rather than a GUI launch? A mode
+    /// added to one list and not the other is a mode that silently stops being
+    /// honoured, so the two are kept in step by hand.
+    /// </summary>
+    internal static bool IsCliFlagForTest(string arg) => arg.ToLowerInvariant() switch
+    {
+        "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
+        "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
+            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" => true,
+        _ => false,
+    };
     /// <summary>
     /// Default server address when no --url is given: environment override →
     /// address baked into the downloaded installer (AgentConfigTrailer) →
@@ -1328,6 +1370,100 @@ public static class AgentRunner
         write(color);
     }
 
+    /// <summary>
+    /// Name of the SYSTEM scheduled task that runs the resident daemon.
+    ///
+    /// A scheduled task rather than a Windows Service on purpose: this is a WPF
+    /// WinExe, and converting it to a real ServiceBase host would mean pulling
+    /// the daemon out of the WPF startup path. The task reaches the same end -
+    /// the agent runs as SYSTEM from boot with no logged-in user - with a
+    /// fraction of the surface area.
+    /// </summary>
+    private const string SystemTaskName = "MitoAuditTrackerService";
+
+    /// <summary>
+    /// Register the daemon to run as SYSTEM at boot, then drop the per-user
+    /// autostart entry so the two cannot both run and fight over the inbox.
+    /// </summary>
+    /// <remarks>
+    /// Must be called elevated. `schtasks /RU SYSTEM` cannot be created by a
+    /// standard user, and the failure mode is the one this task exists to fix,
+    /// so it returns non-zero and prints why rather than pretending.
+    /// </remarks>
+    static int InstallSystemTask(string url, string token, string? assetId, int pollSeconds)
+    {
+        if (!IsElevated())
+        {
+            Console.Error.WriteLine("[X] --install-service needs administrator rights (it registers a SYSTEM task).");
+            return 1;
+        }
+
+        url = url.TrimEnd('/');
+        var exe = SelfBinaryPath();
+
+        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+        {
+            Console.Error.WriteLine("[X] Could not resolve the agent executable path.");
+            return 1;
+        }
+
+        var daemonArgs = $"--daemon --quiet --url \"{url}\" --token \"{token}\" --poll {pollSeconds}";
+        if (!string.IsNullOrWhiteSpace(assetId))
+        {
+            daemonArgs += $" --asset-id \"{assetId}\"";
+        }
+
+        // schtasks stores the whole program-plus-args as one command line, so the
+        // exe path is quoted and the args follow - the same shape the Run key
+        // used, just run as SYSTEM instead of the logged-in user.
+        var taskCommand = $"\\\"{exe}\\\" {daemonArgs}";
+
+        // /SC ONSTART /RU SYSTEM /RL HIGHEST: at every boot, as SYSTEM, highest
+        // run level. /F overwrites an existing task, so a reinstall repairs
+        // rather than errors.
+        var create = $"/Create /TN \"{SystemTaskName}\" /TR \"{taskCommand}\" /SC ONSTART /RU SYSTEM /RL HIGHEST /F";
+
+        if (!Run("schtasks", create, 60))
+        {
+            Console.Error.WriteLine("[X] Could not register the SYSTEM task. Run the installer as an administrator.");
+            return 1;
+        }
+        Console.WriteLine("[OK] Registered SYSTEM task (runs at boot as SYSTEM).");
+
+        // The task replaces the autostart entry. Leaving both would start two
+        // daemons - one as the user, one as SYSTEM - each polling the same
+        // token and double-acking every command.
+        try
+        {
+            using var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
+            if (runKey?.GetValue(RunValueName) is not null)
+            {
+                runKey.DeleteValue(RunValueName, false);
+                Console.WriteLine("[OK] Removed the per-user autostart entry (the SYSTEM task supersedes it).");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] Could not remove the autostart entry: {ex.Message}");
+        }
+
+        // Start it now so the machine is on-system without waiting for a reboot.
+        Run("schtasks", $"/Run /TN \"{SystemTaskName}\"", 30);
+
+        return 0;
+    }
+
+    /// <summary>Delete the SYSTEM task, ignoring "not found" so uninstall is idempotent.</summary>
+    static int RemoveSystemTask()
+    {
+        var removed = Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
+        Console.WriteLine(removed
+            ? "[OK] SYSTEM task removed."
+            : "[i] No SYSTEM task was registered (nothing to remove).");
+
+        return 0;
+    }
+
     static void RegisterAutostart(string url, string token, string? assetId, int pollSeconds)
     {
         try
@@ -1448,6 +1584,12 @@ public static class AgentRunner
     {
         try
         {
+            // 0. The SYSTEM task, if this machine was installed elevated. It runs
+            //    as SYSTEM, so deleting it needs elevation too - a non-elevated
+            //    uninstall reports the refusal but carries on removing what it can,
+            //    rather than leaving the run key and folder half-deleted.
+            Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
+
             // 1. Autostart first - nothing may restart the agent after this.
             using (var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
             {

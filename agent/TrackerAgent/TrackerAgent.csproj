@@ -9,10 +9,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.3.6: the tray's command loop now threads the command id into a
-          server-triggered scan, so the fleet progress dialog advances instead of
-          sitting at 0%. Bump so installed machines pick the new binary up. -->
-        <Version>1.3.9</Version>
+        <!-- 1.4.0: the installer can register the daemon as a SYSTEM scheduled
+          task (install-service), so a pushed run_as:system script can write
+          HKLM on a machine whose user is a standard local account. Bump so
+          installed machines pick the new binary up. -->
+        <Version>1.4.0</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

@@ -367,10 +367,10 @@ public partial class InstallerWindow : Window
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 62,
                 "Registering the device with the server...");
 
-            Report(76, "Configuring autostart...");
-            RegisterAutostart(destExe);
+            Report(76, "Configuring the agent to run at boot...");
+            InstallBootAutostart(serverUrl, token, destExe);
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 76,
-                "Configuring autostart...");
+                "Configuring the agent to run at boot...");
 
             Report(86, "Starting the tray agent...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
@@ -505,6 +505,75 @@ public partial class InstallerWindow : Window
             key?.SetValue("InstalledAt", DateTime.Now.ToString("o"));
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Arrange for the daemon to run at boot, preferring the SYSTEM task so a
+    /// pushed `run_as: system` script can write HKLM.
+    /// </summary>
+    /// <remarks>
+    /// The installer usually runs as the logged-in user, who is a standard user
+    /// on these machines - so it cannot create the SYSTEM task itself. It asks
+    /// for one UAC elevation (the launched copy re-runs `--install-service` with
+    /// the registered token), and only falls back to the per-user autostart when
+    /// that is declined or unavailable. The fallback still gives a working fleet
+    /// agent; it just cannot run machine-level scripts, which is exactly the
+    /// limitation the SYSTEM task removes.
+    /// </remarks>
+    private void InstallBootAutostart(string serverUrl, string token, string exePath)
+    {
+        var elevated = TryInstallSystemTask(serverUrl, token, exePath);
+
+        if (elevated)
+        {
+            return;
+        }
+
+        // Not elevated: keep the agent running and reporting. The SYSTEM task can
+        // be added later by reinstalling elevated, without touching the agent.
+        RegisterAutostart(exePath);
+    }
+
+    /// <summary>
+    /// Launch the installed exe with `--install-service` under a UAC prompt and
+    /// wait for it. Returns true only when the task was actually registered.
+    /// </summary>
+    private static bool TryInstallSystemTask(string serverUrl, string token, string exePath)
+    {
+        try
+        {
+            var args = $"--install-service --url \"{serverUrl}\" --token \"{token}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = args,
+                // ShellExecute is what triggers the UAC prompt; without it the
+                // child inherits our (non-elevated) token and schtasks fails.
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+
+            using var process = Process.Start(psi);
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            // Bounded wait: a UAC prompt the user never answers must not freeze
+            // the install. The task is registered in well under this when granted.
+            process.WaitForExit(60_000);
+
+            return process.HasExited && process.ExitCode == 0;
+        }
+        catch
+        {
+            // Declined UAC (Win32Exception 1223) or no elevation available: fall
+            // back to the per-user autostart. Not an install failure.
+            return false;
+        }
     }
 
     private static void RegisterAutostart(string exePath)

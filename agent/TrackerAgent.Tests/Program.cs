@@ -25,6 +25,7 @@ internal static class Program
         TrayAutostartCases();
         ScanResultCases();
         FullScanCases();
+        ServiceTaskCases();
 
         Console.WriteLine(_failures == 0
             ? "\n[OK] All agent checks passed."
@@ -214,6 +215,30 @@ internal static class Program
         {
             _failures++;
         }
+    }
+
+    /// <summary>
+    /// The SYSTEM-task flags must be recognised as CLI modes, so App.OnStartup
+    /// routes them to AgentRunner.Run instead of opening the installer UI. A flag
+    /// that fell through to the GUI would leave `--install-service` opening a
+    /// window and registering nothing.
+    ///
+    /// The elevation branch itself is not exercised here on purpose: Run()
+    /// silences the console as part of daemon setup, which would swallow this
+    /// harness's own output. The non-admin refusal is verified by hand on a
+    /// standard-user machine; what is pinned here is the wiring that decides
+    /// whether the flag is a CLI mode at all.
+    /// </summary>
+    private static void ServiceTaskCases()
+    {
+        Console.WriteLine("[*] system-task install flags");
+
+        Check("--install-service is a CLI flag", AgentRunner.IsCliFlagForTest("--install-service"));
+        Check("--remove-service is a CLI flag", AgentRunner.IsCliFlagForTest("--remove-service"));
+
+        // Casing must not decide it: the launcher lower-cases, and a mixed-case
+        // spelling from a script should still be treated as the same mode.
+        Check("--Install-Service is recognised case-insensitively", AgentRunner.IsCliFlagForTest("--Install-Service"));
     }
 
     private sealed class RecordingHttpServer : IDisposable
