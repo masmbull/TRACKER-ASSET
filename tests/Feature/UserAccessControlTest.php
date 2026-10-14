@@ -39,14 +39,39 @@ class UserAccessControlTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         User::factory()->count(13)->create(['role' => 'viewer']);
 
-        $this->actingAs($admin)
+        // 14 users at 12 per page is two pages, so the numbered pager must render.
+        // It is matched on the "of N results" line, which only the pager emits;
+        // the footer's "Showing x to y of z users" and the per-page selector are
+        // always present, so neither proves pagination is happening.
+        $response = $this->actingAs($admin)
             ->get(route('users.access'))
             ->assertOk()
             ->assertSee('Access Control')
-            ->assertSee('Next');
+            ->assertSee('Showing')
+            ->assertSee('results');
 
         $this->actingAs(User::factory()->create(['role' => 'support']))
             ->get(route('users.access'))
             ->assertForbidden();
+    }
+
+    /** The per-page selector changes how many users are listed, within a known set. */
+    public function test_access_control_honours_the_per_page_selection(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        User::factory()->count(20)->create(['role' => 'viewer']);
+
+        // 21 users at 25 per page is one page, so the pager is not rendered.
+        $this->actingAs($admin)
+            ->get(route('users.access', ['per_page' => 25]))
+            ->assertOk()
+            ->assertDontSee('results');
+
+        // An arbitrary value is ignored and falls back to the default of 12, so
+        // ?per_page=10000 cannot be used to dump the directory in one query.
+        $this->actingAs($admin)
+            ->get(route('users.access', ['per_page' => 10000]))
+            ->assertOk()
+            ->assertSee('results');
     }
 }

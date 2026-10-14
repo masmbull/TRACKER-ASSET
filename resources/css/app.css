@@ -792,6 +792,43 @@
     margin: 0 auto;
   }
 
+  // Collapsed rail labels.
+  //
+  // Hidden text alone turns the sidebar into a column of unlabelled glyphs: the
+  // only way to tell "QR Labels" from "Reports" is to click and find out. Each
+  // item carries its label in data-tooltip, and hovering brings it back as a
+  // floating chip beside the icon - so the rail stays narrow but nothing on it
+  // is a guess. position: fixed keeps the chip out of the sidebar's own
+  // overflow clipping, and pointer-events: none stops it swallowing the click.
+  .sidebar[data-collapsed="true"] .menu-item[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: fixed;
+    left: 76px;
+    margin-top: -2px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #111827;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 120ms ease-out, transform 120ms ease-out;
+    pointer-events: none;
+    z-index: 10050;
+  }
+  .sidebar[data-collapsed="true"] .menu-item[data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  // The chip would sit under the cursor in dark mode against a dark rail; the
+  // lighter surface keeps it legible there too.
+  .dark .sidebar[data-collapsed="true"] .menu-item[data-tooltip]::after {
+    background: #374151;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .sidebar {
       transition: none;

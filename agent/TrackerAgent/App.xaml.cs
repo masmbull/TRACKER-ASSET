@@ -279,7 +279,7 @@ public partial class App : System.Windows.Application
                             // local tray window. Run the actual full inventory in the
                             // background and settle the command only after the agent has
                             // posted both the audit and the fingerprint payload.
-                            var result = RunScan(config);
+                            var result = RunScan(config, id);
                             nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
                             nextFingerprint = DateTimeOffset.UtcNow.AddSeconds(FingerprintSeconds);
                             Api.Ack(config.ServerUrl, config.Token, id,
@@ -640,11 +640,20 @@ public partial class App : System.Windows.Application
     /// did not already have, and one saying "Scan failed." popped up with no
     /// indication of what failed or where to look.
     /// </remarks>
-    private int RunScan(AgentConfig config)
+    /// <summary>
+    /// Run a full scan, reporting progress when a fleet command asked for it.
+    ///
+    /// commandId is null for the tray menu's own "Scan Now": nobody is watching a
+    /// dialog for that one, so there is no bar to fill. It is set for a
+    /// server-queued command, and the id is then threaded into RunFullScan so the
+    /// stages land on the command the progress dialog is polling. Without it the
+    /// bar sat at 0% until the scan finished, which read as a hung job.
+    /// </summary>
+    private int RunScan(AgentConfig config, long? commandId = null)
     {
         try
         {
-            return AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId);
+            return AgentRunner.RunFullScan(config.ServerUrl, config.Token, config.DeviceId, commandId);
         }
         catch
         {

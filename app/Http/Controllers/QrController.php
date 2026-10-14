@@ -152,6 +152,19 @@ class QrController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
+        // Printing a label IS the act of publishing it, so every code on this
+        // sheet gets a public token now if it lacks one. Without this the sheet
+        // fell back to the authenticated /assets/{id} URL - which a phone scan
+        // cannot open, and which is how a batch of labels ended up encoding
+        // http://localhost from a dev checkout and were dead the moment they
+        // were stuck on a machine. Only the current page is touched (<= sheet_size
+        // rows), not the whole register, per the note on the token migration.
+        foreach ($assets as $asset) {
+            if (! $asset->hasQr()) {
+                $asset->mintQrToken();
+            }
+        }
+
         $qrHistory = $request->user()
             ->customQrHistories()
             ->latest()

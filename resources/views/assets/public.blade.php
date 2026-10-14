@@ -56,11 +56,22 @@
             <h2>Identitas Aset</h2>
             <dl>
                 <div class="row"><dt>Kategori</dt><dd>{{ $asset->category?->name ?? '—' }}</dd></div>
+                <div class="row"><dt>Merk / Model</dt><dd>{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) ?: '—' }}</dd></div>
                 <div class="row"><dt>Serial Number</dt><dd>{{ $asset->serial_number ?? '—' }}</dd></div>
                 <div class="row"><dt>Hostname</dt><dd>{{ $asset->hostname ?? '—' }}</dd></div>
+                <div class="row"><dt>Kode Barcode</dt><dd>{{ $asset->barcode ?? '—' }}</dd></div>
+                <div class="row"><dt>Status</dt><dd>{{ $asset->status?->name ?? '—' }}</dd></div>
+            </dl>
+
+            <h2>Kepemilikan &amp; Penempatan</h2>
+            <dl>
                 <div class="row"><dt>Perusahaan</dt><dd>{{ $asset->company?->name ?? '—' }}</dd></div>
                 <div class="row"><dt>Lokasi</dt><dd>{{ $asset->location?->name ?? '—' }}</dd></div>
-                <div class="row"><dt>Pengguna</dt><dd>{{ $asset->currentUser?->name ?? '—' }}</dd></div>
+                <div class="row"><dt>Pengguna Saat Ini</dt><dd>{{ $asset->currentUser?->name ?? 'Tidak ada' }}</dd></div>
+                @if($asset->currentUser?->department)
+                    <div class="row"><dt>Divisi Pengguna</dt><dd>{{ $asset->currentUser->department }}</dd></div>
+                @endif
+                <div class="row"><dt>PIC IT</dt><dd>{{ $asset->adminItPic?->name ?? '—' }}</dd></div>
             </dl>
 
             <h2>Spesifikasi</h2>
@@ -69,8 +80,17 @@
                 <div class="row"><dt>RAM</dt><dd>{{ $asset->ram ?? '—' }}</dd></div>
                 <div class="row"><dt>Storage</dt><dd>{{ $asset->storage ?? '—' }}</dd></div>
                 <div class="row"><dt>Sistem Operasi</dt><dd>{{ $asset->os_version ?? '—' }}</dd></div>
-                <div class="row"><dt>PIC IT</dt><dd>{{ $asset->adminItPic?->name ?? '—' }}</dd></div>
-                <div class="row"><dt>Garansi</dt><dd>{{ $asset->warranty_until?->format('d M Y') ?? '—' }}</dd></div>
+                <div class="row"><dt>MAC Address</dt><dd>{{ $asset->mac_address ?? '—' }}</dd></div>
+                <div class="row"><dt>IP Statis</dt><dd>{{ $asset->static_ip ?? '—' }}</dd></div>
+            </dl>
+
+            <h2>Perolehan &amp; Garansi</h2>
+            <dl>
+                <div class="row"><dt>Vendor</dt><dd>{{ $asset->vendor ?? '—' }}</dd></div>
+                <div class="row"><dt>Tahun Pembelian</dt><dd>{{ $asset->purchase_year ?? '—' }}</dd></div>
+                <div class="row"><dt>Tanggal Deploy</dt><dd>{{ $asset->deploy_date?->translatedFormat('d F Y') ?? '—' }}</dd></div>
+                <div class="row"><dt>Garansi s/d</dt><dd>{{ $asset->warranty_until?->translatedFormat('d F Y') ?? '—' }}</dd></div>
+                <div class="row"><dt>Lisensi Software</dt><dd>{{ $asset->software_license ?? '—' }}</dd></div>
             </dl>
         </div>
 

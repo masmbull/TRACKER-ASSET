@@ -9,10 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.3.5: a command-driven scan now reports stages/percent so the fleet
-          progress dialog moves instead of spinning. Bump so installed machines
-          pick the new binary up. -->
-        <Version>1.3.5</Version>
+        <!-- 1.3.6: the tray's command loop now threads the command id into a
+          server-triggered scan, so the fleet progress dialog advances instead of
+          sitting at 0%. Bump so installed machines pick the new binary up. -->
+        <Version>1.3.6</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

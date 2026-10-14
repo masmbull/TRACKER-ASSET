@@ -107,6 +107,15 @@ class UserController extends Controller
 
     public function access(Request $request): View
     {
+        // Per-page is requested, not fixed, and clamped to a known set. The user
+        // list is the control surface on this screen - an admin looking for one
+        // person out of forty should not have to page through four screens of
+        // twelve, and a hand-typed ?per_page=10000 is a cheap way to dump the
+        // whole directory in one query.
+        $perPage = in_array($request->integer('per_page'), [12, 25, 50, 100], true)
+            ? $request->integer('per_page')
+            : 12;
+
         $users = User::query()
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = '%'.trim((string) $request->input('search')).'%';
@@ -117,7 +126,7 @@ class UserController extends Controller
                     ->orWhere('department', 'like', $search));
             })
             ->orderBy('name')
-            ->paginate(12)
+            ->paginate($perPage)
             ->withQueryString();
 
         $selectedUser = $request->filled('user')
@@ -127,6 +136,7 @@ class UserController extends Controller
         return view('users.access', [
             'users' => $users,
             'selectedUser' => $selectedUser,
+            'perPage' => $perPage,
             'permissionGroups' => User::PERMISSION_GROUPS,
         ]);
     }

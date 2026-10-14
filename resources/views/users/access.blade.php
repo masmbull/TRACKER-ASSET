@@ -36,13 +36,18 @@
                            class="w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pr-3 pl-10 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-brand-500/10 focus:ring-3 focus:outline-none dark:border-gray-700 dark:text-white/90 dark:placeholder:text-white/30">
                 </form>
             </div>
-            <div class="max-h-[26rem] min-h-[26rem] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+            {{-- The list used to be a fixed-height scroll box with a Prev/Next
+                 footer, so a 40-person directory was two nested scrollers (the box
+                 and the page) and the count was invisible. It now flows at its
+                 natural height with a numbered pager and a per-page selector, the
+                 same shape as every other list in the app. --}}
+            <div class="divide-y divide-gray-100 dark:divide-gray-800">
                 @forelse($users as $user)
                     @php
                         $isSelected = $selectedUser?->is($user);
                         $initials = \Illuminate\Support\Str::of($user->name)->trim()->explode(' ')->filter()->map(fn ($part) => mb_substr($part, 0, 1))->take(2)->implode('');
                     @endphp
-                    <a href="{{ route('users.access', array_filter(['user' => $user->id, 'search' => request('search')])) }}"
+                    <a href="{{ route('users.access', array_filter(['user' => $user->id, 'search' => request('search'), 'per_page' => request('per_page')])) }}"
                        @if($isSelected) aria-current="true" @endif
                        class="flex items-center gap-3 px-4 py-3 transition-colors {{ $isSelected ? 'bg-brand-50/70 shadow-[inset_3px_0_0_0_theme(colors.brand.500)] dark:bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-white/5' }}">
                         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-theme-xs font-semibold uppercase {{ $isSelected ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300' }}">{{ $initials }}</span>
@@ -56,7 +61,32 @@
                     <p class="p-5 text-theme-sm text-gray-500 dark:text-gray-400">No users found.</p>
                 @endforelse
             </div>
-            <x-pagination-compact :paginator="$users" />
+
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-3 text-theme-xs dark:border-gray-800">
+                <form method="GET" action="{{ route('users.access') }}" class="flex items-center gap-2">
+                    @if($selectedUser)
+                        <input type="hidden" name="user" value="{{ $selectedUser->id }}">
+                    @endif
+                    @if(request('search'))
+                        <input type="hidden" name="search" value="{{ request('search') }}">
+                    @endif
+                    <label for="per_page" class="text-gray-500 dark:text-gray-400">Show</label>
+                    <select id="per_page" name="per_page" onchange="this.form.submit()"
+                            class="min-w-[4.5rem] rounded-lg border border-gray-300 bg-white py-1 pl-3 pr-8 text-gray-700 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                        @foreach([12, 25, 50, 100] as $option)
+                            <option value="{{ $option }}" @selected($perPage === $option)>{{ $option }}</option>
+                        @endforeach
+                    </select>
+                    <span class="text-gray-500 dark:text-gray-400">per page</span>
+                </form>
+                <p class="text-gray-500 dark:text-gray-400">
+                    Showing {{ $users->firstItem() ?? 0 }} to {{ $users->lastItem() ?? 0 }} of {{ $users->total() }} users
+                </p>
+            </div>
+
+            @if($users->hasPages())
+                {{ $users->links('components.pagination') }}
+            @endif
         </section>
         <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
             @if($selectedUser)

@@ -56,15 +56,27 @@
     <tr><td class="label">Asset ID</td><td>{{ $asset->asset_id ?? '-' }}</td><td class="label">Kategori</td><td>{{ $asset->category?->name ?? '-' }}</td></tr>
     <tr><td class="label">Merk / Model</td><td>{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) ?: '-' }}</td><td class="label">Serial Number</td><td>{{ $asset->serial_number ?? '-' }}</td></tr>
     <tr><td class="label">Hostname</td><td>{{ $asset->hostname ?? '-' }}</td><td class="label">Status</td><td>{{ $asset->status?->name ?? '-' }}</td></tr>
+    <tr><td class="label">Barcode</td><td>{{ $asset->barcode ?? '-' }}</td><td class="label">Sistem Operasi</td><td>{{ $asset->os_version ?? '-' }}</td></tr>
+</table>
+
+<table>
+    <tr><th class="section-head" colspan="4">KEPEMILIKAN &amp; PENEMPATAN</th></tr>
     <tr><td class="label">Perusahaan</td><td>{{ $asset->company?->name ?? '-' }}</td><td class="label">Lokasi</td><td>{{ $asset->location?->name ?? '-' }}</td></tr>
-    <tr><td class="label">Pengguna</td><td>{{ $asset->currentUser?->name ?? '-' }}</td><td class="label">PIC IT</td><td>{{ $asset->adminItPic?->name ?? '-' }}</td></tr>
+    <tr><td class="label">Pengguna Saat Ini</td><td>{{ $asset->currentUser?->name ?? 'Tidak ada' }}</td><td class="label">Divisi Pengguna</td><td>{{ $asset->currentUser?->department ?? '-' }}</td></tr>
+    <tr><td class="label">PIC IT</td><td>{{ $asset->adminItPic?->name ?? '-' }}</td><td class="label">MAC Address</td><td>{{ $asset->mac_address ?? '-' }}</td></tr>
 </table>
 
 <table>
     <tr><th class="section-head" colspan="4">SPESIFIKASI</th></tr>
     <tr><td class="label">Processor</td><td>{{ $asset->processor ?? '-' }}</td><td class="label">RAM</td><td>{{ $asset->ram ?? '-' }}</td></tr>
-    <tr><td class="label">Storage</td><td>{{ $asset->storage ?? '-' }}</td><td class="label">Sistem Operasi</td><td>{{ $asset->os_version ?? '-' }}</td></tr>
-    <tr><td class="label">Tahun Pembelian</td><td>{{ $asset->purchase_year ?? '-' }}</td><td class="label">Garansi s/d</td><td>{{ $asset->warranty_until?->translatedFormat('d F Y') ?? '-' }}</td></tr>
+    <tr><td class="label">Storage</td><td>{{ $asset->storage ?? '-' }}</td><td class="label">IP Statis</td><td>{{ $asset->static_ip ?? '-' }}</td></tr>
+</table>
+
+<table>
+    <tr><th class="section-head" colspan="4">PEROLEHAN &amp; GARANSI</th></tr>
+    <tr><td class="label">Vendor</td><td>{{ $asset->vendor ?? '-' }}</td><td class="label">Tahun Pembelian</td><td>{{ $asset->purchase_year ?? '-' }}</td></tr>
+    <tr><td class="label">Tanggal Deploy</td><td>{{ $asset->deploy_date?->translatedFormat('d F Y') ?? '-' }}</td><td class="label">Garansi s/d</td><td>{{ $asset->warranty_until?->translatedFormat('d F Y') ?? '-' }}</td></tr>
+    <tr><td class="label">Lisensi Software</td><td colspan="3">{{ $asset->software_license ?? '-' }}</td></tr>
 </table>
 
 <div class="footer">
