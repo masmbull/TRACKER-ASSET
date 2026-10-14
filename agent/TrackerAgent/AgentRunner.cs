@@ -571,6 +571,21 @@ public static class AgentRunner
 
             Api.ReportProgress(url, token, commandId, 25, "Running script...");
 
+            // A script that changes machine-wide settings needs elevation; the
+            // agent runs as the logged-in user and a plain `cmd /c` cannot write
+            // HKLM. run_as was accepted by the API and shown in the form but
+            // ignored here, so an endpoint-policy script failed with an access
+            // denied the operator never saw. admin/system now route the script
+            // through a one-shot scheduled task with highest privileges.
+            var runAs = payload.TryGetProperty("run_as", out var runAsEl) && runAsEl.ValueKind == JsonValueKind.String
+                ? runAsEl.GetString() ?? "current-user"
+                : "current-user";
+
+            if (runAs is "admin" or "system")
+            {
+                return RunScriptElevated(scriptPath, scriptType, safeDirectory, commandId, timeoutSeconds, url, token);
+            }
+
             using var launched = Process.Start(startInfo);
             if (launched is null)
             {
@@ -598,6 +613,227 @@ public static class AgentRunner
                 ["message"] = $"The script execution failed: {ex.Message}",
             });
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Run a script with machine-wide privileges, for run_as admin/system.
+    ///
+    /// The tray agent runs as the logged-in user, so a `reg add HKLM\...` or a
+    /// service change fails with access denied. Elevating the already-running
+    /// process is not possible without a UAC prompt nobody is there to answer, so
+    /// the work is handed to a one-shot scheduled task owned by SYSTEM (the same
+    /// mechanism Windows uses for unattended tasks): it is created with highest
+    /// privileges, run once, waited on, and deleted. A wrapper writes the inner
+    /// script's exit code to a file the task itself can then be read from, since
+    /// schtasks does not surface the exit code of what it ran.
+    /// </summary>
+    private static int RunScriptElevated(
+        string scriptPath,
+        string scriptType,
+        string directory,
+        long commandId,
+        int timeoutSeconds,
+        string url,
+        string token)
+    {
+        var taskName = $"TrackerAgent-Script-{commandId}";
+        var markerPath = Path.Combine(directory, $"tracker-script-{commandId}.exit");
+        var wrapperPath = Path.Combine(directory, $"tracker-script-{commandId}.wrapper.cmd");
+
+        try
+        {
+            if (File.Exists(markerPath))
+            {
+                File.Delete(markerPath);
+            }
+
+            // If this process already runs with machine rights (the tray was
+            // launched elevated, or the agent runs as a service), there is nothing
+            // to hand off - run the script directly. Creating a scheduled task
+            // would itself need the very rights we already have, so this is also
+            // the only path that works for a SYSTEM-installed agent.
+            if (IsElevated())
+            {
+                return RunDirect(scriptPath, scriptType, directory, commandId, timeoutSeconds, url, token);
+            }
+
+            // The wrapper runs the real script and records its errorlevel, because
+            // a scheduled task reports only its own success, never the exit code of
+            // the program it launched - so without this every elevated script would
+            // look like it succeeded.
+            var inner = scriptType is "powershell" or "ps1"
+                ? $"powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\""
+                : $"call \"{scriptPath}\"";
+
+            File.WriteAllText(wrapperPath,
+                "@echo off\r\n" +
+                inner + "\r\n" +
+                $"echo %errorlevel% > \"{markerPath}\"\r\n");
+
+            Api.ReportProgress(url, token, commandId, 40, "Running with elevated privileges…");
+
+            if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", timeoutSeconds))
+            {
+                // The honest failure: creating a SYSTEM task is itself an
+                // administrative action, so an agent running as a plain user
+                // cannot perform it. Say what to do rather than "not enough
+                // rights", which reads like a bug in the click.
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "This script needs administrator rights, but the agent is running as a standard user. "
+                        + "Reinstall or start the agent as an administrator (or as a service) on this machine, then push the script again.",
+                });
+                return 1;
+            }
+
+            if (!Run("schtasks", $"/Run /TN \"{taskName}\"", timeoutSeconds))
+            {
+                Run("schtasks", $"/Delete /TN \"{taskName}\" /F", 30);
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "The elevated task could not be started.",
+                });
+                return 1;
+            }
+
+            // Wait for the wrapper to write its marker: the task itself can read as
+            // "Ready" before the script inside it has finished.
+            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (!File.Exists(markerPath) && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(500);
+            }
+
+            Run("schtasks", $"/Delete /TN \"{taskName}\" /F", 30);
+
+            if (!File.Exists(markerPath))
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "The elevated script timed out or left no result.",
+                });
+                return 1;
+            }
+
+            var raw = File.ReadAllText(markerPath).Trim();
+            var exitCode = int.TryParse(raw, out var parsed) ? parsed : 1;
+
+            Api.Ack(url, token, commandId, exitCode == 0 ? "done" : "failed", new Dictionary<string, string>
+            {
+                ["message"] = exitCode == 0
+                    ? "Script completed successfully (elevated)."
+                    : $"The elevated script exited with code {exitCode}.",
+            });
+
+            return exitCode;
+        }
+        catch (Exception ex)
+        {
+            Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+            {
+                ["message"] = $"The elevated script failed: {ex.Message}",
+            });
+            return 1;
+        }
+        finally
+        {
+            try { if (File.Exists(markerPath)) File.Delete(markerPath); } catch { }
+            try { if (File.Exists(wrapperPath)) File.Delete(wrapperPath); } catch { }
+            try { Run("schtasks", $"/Delete /TN \"{taskName}\" /F", 15); } catch { }
+        }
+    }
+
+    /// <summary>True when the process token is a member of the Administrators group.</summary>
+    private static bool IsElevated()
+    {
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Run a script in this (already elevated) process and report its exit code.</summary>
+    private static int RunDirect(
+        string scriptPath,
+        string scriptType,
+        string directory,
+        long commandId,
+        int timeoutSeconds,
+        string url,
+        string token)
+    {
+        var startInfo = scriptType is "powershell" or "ps1"
+            ? new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\"",
+                WorkingDirectory = directory,
+                UseShellExecute = false,
+            }
+            : new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"\"{scriptPath}\"\"",
+                WorkingDirectory = directory,
+                UseShellExecute = false,
+            };
+
+        Api.ReportProgress(url, token, commandId, 40, "Running script (elevated)…");
+
+        using var process = Process.Start(startInfo);
+
+        if (process is null)
+        {
+            Api.Ack(url, token, commandId, "failed", new Dictionary<string, string> { ["message"] = "The script could not be launched." });
+
+            return 1;
+        }
+
+        var exitCode = process.WaitForExit(timeoutSeconds * 1000) ? process.ExitCode : 1;
+
+        Api.Ack(url, token, commandId, exitCode == 0 ? "done" : "failed", new Dictionary<string, string>
+        {
+            ["message"] = exitCode == 0 ? "Script completed successfully (elevated)." : $"The elevated script exited with code {exitCode}.",
+        });
+
+        return exitCode;
+    }
+
+    /// <summary>Run a small helper process to completion; returns true on exit code 0.</summary>
+    private static bool Run(string file, string arguments, int timeoutSeconds)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = file,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            process.WaitForExit(Math.Max(5, timeoutSeconds) * 1000);
+
+            return process.HasExited && process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
         }
     }
 
