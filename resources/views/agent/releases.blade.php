@@ -109,18 +109,13 @@
                                     <x-button type="submit" variant="secondary" size="sm">Activate</x-button>
                                 </form>
                             @endif
-                            <form method="POST" action="{{ route('agent.releases.destroy', $release) }}" onsubmit="return confirm('Delete release {{ $release->version }} and its stored binary?');">
-                                @csrf
-                                @method('DELETE')
-                                <x-button type="submit" variant="ghost" size="sm" class="text-error-600 hover:bg-error-50 dark:text-error-400">Delete</x-button>
-                            </form>
+                            <x-button type="button" variant="ghost" size="sm" class="text-error-600 hover:bg-error-50 dark:text-error-400"
+                                      x-on:click="$dispatch('open-modal', 'delete-release-{{ $release->id }}')">Delete</x-button>
                         @endunless
 
                         @if($release->is_current && $release->hasBinary())
-                            <form method="POST" action="{{ route('agent.releases.push', $release) }}" onsubmit="return confirm('Queue an update to {{ $release->version }} on every device that is not already on it?');">
-                                @csrf
-                                <x-button type="submit" variant="primary" size="sm">Push to fleet</x-button>
-                            </form>
+                            <x-button type="button" variant="primary" size="sm"
+                                      x-on:click="$dispatch('open-modal', 'push-release-{{ $release->id }}')">Push to fleet</x-button>
                         @endif
                     </div>
                 </td>
@@ -189,4 +184,39 @@
         </div>
     </form>
 </x-modal>
+
+{{-- Confirmation dialogs, replacing window.confirm(): the native box is
+     unbranded, cannot be styled for dark mode, and blocks the whole tab. These
+     post through the same data-modal-action pipeline as every other action, so a
+     push also opens the fleet-rollout progress dialog after the click. --}}
+@foreach($releases as $release)
+    @unless($release->is_current)
+        @if($release->hasBinary())
+            <x-modal id="delete-release-{{ $release->id }}" title="Delete release {{ $release->version }}?" maxWidth="md">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+                    This removes release <strong>{{ $release->version }}</strong> and its stored binary. Devices already on it are not affected.
+                </p>
+                <form method="POST" action="{{ route('agent.releases.destroy', $release) }}" data-modal-action data-close-modal="delete-release-{{ $release->id }}" class="mt-5 flex justify-end gap-3">
+                    @csrf
+                    @method('DELETE')
+                    <x-button type="button" variant="secondary" @click="$dispatch('close-modal', 'delete-release-{{ $release->id }}')">Cancel</x-button>
+                    <x-button type="submit" variant="danger">Delete release</x-button>
+                </form>
+            </x-modal>
+        @endif
+    @endunless
+
+    @if($release->is_current && $release->hasBinary())
+        <x-modal id="push-release-{{ $release->id }}" title="Push {{ $release->version }} to the fleet?" maxWidth="md">
+            <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+                Queues an update to <strong>{{ $release->version }}</strong> on every device that is not already on it. Each agent re-pulls the binary and restarts itself in the background.
+            </p>
+            <form method="POST" action="{{ route('agent.releases.push', $release) }}" data-modal-action data-close-modal="push-release-{{ $release->id }}" class="mt-5 flex justify-end gap-3">
+                @csrf
+                <x-button type="button" variant="secondary" @click="$dispatch('close-modal', 'push-release-{{ $release->id }}')">Cancel</x-button>
+                <x-button type="submit" variant="primary">Push to fleet</x-button>
+            </form>
+        </x-modal>
+    @endif
+@endforeach
 @endsection

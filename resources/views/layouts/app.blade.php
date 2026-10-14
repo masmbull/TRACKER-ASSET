@@ -580,6 +580,69 @@
                 }, 1500);
             };
 
+            /**
+             * Watch a broadcast rollout: one command per device, each on its own clock.
+             *
+             * "Push to fleet" queues an update per machine, so there is no single
+             * percentage to show - one device may be offline and not started, another
+             * already back up. The bar therefore tracks how many queued updates have
+             * settled, with the stage of whichever device is furthest along as the
+             * detail line beneath it.
+             */
+            const watchBatch = (commandIds) => {
+                spinner.classList.add('hidden');
+                progressWrap.classList.remove('hidden');
+                title.textContent = 'Updating fleet';
+                pollStartedAt = Date.now();
+                setProgressBar(0, '0 of ' + commandIds.length + ' devices…', false, false);
+                setBusy(true);
+                startElapsedTicker('0 of ' + commandIds.length + ' devices…');
+
+                window.clearInterval(pollTimer);
+                pollTimer = window.setInterval(async () => {
+                    try {
+                        const states = await Promise.all(commandIds.map(async (id) => {
+                            const response = await fetch('/agent/commands/' + id + '/status', {
+                                headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                            return response.ok ? response.json() : null;
+                        }));
+
+                        const settled = states.filter((s) => s && (s.done || s.failed));
+                        const failed = settled.filter((s) => s && s.failed).length;
+                        const total = commandIds.length;
+                        const percent = Math.round((settled.length / total) * 100);
+                        const failedNote = failed > 0 ? ' (' + failed + ' failed)' : '';
+
+                        if (settled.length === total) {
+                            window.clearInterval(pollTimer);
+                            pollTimer = null;
+                            setBusy(false);
+                            setProgressBar(100, total + ' of ' + total + ' devices updated' + failedNote, false, failed > 0);
+                            modal.dataset.busy = 'false';
+                            modal.removeAttribute('aria-busy');
+                            spinner.classList.remove('hidden');
+                            closeButton.classList.remove('hidden');
+                            setBar(false);
+                            title.textContent = failed > 0 ? 'Update finished with errors' : 'Done';
+                            message.textContent = (settled.length - failed) + ' of ' + total + ' devices updated successfully' + failedNote + '.';
+                            window.showToast?.('Fleet update: ' + (settled.length - failed) + '/' + total + ' updated' + failedNote + '.', failed > 0 ? 'error' : 'success');
+                            window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: '' } }));
+                            return;
+                        }
+
+                        const furthest = states.find((s) => s && s.status === 'in_progress') || states.find((s) => s && !s.done && !s.failed);
+                        const detail = furthest?.label || 'Waiting for devices…';
+                        setProgressBar(percent, settled.length + ' of ' + total + ' devices · ' + detail, false, false);
+                        setBusy(true);
+                        startElapsedTicker(settled.length + ' of ' + total + ' devices · ' + detail);
+                    } catch {
+                        // Silence; the next tick retries.
+                    }
+                }, 2000);
+            };
+
             document.querySelectorAll('form[data-modal-action]').forEach((form) => {
                 form.addEventListener('submit', async (event) => {
                     event.preventDefault();
@@ -632,8 +695,18 @@
                         }
 
                         // A queued command is not a finished action: keep the
-                        // dialog open and watch it. Everything else has no work
-                        // to follow, so it closes as before.
+                        // dialog open and watch it. A broadcast rollout carries
+                        // several ids and is watched as a batch. Everything else
+                        // has no work to follow, so it closes as before.
+                        if (payload.command_ids && payload.command_ids.length > 1) {
+                            submitButtons.forEach((button) => {
+                                button.disabled = false;
+                                button.classList.remove('opacity-80');
+                            });
+                            watchBatch(payload.command_ids);
+                            return;
+                        }
+
                         if (payload.command_id) {
                             submitButtons.forEach((button) => {
                                 button.disabled = false;

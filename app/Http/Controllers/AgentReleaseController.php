@@ -171,20 +171,29 @@ class AgentReleaseController extends Controller
             ->get()
             ->filter(fn (AgentApiToken $t) => $t->isOutdated() !== false && $t->isUsable());
 
+        $commands = [];
+
         foreach ($targets as $token) {
-            AgentCommand::create([
+            $commands[] = AgentCommand::create([
                 'agent_token_id' => $token->id,
                 'command' => 'update',
                 'payload' => ['url' => $url],
                 'status' => 'pending',
-            ]);
+            ])->id;
         }
 
-        return $this->respond($request, sprintf(
-            'Update to %s queued for %d device(s). Each re-pulls the binary and restarts in the background.',
-            $release->version,
-            $targets->count()
-        ));
+        // The ids travel back with the response so the page can watch the rollout
+        // device by device. A broadcast is not one job with one percentage: each
+        // machine downloads and restarts on its own clock, so "3 of 5 done" is the
+        // only progress that means anything here.
+        return $this->respond($request,
+            sprintf(
+                'Update to %s queued for %d device(s). Each re-pulls the binary and restarts in the background.',
+                $release->version,
+                count($commands)
+            ),
+            commandIds: $commands
+        );
     }
 
     /**
@@ -250,10 +259,18 @@ class AgentReleaseController extends Controller
         }
     }
 
-    private function respond(Request $request, string $message, bool $success = true): JsonResponse|RedirectResponse
+    private function respond(Request $request, string $message, bool $success = true, array $commandIds = []): JsonResponse|RedirectResponse
     {
         if ($request->expectsJson()) {
-            return response()->json(['ok' => $success, 'message' => $message], $success ? 200 : 422);
+            return response()->json([
+                'ok' => $success,
+                'message' => $message,
+                // Single-command actions (scan, uninstall) set command_id; a
+                // broadcast rollout sets command_ids. The progress dialog reads
+                // whichever is present.
+                'command_id' => $commandIds[0] ?? null,
+                'command_ids' => $commandIds,
+            ], $success ? 200 : 422);
         }
 
         return back()->with($success ? 'success' : 'error', $message);
