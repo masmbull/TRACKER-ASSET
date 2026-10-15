@@ -142,6 +142,61 @@ class LiveFleetTest extends TestCase
     }
 
     /**
+     * A machine that went quiet right after settling an update is the known
+     * failed-self-restart case, and the fleet should say so instead of a bare
+     * "stale" the operator cannot act on.
+     */
+    public function test_offline_reason_names_a_failed_self_restart(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        // The agent went quiet two hours ago, right after an update settled.
+        $quietSince = now()->subHours(2);
+
+        $this->agentToken->forceFill(['last_used_at' => $quietSince])->save();
+        AgentTelemetry::firstOrFail()->forceFill(['reported_at' => $quietSince])->save();
+
+        AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'done',
+            'executed_at' => $quietSince,
+        ]);
+
+        $refresh = $this->actingAs($admin)->getJson(route('agent.fleet.refresh'));
+        $refresh->assertOk();
+
+        $state = collect($refresh->json('devices'))->first();
+
+        $this->assertStringContainsString('did not restart', (string) $state['reason']);
+    }
+
+    /**
+     * A device that is simply switched off gets a plain explanation, not a
+     * misleading update-specific one.
+     */
+    public function test_offline_reason_reports_silence_when_nothing_explains_it(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $this->agentToken->forceFill(['last_used_at' => now()->subHours(5)])->save();
+        AgentTelemetry::firstOrFail()->forceFill(['reported_at' => now()->subHours(5)])->save();
+
+        $refresh = $this->actingAs($admin)->getJson(route('agent.fleet.refresh'));
+        $state = collect($refresh->json('devices'))->first();
+
+        $this->assertStringContainsString('No contact', (string) $state['reason']);
+    }
+
+    /**
      * An agent too old to report elevation sends nothing, and the column stays
      * null - which the page reads as "unknown", not as "not elevated".
      */

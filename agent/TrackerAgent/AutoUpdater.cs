@@ -91,7 +91,12 @@ public static class AutoUpdater
     /// route the operator pointed at. This used to be ignored in favour of a
     /// hardcoded /agent/download, which made the payload decoration only.
     /// </param>
-    public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null, Action<int, string>? onProgress = null)
+    /// <param name="resumeAsDaemon">
+    /// True when this process is the SYSTEM daemon, so the swap re-triggers the
+    /// boot task instead of launching a tray. A tray started from session 0 has no
+    /// desktop and exits, which is how an updated machine went silent.
+    /// </param>
+    public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null, Action<int, string>? onProgress = null, bool resumeAsDaemon = false)
     {
         try
         {
@@ -195,6 +200,16 @@ public static class AutoUpdater
             // and launches the new build, and on failure it launches whatever exe
             // is present - so the worst case is "still the old version, still
             // reporting", never "no agent".
+            // How the agent comes back after the swap. A SYSTEM daemon must resume as
+// the daemon (re-trigger the boot task), not as a tray - a tray launched
+// from session 0 has no desktop and dies, leaving the machine silent. A
+// user-mode agent resumes as the tray. The caller tells us which we are.
+            var restartLine = resumeAsDaemon
+                // Re-run the registered task; it carries the daemon's own
+                // --url/--token, so nothing has to be reconstructed here.
+                ? $"schtasks /Run /TN \"{AgentRunner.SystemTaskNameForRestart}\" >nul 2>&1"
+                : "if exist \"%TARGET%\" start \"\" \"%TARGET%\"";
+
             var scriptContent = $@"@echo off
 timeout /t 3 /nobreak >nul
 set ""TARGET={currentExe}""
@@ -219,7 +234,7 @@ rem the machine keeps its agent rather than going dark.
 if exist ""%NEW%"" del /f /q ""%NEW%"" >nul 2>&1
 
 :launch
-if exist ""%TARGET%"" start """" ""%TARGET%""
+{restartLine}
 del /f /q ""%~f0"" >nul 2>&1
 ";
             File.WriteAllText(updateScript, scriptContent, System.Text.Encoding.ASCII);

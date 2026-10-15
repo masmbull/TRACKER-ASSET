@@ -9,9 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.5.0: the elevated-script task creation is bounded, so a standard-user
-          agent no longer pins the command at 40% for the whole script timeout. -->
-        <Version>1.5.0</Version>
+        <!-- 1.6.0: one agent per machine. The SYSTEM daemon no longer arms a per-user
+          autostart, a tray defers to a live daemon via its marker, and an
+          updated daemon resumes as the daemon rather than a doomed tray. -->
+        <Version>1.6.0</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

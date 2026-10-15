@@ -306,6 +306,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (reported && state.reported_at) {
                         reported.textContent = state.reported_at;
                     }
+
+                    // Why the device is offline, when the server can say. Only
+                    // shown while it is not online, so a healthy machine gains no
+                    // extra line.
+                    const reason = row.querySelector('[data-fleet-reason]');
+                    if (reason) {
+                        if (state.reason && state.status !== 'online') {
+                            reason.textContent = state.reason;
+                            reason.classList.remove('hidden');
+                        } else {
+                            reason.textContent = '';
+                            reason.classList.add('hidden');
+                        }
+                    }
                     const battery = row.querySelector('[data-fleet-battery]');
                     if (battery && state.battery_percent !== null && state.battery_percent !== undefined) {
                         battery.innerHTML = `<span class="font-medium ${state.battery_alert ? 'text-error-500' : 'text-gray-700 dark:text-gray-300'}">${state.battery_percent}%</span><span class="block text-theme-xs text-gray-500 dark:text-gray-400">health ${state.battery_health ?? '—'}%</span>`;

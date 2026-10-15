@@ -70,6 +70,20 @@ class AgentFleetController extends Controller
             ->unique('agent_token_id')
             ->keyBy('agent_token_id');
 
+        // The last command each device actually finished, to explain an offline
+        // state. A machine that went quiet right after telling the server it had
+        // downloaded an update did not simply wink out - its restart failed, which
+        // is a fixable, known cause rather than an unexplained absence. Without
+        // this the page said only "stale", and an operator had no way to tell a
+        // broken self-update from a laptop that was switched off.
+        $lastSettled = AgentCommand::query()
+            ->whereIn('agent_token_id', $devices->pluck('id'))
+            ->whereIn('status', ['done', 'failed'])
+            ->orderByDesc('executed_at')
+            ->get(['agent_token_id', 'command', 'status', 'executed_at', 'result'])
+            ->unique('agent_token_id')
+            ->keyBy('agent_token_id');
+
         $onlineCount = 0;
         $deviceStates = [];
 
@@ -95,6 +109,7 @@ class AgentFleetController extends Controller
 
             $deviceStates[$device->id] = [
                 'status' => $status,
+                'reason' => $isOnline ? null : $this->offlineReason($device, $operation, $lastSettled->get($device->id)),
                 'reported_at' => $telemetry?->reported_at?->diffForHumans() ?? 'no report yet',
                 'is_elevated' => $telemetry?->is_elevated,
                 'battery_percent' => $telemetry?->battery_percent,
@@ -279,6 +294,23 @@ class AgentFleetController extends Controller
             ->groupBy('agent_token_id')
             ->map(fn ($rows) => $rows->first());
 
+        // Why each offline device is offline, for the status column. Computed here
+        // (the same helper the live refresh uses) so the first paint already
+        // explains a dark machine, not only after the next 15 s poll.
+        $offlineReasons = $devices
+            ->filter(fn (AgentApiToken $t) => $t->isUsable() && $t->telemetry !== null)
+            ->filter(fn (AgentApiToken $t) => ! $t->telemetry->isOnline()
+                && ! ($t->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false))
+            ->mapWithKeys(function (AgentApiToken $t) use ($activeOperations) {
+                $lastSettled = AgentCommand::query()
+                    ->where('agent_token_id', $t->id)
+                    ->whereIn('status', ['done', 'failed'])
+                    ->orderByDesc('executed_at')
+                    ->first();
+
+                return [$t->id => $this->offlineReason($t, $activeOperations->get($t->id), $lastSettled)];
+            });
+
         // Revoked devices are split off: their agent can never authenticate
         // again, so every action column entry for them is dead weight and they
         // only dilute the count of machines an operator actually manages. This
@@ -372,6 +404,7 @@ class AgentFleetController extends Controller
             'pendingUninstalls' => $pendingUninstalls,
             'activeOperations' => $activeOperations,
             'findingsByToken' => $findingsByToken,
+            'offlineReasons' => $offlineReasons,
         ]);
     }
 
@@ -1029,6 +1062,39 @@ class AgentFleetController extends Controller
         }
 
         return $this->actionResponse($request, sprintf('Sweep queued %d agent(s).', $queued), commandIds: $commandIds);
+    }
+
+    /**
+     * Why a device that is not answering is not answering.
+     *
+     * "stale" alone tells an operator nothing actionable. The two causes they can
+     * act on are worth naming: a machine that went quiet immediately after an
+     * update settled is the failed-self-restart case (the update said it finished,
+     * the process never came back), and a machine with an open update that never
+     * progressed never got to run it. Anything else is just silence, reported as
+     * how long it has been quiet.
+     */
+    private function offlineReason(AgentApiToken $device, ?AgentCommand $operation, ?AgentCommand $lastSettled): ?string
+    {
+        // An update that was queued but never picked up.
+        if ($operation !== null && $operation->command === 'update' && $operation->isStalled()) {
+            return 'An update was queued but the agent has not collected it — the agent may not be running.';
+        }
+
+        // The device went quiet right after settling an update: the self-restart.
+        if ($lastSettled !== null
+            && $lastSettled->command === 'update'
+            && $device->last_used_at !== null
+            && $lastSettled->executed_at !== null
+            && abs($device->last_used_at->diffInSeconds($lastSettled->executed_at)) <= 120) {
+            return 'Went offline right after an update: the agent downloaded the new build but did not restart. Reinstall the agent on this machine.';
+        }
+
+        $quiet = $device->last_used_at?->diffForHumans();
+
+        return $quiet === null
+            ? 'The agent has never reported in.'
+            : 'No contact from the agent for '.$quiet.' — the machine may be off, or the agent stopped.';
     }
 
     private function actionResponse(Request $request, string $message, bool $success = true, ?int $commandId = null, array $commandIds = []): JsonResponse|RedirectResponse

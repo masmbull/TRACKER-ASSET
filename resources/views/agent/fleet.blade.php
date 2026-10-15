@@ -161,6 +161,14 @@
                                 {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans() : 'no report yet' }}
                             </span>
 
+                            {{-- Why an offline device is offline, when the server can
+                                 say. Hidden while online so a healthy machine gains
+                                 no extra line. --}}
+                            <span @class([
+                                'mt-1 block max-w-[16rem] text-theme-xs text-warning-600 dark:text-warning-300',
+                                'hidden' => ! isset($offlineReasons[$device->id]) || ($online ?? false) || ($polling ?? false),
+                            ]) data-fleet-reason>{{ $offlineReasons[$device->id] ?? '' }}</span>
+
                             {{-- Install and update progress. Without this a rollout is
                                  a blank wait: there is no way to tell a machine working
                                  through its first inventory from one that hung

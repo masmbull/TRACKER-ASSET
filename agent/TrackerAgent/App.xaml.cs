@@ -162,8 +162,26 @@ public partial class App : System.Windows.Application
 
     private void StartTray(AgentConfig config)
     {
+        // If the SYSTEM daemon owns this machine, stand down.
+        //
+        // The daemon runs as SYSTEM from a scheduled task; this tray runs in a
+        // user session. A per-session mutex cannot see across sessions, and a
+        // Global mutex cannot be created by a standard user (no
+        // SeCreateGlobalPrivilege), so neither can enforce "one agent". The daemon
+        // instead touches a marker file under ProgramData that any user can read;
+        // finding it fresh means the daemon is alive and this tray must not also
+        // poll the one token.
+        if (AgentRunner.IsSystemDaemonAlive())
+        {
+            AgentLog.Write("SYSTEM daemon is active; tray standing down to avoid two agents on one token.");
+            Shutdown();
+            return;
+        }
+
         try
         {
+            // Same-session guard: prevents two trays in one session. Cross-session
+            // is handled by the marker above.
             _trayMutex = new Mutex(true, @"Local\MITO.TRACKER-ASSET.Tray", out _ownsTrayMutex);
 
             if (!_ownsTrayMutex)

@@ -852,6 +852,49 @@ public static class AgentRunner
     /// </summary>
     public static bool IsProcessElevated() => IsElevated();
 
+    /// <summary>Heartbeat file the SYSTEM daemon touches so a tray can see it is alive.</summary>
+    private static string DaemonMarker =>
+        Path.Combine(ProtectedDir, "daemon.alive");
+
+    /// <summary>
+    /// Touch the daemon marker. Called by the SYSTEM daemon each loop so a user
+    /// tray (which cannot see a SYSTEM process or a cross-session mutex) can tell
+    /// the daemon owns the machine and stay down.
+    /// </summary>
+    public static void TouchDaemonMarker()
+    {
+        try
+        {
+            Directory.CreateDirectory(ProtectedDir);
+            File.WriteAllText(DaemonMarker, DateTimeOffset.UtcNow.ToString("o"));
+        }
+        catch
+        {
+            // Marker is best-effort; a failure just means a tray may not defer.
+        }
+    }
+
+    /// <summary>
+    /// True when a SYSTEM daemon touched its marker recently (within three
+    /// heartbeats). A stale marker means the daemon is gone, so a tray may run.
+    /// </summary>
+    public static bool IsSystemDaemonAlive()
+    {
+        try
+        {
+            if (!File.Exists(DaemonMarker))
+            {
+                return false;
+            }
+
+            return DateTime.UtcNow - File.GetLastWriteTimeUtc(DaemonMarker) < TimeSpan.FromMinutes(3);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Ask Windows to relaunch this binary elevated and register the boot-time
     /// SYSTEM task, so machine-level scripts stop needing a human.
@@ -1160,6 +1203,12 @@ public static class AgentRunner
                 {
                     SendHeartbeat(url, token, assetId);
 
+                    // Mark this daemon alive so a user-session tray stands down.
+                    // A SYSTEM process and a user process cannot see each other's
+                    // session-local mutex, so this file is the only signal that
+                    // crosses the boundary. Only the daemon writes it.
+                    TouchDaemonMarker();
+
                     // Advance regardless of success. On failure the retry waits a
                     // full interval rather than hammering an unreachable server.
                     nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(HeartbeatSeconds);
@@ -1247,7 +1296,7 @@ public static class AgentRunner
                             // complete, stayed on the old build, and nothing said
                             // otherwise. The only honest moment to settle this row
                             // is after the call returns.
-                            if (AutoUpdater.PerformUpdate(url, token, downloadUrl))
+                            if (AutoUpdater.PerformUpdate(url, token, downloadUrl, resumeAsDaemon: IsElevated()))
                             {
                                 Api.Ack(url, token, id, "done", new Dictionary<string, string>
                                 {
@@ -1518,6 +1567,12 @@ public static class AgentRunner
     private const string SystemTaskName = "MitoAuditTrackerService";
 
     /// <summary>
+    /// The SYSTEM task's name, for code that re-triggers it (the update swap)
+    /// without being able to reach the private constant.
+    /// </summary>
+    public static string SystemTaskNameForRestart => SystemTaskName;
+
+    /// <summary>
     /// Register the daemon to run as SYSTEM at boot, then drop the per-user
     /// autostart entry so the two cannot both run and fight over the inbox.
     /// </summary>
@@ -1566,27 +1621,146 @@ public static class AgentRunner
         }
         Console.WriteLine("[OK] Registered SYSTEM task (runs at boot as SYSTEM).");
 
-        // The task replaces the autostart entry. Leaving both would start two
-        // daemons - one as the user, one as SYSTEM - each polling the same
-        // token and double-acking every command.
-        try
-        {
-            using var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
-            if (runKey?.GetValue(RunValueName) is not null)
-            {
-                runKey.DeleteValue(RunValueName, false);
-                Console.WriteLine("[OK] Removed the per-user autostart entry (the SYSTEM task supersedes it).");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[!] Could not remove the autostart entry: {ex.Message}");
-        }
+        // The task replaces every per-user autostart entry, not just this
+        // profile's. The old code deleted only the SYSTEM profile's Run value (the
+        // only one this elevated process can see), so a logged-in user's tray
+        // survived, started at their next logon and ran the command loop
+        // alongside the SYSTEM daemon - two agents, one token, is_elevated
+        // flipping per poll. Remove it for every real user profile and kill any
+        // tray already running in one.
+        RemoveAllUserAutostarts();
+        KillUserTrays(exe);
 
         // Start it now so the machine is on-system without waiting for a reboot.
         Run("schtasks", $"/Run /TN \"{SystemTaskName}\"", 30);
 
         return 0;
+    }
+
+    /// <summary>
+    /// Remove the per-user autostart value from every real user profile, so no
+    /// tray starts at anyone's logon once the SYSTEM task owns the agent.
+    /// </summary>
+    static void RemoveAllUserAutostarts()
+    {
+        foreach (var sid in UserProfileSids())
+        {
+            try
+            {
+                using var baseKey = Registry.Users.OpenSubKey($@"{sid}\{RunKeyPath}", true);
+                if (baseKey?.GetValue(RunValueName) is not null)
+                {
+                    baseKey.DeleteValue(RunValueName, false);
+                    Console.WriteLine($"[OK] Removed autostart for {sid}.");
+                }
+            }
+            catch
+            {
+                // A profile we cannot open is not fatal - the visible ones are.
+            }
+        }
+
+        // And this process's own hive, in case it runs as a user somewhere.
+        try
+        {
+            using var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
+            runKey?.DeleteValue(RunValueName, false);
+        }
+        catch
+        {
+        }
+    }
+
+    /// <summary>
+    /// Every loaded user profile's SID under HKEY_USERS, excluding the system
+    /// accounts. Those are the hives that can hold a real user's Run key.
+    /// </summary>
+    private static IEnumerable<string> UserProfileSids()
+    {
+        List<string> sids = [];
+
+        try
+        {
+            using var users = Registry.Users;
+            foreach (var name in users.GetSubKeyNames())
+            {
+                // S-1-5-18 (SYSTEM), S-1-5-19 (LocalService), S-1-5-20
+                // (NetworkService) and the .DEFAULT/class hives are not user
+                // profiles; a real interactive user is an S-1-5-21-* SID.
+                if (name.StartsWith("S-1-5-21-", StringComparison.OrdinalIgnoreCase))
+                {
+                    sids.Add(name);
+                }
+            }
+        }
+        catch
+        {
+            // HKEY_USERS unreadable - nothing to enumerate.
+        }
+
+        return sids;
+    }
+
+    /// <summary>
+    /// Stop any tray-mode agent still running in a user session. The SYSTEM
+    /// daemon is now the one agent; a surviving tray would double-poll.
+    /// </summary>
+    static void KillUserTrays(string systemExe)
+    {
+        var self = Environment.ProcessId;
+
+        foreach (var proc in Process.GetProcessesByName("TrackerAgent"))
+        {
+            if (proc.Id == self)
+            {
+                continue;
+            }
+
+            try
+            {
+                // Only kill a process that is NOT this SYSTEM daemon: a tray runs
+                // without --daemon, the daemon with it. The command line is the
+                // only reliable tell from another process.
+                var cmdline = ReadCommandLine(proc.Id);
+                if (cmdline.Contains("--daemon", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                proc.Kill();
+                proc.WaitForExit(5000);
+                Console.WriteLine($"[OK] Stopped a user-session tray (pid {proc.Id}).");
+            }
+            catch
+            {
+                // Access denied or already gone.
+            }
+            finally
+            {
+                proc.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Best-effort command line of a process, via WMI.</summary>
+    private static string ReadCommandLine(int pid)
+    {
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher(
+                $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {pid}");
+
+            foreach (var obj in searcher.Get())
+            {
+                return obj["CommandLine"]?.ToString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            // WMI unavailable.
+        }
+
+        return string.Empty;
     }
 
     /// <summary>Delete the SYSTEM task, ignoring "not found" so uninstall is idempotent.</summary>
@@ -1601,9 +1775,7 @@ public static class AgentRunner
 
         RemoveProtectedCopy();
 
-        Console.WriteLine(removed
-            ? "[OK] SYSTEM task removed."
-            : "[i] No SYSTEM task was registered (nothing to remove).");
+        Console.WriteLine($"[OK] SYSTEM task removed.");
 
         return 0;
     }
@@ -1868,18 +2040,18 @@ public static class AgentRunner
             var exe = Environment.ProcessPath
                 ?? Path.Combine(AppContext.BaseDirectory, "TrackerAgent.exe");
 
-            // Autostart launches the TRAY, not the headless daemon.
-            //
-            // The daemon has no window and no message pump, and Windows will not
-            // raise a UAC consent dialog from such a process - a runas launch is
-            // accepted by Process.Start and then produces nothing. That is why a
-            // run_as:system script on a daemon-installed machine failed with no
-            // prompt. The tray runs the same command loop but has a UI thread, so
-            // the one-time elevation prompt the agent raises actually appears.
-            //
-            // No --url/--token: the tray reads config.json the installer wrote,
-            // which is also what keeps it correct after the server rotates the
-            // credential. The daemon needed them because it had no other source.
+            // A SYSTEM-run daemon must NOT write a per-user autostart entry. It
+            // would only be writing the SYSTEM profile's Run key, and the whole
+            // point of the SYSTEM task is that the daemon starts from the task, not
+            // from a logon. Writing it here is the bug that let a user-session tray
+            // and the SYSTEM daemon both run, both poll the one token, and both
+            // report is_elevated - which is why the flag flipped between true and
+            // false from poll to poll.
+            if (IsElevated())
+            {
+                return;
+            }
+
             using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
             key?.SetValue(RunValueName, $"\"{exe}\"");
             Console.WriteLine("[OK] Registered for autostart (HKCU Run, tray).");
