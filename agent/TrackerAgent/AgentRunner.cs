@@ -18,7 +18,7 @@ public static class AgentRunner
     private const int AttachParentProcess = -1;
 
     /// <summary>
-    /// How often the daemon pushes a telemetry ping while idle (PRD §11).
+    /// How often the daemon pushes a telemetry ping while idle (PRD Â§11).
     /// </summary>
     /// <remarks>
     /// 60 seconds against a 2-minute online window on the server gives exactly
@@ -291,8 +291,8 @@ public static class AgentRunner
         _ => false,
     };
     /// <summary>
-    /// Default server address when no --url is given: environment override →
-    /// address baked into the downloaded installer (AgentConfigTrailer) →
+    /// Default server address when no --url is given: environment override â†’
+    /// address baked into the downloaded installer (AgentConfigTrailer) â†’
     /// local development server.
     /// </summary>
     static string ResolveDefaultServerUrl()
@@ -420,11 +420,11 @@ public static class AgentRunner
         try
         {
             // A scan driven by a fleet command reports where it has got to, so the
-            // operator watching the modal sees "Uploading audit…" rather than a
+            // operator watching the modal sees "Uploading auditâ€¦" rather than a
             // spinner that says nothing for a minute. A heartbeat-driven scan has
             // no command id and stays silent. Best-effort throughout: a lost
             // progress ping must never abort real collection work.
-            ReportScanProgress(url, token, commandId, 10, "Collecting hardware…");
+            ReportScanProgress(url, token, commandId, 10, "Collecting hardwareâ€¦");
 
             var payload = HardwareCollector.Collect();
             if (!string.IsNullOrWhiteSpace(assetId))
@@ -438,7 +438,7 @@ public static class AgentRunner
                 payload["device_id"] = deviceId;
             }
 
-            ReportScanProgress(url, token, commandId, 40, "Uploading audit…");
+            ReportScanProgress(url, token, commandId, 40, "Uploading auditâ€¦");
 
             var result = Api.Post(url, token, payload);
 
@@ -456,14 +456,14 @@ public static class AgentRunner
             // full scan is the natural moment to refresh the second one, since
             // the user is already waiting and the registry walk costs seconds.
             //
-            ReportScanProgress(url, token, commandId, 65, "Collecting deep inventory…");
+            ReportScanProgress(url, token, commandId, 65, "Collecting deep inventoryâ€¦");
 
             if (!SendFingerprint(url, token, commandId))
             {
                 return 1;
             }
 
-            ReportScanProgress(url, token, commandId, 95, "Finishing…");
+            ReportScanProgress(url, token, commandId, 95, "Finishingâ€¦");
 
             return 0;
         }
@@ -713,7 +713,7 @@ public static class AgentRunner
                 inner + "\r\n" +
                 $"echo %errorlevel% > \"{markerPath}\"\r\n");
 
-            Api.ReportProgress(url, token, commandId, 40, "Running with elevated privileges…");
+            Api.ReportProgress(url, token, commandId, 40, "Running with elevated privilegesâ€¦");
 
             if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", timeoutSeconds))
             {
@@ -843,35 +843,62 @@ public static class AgentRunner
             return false;
         }
 
-        try
+        var exe = SelfBinaryPath();
+        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
         {
-            var exe = SelfBinaryPath();
-            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
-            {
-                return false;
-            }
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = $"--install-service --quiet --url \"{url}\" --token \"{token}\"",
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden,
-            };
-
-            // Do not wait: the consent dialog blocks until a human answers, and
-            // the daemon must keep polling. The child registers the task itself.
-            Process.Start(psi);
-
-            return true;
-        }
-        catch
-        {
-            // UAC declined, or no interactive session to raise it in. The caller
-            // falls through to the plain "needs admin" message.
             return false;
         }
+
+        // The UAC dialog is a shell UI, and raising it reliably needs a thread
+        // with a message pump on the interactive desktop. The tray (WPF) has one;
+        // the headless `--daemon` process does not, and a runas launch from there
+        // was accepted by Process.Start yet produced no visible prompt - the
+        // failure this fixes. So when a WPF Application exists, marshal the launch
+        // onto its UI thread; otherwise fall through to a direct attempt, which
+        // is all a non-GUI process can do.
+        var launched = false;
+
+        void Launch()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = $"--install-service --quiet --url \"{url}\" --token \"{token}\"",
+                    UseShellExecute = true,
+                    Verb = "runas",
+                };
+
+                // Deliberately NOT waited on: the consent dialog blocks until a
+                // human answers and the poll loop must keep running. The elevated
+                // child registers the task itself and exits.
+                Process.Start(psi);
+                launched = true;
+            }
+            catch (Exception ex)
+            {
+                // Win32Exception 1223 is "the user declined"; no interactive
+                // session is the other common case. Both mean the same thing to
+                // the caller - this machine still needs a manual install.
+                AgentLog.Write($"UAC promote attempt failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        var app = System.Windows.Application.Current;
+        if (app?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            // Invoke (blocking) so `launched` is set before we return: the caller
+            // decides the command's message from it, and a fire-and-forget
+            // BeginInvoke would race that decision.
+            dispatcher.Invoke(Launch);
+        }
+        else
+        {
+            Launch();
+        }
+
+        return launched;
     }
 
     /// <summary>Run a script in this (already elevated) process and report its exit code.</summary>
@@ -900,7 +927,7 @@ public static class AgentRunner
                 UseShellExecute = false,
             };
 
-        Api.ReportProgress(url, token, commandId, 40, "Running script (elevated)…");
+        Api.ReportProgress(url, token, commandId, 40, "Running script (elevated)â€¦");
 
         using var process = Process.Start(startInfo);
 
@@ -1058,7 +1085,7 @@ public static class AgentRunner
     /// </summary>
     static int RunDaemon(string url, string token, string? assetId, int pollSeconds)
     {
-        RegisterAutostart(url, token, assetId, pollSeconds);
+        RegisterAutostart();
         Console.WriteLine($"[OK] Daemon started - waiting on {url} for commands.");
 
         // Telemetry heartbeat. The inbox only carries commands, so a device that
@@ -1134,7 +1161,7 @@ public static class AgentRunner
                 {
                     // The Run key still carries the dead token, so a reboot
                     // would resurrect the broken credential.
-                    RegisterAutostart(url, token, assetId, pollSeconds);
+                    RegisterAutostart();
                 }
 
                 if (commands is not null)
@@ -1275,11 +1302,11 @@ public static class AgentRunner
             // seconds on a loaded machine - and it used to sit silent after one
             // "collecting deep inventory" note. Reporting either side of it keeps
             // the progress bar moving through the wait instead of parking at 65%.
-            ReportScanProgress(url, token, commandId, 72, "Reading installed software…");
+            ReportScanProgress(url, token, commandId, 72, "Reading installed softwareâ€¦");
 
             var payload = FingerprintCollector.Collect();
 
-            ReportScanProgress(url, token, commandId, 90, "Uploading inventory…");
+            ReportScanProgress(url, token, commandId, 90, "Uploading inventoryâ€¦");
 
             // Reuse the same device id the daemon registers with. The collector
             // deliberately does not derive one itself: reading a different
@@ -1536,26 +1563,28 @@ public static class AgentRunner
         return 0;
     }
 
-    static void RegisterAutostart(string url, string token, string? assetId, int pollSeconds)
+    static void RegisterAutostart()
     {
         try
         {
             var exe = Environment.ProcessPath
                 ?? Path.Combine(AppContext.BaseDirectory, "TrackerAgent.exe");
 
-            // --quiet is belt and braces: Run() already silences itself when it
-            // cannot attach to a terminal. Passing it explicitly means the autostart
-            // entry stays quiet even if that check ever regresses, and it records in
-            // the registry entry itself that this is a background launch.
-            var args = $"--daemon --quiet --url \"{url}\" --token \"{token}\" --poll {pollSeconds}";
-            if (!string.IsNullOrWhiteSpace(assetId))
-            {
-                args += $" --asset-id \"{assetId}\"";
-            }
-
+            // Autostart launches the TRAY, not the headless daemon.
+            //
+            // The daemon has no window and no message pump, and Windows will not
+            // raise a UAC consent dialog from such a process - a runas launch is
+            // accepted by Process.Start and then produces nothing. That is why a
+            // run_as:system script on a daemon-installed machine failed with no
+            // prompt. The tray runs the same command loop but has a UI thread, so
+            // the one-time elevation prompt the agent raises actually appears.
+            //
+            // No --url/--token: the tray reads config.json the installer wrote,
+            // which is also what keeps it correct after the server rotates the
+            // credential. The daemon needed them because it had no other source.
             using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
-            key?.SetValue(RunValueName, $"\"{exe}\" {args}");
-            Console.WriteLine("[OK] Registered for autostart (HKCU Run).");
+            key?.SetValue(RunValueName, $"\"{exe}\"");
+            Console.WriteLine("[OK] Registered for autostart (HKCU Run, tray).");
         }
         catch (Exception ex)
         {

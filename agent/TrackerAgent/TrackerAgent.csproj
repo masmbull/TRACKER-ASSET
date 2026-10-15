@@ -9,11 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.1: a standard-user agent that hits a run_as:system script now
-          raises a one-time UAC prompt to register the boot-time SYSTEM task, so
-          the fleet can promote a laptop without a manual reinstall. Bump so
-          installed machines pick the new binary up. -->
-        <Version>1.4.1</Version>
+        <!-- 1.4.2: autostart launches the tray (UI thread) instead of the
+          headless daemon, so the one-time UAC prompt for a run_as:system script
+          actually appears. Also marshals that prompt onto the WPF UI thread. -->
+        <Version>1.4.2</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
