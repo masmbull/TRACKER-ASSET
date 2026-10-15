@@ -9,10 +9,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.4: a standalone `elevate` command lets the fleet promote one
-          laptop to an administrator from the browser, without pushing a script
-          first. -->
-        <Version>1.4.4</Version>
+        <!-- 1.4.5: the elevation prompt is raised on its own thread (never the
+          WPF UI thread, where Process.Start(runas) froze the pump and the prompt
+          never painted), and the command is acked before the blocking prompt so
+          it no longer sits in_progress for the whole timeout. -->
+        <Version>1.4.5</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

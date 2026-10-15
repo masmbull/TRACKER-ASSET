@@ -718,12 +718,11 @@ public static class AgentRunner
             if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", timeoutSeconds))
             {
                 // Creating a SYSTEM task is an administrative action, so a
-                // standard-user agent cannot do it. Before giving up, try to
-                // become the SYSTEM agent for good: a one-time UAC prompt
-                // registers the boot-time SYSTEM task (the same thing the
-                // installer does when run elevated). If someone is at the machine
-                // and grants it, the very next poll runs this script as SYSTEM and
-                // every future one needs no prompt.
+                // standard-user agent cannot do it. Settle the command NOW, before
+                // asking for elevation: Process.Start(runas) blocks until the
+                // prompt is answered, and acking after it left the command
+                // in_progress for the whole timeout - the progress bar sat at 40%
+                // for minutes. The elevation request is fire-and-forget by design.
                 if (PromoteToSystemService(url, token))
                 {
                     Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
@@ -879,33 +878,34 @@ public static class AgentRunner
                     Verb = "runas",
                 };
 
-                // Deliberately NOT waited on: the consent dialog blocks until a
-                // human answers and the poll loop must keep running. The elevated
-                // child registers the task itself and exits.
-                Process.Start(psi);
+                // Marked before the blocking call: Process.Start(runas) does not
+                // return until the consent dialog is answered, so setting this
+                // afterwards would report "not requested" while the prompt is
+                // still on screen. "We asked" is the truthful state here; a
+                // decline is a separate outcome the machine simply does not act on.
                 launched = true;
+
+                // Blocks until the consent dialog is answered, which is why this
+                // runs on its own thread and never on the WPF UI thread - freezing
+                // that pump is what stopped the prompt painting at all.
+                Process.Start(psi);
             }
             catch (Exception ex)
             {
+                launched = false;
+
                 // Win32Exception 1223 is "the user declined"; no interactive
-                // session is the other common case. Both mean the same thing to
-                // the caller - this machine still needs a manual install.
+                // session is the other common case.
                 AgentLog.Write($"UAC promote attempt failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
-        var app = System.Windows.Application.Current;
-        if (app?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
-        {
-            // Invoke (blocking) so `launched` is set before we return: the caller
-            // decides the command's message from it, and a fire-and-forget
-            // BeginInvoke would race that decision.
-            dispatcher.Invoke(Launch);
-        }
-        else
-        {
-            Launch();
-        }
+        // Off the UI thread deliberately (see Launch). The join is short: enough
+        // for Process.Start to raise the prompt or throw, not so long that it
+        // blocks the caller waiting on the user.
+        var worker = new Thread(Launch) { IsBackground = true };
+        worker.Start();
+        worker.Join(TimeSpan.FromSeconds(3));
 
         return launched;
     }
