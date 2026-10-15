@@ -70,6 +70,7 @@ class LiveFleetTest extends TestCase
             'ip_address' => '192.168.1.44',
             'device_id' => 'ZGV2aWNlLTAwMQ==',
             'logged_in_user' => 'mbul',
+            'is_elevated' => '1',
             'gpu' => 'Intel Iris Xe Graphics',
             'ram_config' => '2x 8GB @ 3200 MHz',
             'wifi_ssid' => 'MITO-OFFICE',
@@ -116,6 +117,44 @@ class LiveFleetTest extends TestCase
         $this->assertTrue($telemetry->isOnline());
         $this->assertFalse($telemetry->hasLowDisk());
         $this->assertFalse($telemetry->hasWeakBattery());
+    }
+
+    /**
+     * The fleet has to see which laptops can run a system-level script, so the
+     * agent's elevation state is stored with its telemetry and returned by the
+     * live refresh. "1"/"0" is the wire form the string payload carries.
+     */
+    public function test_telemetry_records_and_refreshes_the_elevation_state(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload(['is_elevated' => '0']))
+            ->assertCreated();
+
+        $this->assertFalse(AgentTelemetry::firstOrFail()->is_elevated);
+
+        $refresh = $this->actingAs($admin)->getJson(route('agent.fleet.refresh'));
+        $refresh->assertOk();
+
+        $state = collect($refresh->json('devices'))->first();
+        $this->assertFalse($state['is_elevated'], 'refresh must expose the elevation state');
+    }
+
+    /**
+     * An agent too old to report elevation sends nothing, and the column stays
+     * null - which the page reads as "unknown", not as "not elevated".
+     */
+    public function test_elevation_is_null_when_the_agent_does_not_report_it(): void
+    {
+        $payload = $this->telemetryPayload();
+        unset($payload['is_elevated']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $payload)
+            ->assertCreated();
+
+        $this->assertNull(AgentTelemetry::firstOrFail()->is_elevated);
     }
 
     public function test_repeated_scans_refresh_the_same_snapshot(): void

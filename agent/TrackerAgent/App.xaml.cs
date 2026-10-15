@@ -293,8 +293,33 @@ public partial class App : System.Windows.Application
                         }
                         else if (command == "update")
                         {
-                            Api.Ack(config.ServerUrl, config.Token, id, "done");
-                            if (AutoUpdater.PerformUpdate(config.ServerUrl, config.Token))
+                            // Report progress while the 160 MB download runs, then
+                            // ack DONE only if it actually succeeded. The old order
+                            // acked first and updated second, so the server settled
+                            // the row as "done" before the binary had even been
+                            // fetched - a failed download still looked like a
+                            // successful update, and the progress dialog sat at 0%
+                            // for the whole wait because nothing reported.
+                            var ok = AutoUpdater.PerformUpdate(
+                                config.ServerUrl,
+                                config.Token,
+                                payloadUrl: cmd.TryGetProperty("payload", out var up) &&
+                                            up.ValueKind == JsonValueKind.Object &&
+                                            up.TryGetProperty("url", out var u)
+                                    ? u.GetString()
+                                    : null,
+                                onProgress: (percent, stage) =>
+                                    Api.ReportProgress(config.ServerUrl, config.Token, id, percent, stage));
+
+                            Api.Ack(config.ServerUrl, config.Token, id, ok ? "done" : "failed",
+                                new Dictionary<string, string>
+                                {
+                                    ["message"] = ok
+                                        ? "Update downloaded; the agent is restarting on the new build."
+                                        : "The update download failed. Check network reachability to the server.",
+                                });
+
+                            if (ok)
                             {
                                 Environment.Exit(0);
                             }

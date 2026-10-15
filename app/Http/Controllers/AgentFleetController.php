@@ -96,6 +96,7 @@ class AgentFleetController extends Controller
             $deviceStates[$device->id] = [
                 'status' => $status,
                 'reported_at' => $telemetry?->reported_at?->diffForHumans() ?? 'no report yet',
+                'is_elevated' => $telemetry?->is_elevated,
                 'battery_percent' => $telemetry?->battery_percent,
                 'battery_health' => $telemetry?->battery_health,
                 'battery_alert' => $telemetry !== null
@@ -131,6 +132,7 @@ class AgentFleetController extends Controller
                     fn (string $column): string => $query->getModel()->qualifyColumn($column),
                     [
                         'id', 'agent_token_id', 'asset_id', 'hostname', 'logged_in_user',
+                        'is_elevated',
                         'os', 'ip_address', 'battery_percent', 'battery_health',
                         'battery_cycle_count', 'disk_free_gb', 'disk_total_gb',
                         'disk_free_percent', 'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',

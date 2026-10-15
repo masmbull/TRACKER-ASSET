@@ -74,7 +74,7 @@ class AuditApiController extends Controller
     private function telemetryDelta(Request $request, array $payload, AgentTelemetry $current): array
     {
         $columns = [
-            'hostname', 'logged_in_user', 'os', 'ip_address', 'gpu', 'ram_config',
+            'hostname', 'logged_in_user', 'is_elevated', 'os', 'ip_address', 'gpu', 'ram_config',
             'wifi_ssid', 'battery_percent', 'battery_health', 'battery_cycle_count',
             'wifi_signal', 'network_type', 'network_adapter', 'network_speed',
             'uptime_hours',
@@ -131,6 +131,7 @@ class AuditApiController extends Controller
             'os' => 'nullable|string|max:255',
             'ip_address' => 'nullable|string|max:255',
             'logged_in_user' => 'nullable|string|max:255',
+            'is_elevated' => 'nullable|boolean',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',
@@ -165,6 +166,7 @@ class AuditApiController extends Controller
             'ip_address' => 'nullable|string|max:255',
             'device_id' => 'nullable|string|max:255',
             'logged_in_user' => 'nullable|string|max:255',
+            'is_elevated' => 'nullable|boolean',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',
@@ -436,6 +438,7 @@ class AuditApiController extends Controller
             'device_id' => $payload['device_id'] ?? $token?->device_id,
             'hostname' => $payload['hostname'] ?? null,
             'logged_in_user' => $payload['logged_in_user'] ?? null,
+            'is_elevated' => array_key_exists('is_elevated', $payload) ? (bool) $payload['is_elevated'] : null,
             'os' => $payload['os'] ?? null,
             'ip_address' => $payload['ip_address'] ?? null,
             'battery_percent' => $this->intOrNull($payload['battery_percent'] ?? null),

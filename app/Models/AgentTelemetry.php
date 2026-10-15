@@ -15,6 +15,7 @@ class AgentTelemetry extends Model
 {
     protected $fillable = [
         'agent_token_id', 'asset_id', 'device_id', 'hostname', 'logged_in_user', 'os', 'ip_address',
+        'is_elevated',
         'battery_percent', 'battery_health', 'battery_cycle_count',
         'disk_free_gb', 'disk_total_gb', 'disk_free_percent',
         'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
@@ -27,6 +28,7 @@ class AgentTelemetry extends Model
         return [
             'payload' => 'array',
             'reported_at' => 'datetime',
+            'is_elevated' => 'boolean',
             'battery_percent' => 'integer',
             'battery_health' => 'integer',
             'battery_cycle_count' => 'integer',

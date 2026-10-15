@@ -9,10 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.2: autostart launches the tray (UI thread) instead of the
-          headless daemon, so the one-time UAC prompt for a run_as:system script
-          actually appears. Also marshals that prompt onto the WPF UI thread. -->
-        <Version>1.4.2</Version>
+        <!-- 1.4.3: the agent reports whether it can act as an administrator, and
+          the update command reports download progress and acks only on success. -->
+        <Version>1.4.3</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

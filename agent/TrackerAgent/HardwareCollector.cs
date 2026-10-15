@@ -108,6 +108,13 @@ public static class HardwareCollector
         // layout, Wi-Fi link and the Windows user that is logged in.
         try { data["logged_in_user"] = Environment.UserName; } catch { }
 
+        // Whether this agent can run machine-level scripts. A standard-user agent
+        // cannot, and the fleet page needs to say so before an operator pushes a
+        // run_as:system script at it and reads the failure. "1"/"0" because the
+        // payload is a string map and Laravel's boolean rule reads those, not
+        // the words "true"/"false".
+        try { data["is_elevated"] = AgentRunner.IsProcessElevated() ? "1" : "0"; } catch { }
+
         CollectBattery(data);
         CollectDisk(data);
         CollectMemoryLayout(data);

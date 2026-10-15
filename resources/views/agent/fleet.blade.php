@@ -115,6 +115,23 @@
                                         · {{ $telemetry->logged_in_user }}
                                     @endif
                                 </span>
+                                {{-- Admin capability. A machine-level script
+                                     (USB disable, HKLM write) only runs from an
+                                     elevated/SYSTEM agent, so the operator needs
+                                     to see which laptops can and which cannot
+                                     before pushing one - null means the agent
+                                     never reported it (pre-1.4.3 build). --}}
+                                @if($telemetry?->is_elevated === true)
+                                    <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-300" title="Agent runs with administrator rights — can run system-level scripts">
+                                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1 3 4v6c0 4.4 3 8 7 9 4-1 7-4.6 7-9V4l-7-3Zm3.7 6.7-4.4 4.4a1 1 0 0 1-1.4 0L6.3 10.5a1 1 0 0 1 1.4-1.4l.9.9 3.7-3.7a1 1 0 1 1 1.4 1.4Z" clip-rule="evenodd"/></svg>
+                                        admin
+                                    </span>
+                                @elseif($telemetry?->is_elevated === false)
+                                    <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/10 dark:text-warning-300" title="Agent runs as a standard user — system-level scripts will fail until it is elevated">
+                                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.5 2h3l.4 2.2 1.6.9 2-1 1.5 2.6-1.7 1.4v1.8l1.7 1.4-1.5 2.6-2-1-1.6.9L11.5 16h-3l-.4-2.2-1.6-.9-2 1-1.5-2.6 1.7-1.4V8.1L3 6.7l1.5-2.6 2 1 1.6-.9L8.5 2ZM10 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" clip-rule="evenodd"/></svg>
+                                        no admin
+                                    </span>
+                                @endif
                             </button>
                         </td>
                         <td class="py-3 px-3">

@@ -91,7 +91,7 @@ public static class AutoUpdater
     /// route the operator pointed at. This used to be ignored in favour of a
     /// hardcoded /agent/download, which made the payload decoration only.
     /// </param>
-    public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null)
+    public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null, Action<int, string>? onProgress = null)
     {
         try
         {
@@ -107,6 +107,8 @@ public static class AutoUpdater
             var currentDir = Path.GetDirectoryName(currentExe)!;
             var tempNewExe = Path.Combine(currentDir, $"_new_TrackerAgent_{Guid.NewGuid():N}.exe");
             var updateScript = Path.Combine(currentDir, "_update_runner.bat");
+
+            onProgress?.Invoke(5, "Downloading the new version...");
 
             // Prefer the URL the server sent with the command. Falling back to
             // /agent/download keeps --update (run by hand, no payload) working.
@@ -141,6 +143,12 @@ public static class AutoUpdater
                 try { File.Delete(tempNewExe); } catch { }
                 return false;
             }
+
+            // Download is the whole wait (160 MB), so report it complete before
+            // the near-instant swap: an operator watching the bar sees it move
+            // through download and finish, instead of sitting at 5% until the
+            // process vanishes.
+            onProgress?.Invoke(90, "Installing and restarting...");
 
             Console.WriteLine($"[OK] Downloaded new version ({fi.Length / 1024 / 1024:N1} MB). Preparing swap...");
 

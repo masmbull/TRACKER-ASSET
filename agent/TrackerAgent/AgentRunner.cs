@@ -820,6 +820,12 @@ public static class AgentRunner
     }
 
     /// <summary>
+    /// Whether the running agent can act as an administrator, for the fleet to
+    /// read. Public so the collector can report it with the rest of telemetry.
+    /// </summary>
+    public static bool IsProcessElevated() => IsElevated();
+
+    /// <summary>
     /// Ask Windows to relaunch this binary elevated and register the boot-time
     /// SYSTEM task, so machine-level scripts stop needing a human.
     /// </summary>
