@@ -9,10 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.6: the update download reports real progress as it streams, so
-          the bar moves and a slow-but-healthy transfer is not mistaken for a
-          stalled command. -->
-        <Version>1.4.6</Version>
+        <!-- 1.4.7: the self-update swap is bounded and always relaunches the
+          installed exe. The old loop retried delete forever and could leave a
+          machine with no agent at all when the file stayed locked. -->
+        <Version>1.4.7</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

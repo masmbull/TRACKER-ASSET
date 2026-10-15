@@ -182,16 +182,44 @@ public static class AutoUpdater
 
             // Restart without CLI flags so installed config launches the tray
             // and repairs the Run key instead of reviving a headless daemon.
+            //
+            // Bounded, and it ALWAYS ends by launching the installed exe.
+            //
+            // The previous version looped `del` until the old exe was gone and
+            // only then moved the new one in. If the delete never succeeded -
+            // antivirus holding the 160 MB file, a handle still open after the
+            // agent exited - that loop ran forever: the move and the restart
+            // never happened, and the machine was left with NO agent at all,
+            // silent on the fleet until someone walked over to it. Two machines
+            // died exactly this way. Now the retry is capped; on success it swaps
+            // and launches the new build, and on failure it launches whatever exe
+            // is present - so the worst case is "still the old version, still
+            // reporting", never "no agent".
             var scriptContent = $@"@echo off
-timeout /t 2 /nobreak >nul
-:loop
-del /f /q ""{currentExe}"" >nul 2>&1
-if exist ""{currentExe}"" (
-    timeout /t 1 /nobreak >nul
-    goto loop
-)
-move /y ""{tempNewExe}"" ""{currentExe}"" >nul
-start """" ""{currentExe}""
+timeout /t 3 /nobreak >nul
+set ""TARGET={currentExe}""
+set ""NEW={tempNewExe}""
+set /a tries=0
+
+:retry
+del /f /q ""%TARGET%"" >nul 2>&1
+if not exist ""%TARGET%"" goto install
+set /a tries+=1
+if %tries% geq 30 goto fallback
+timeout /t 1 /nobreak >nul
+goto retry
+
+:install
+move /y ""%NEW%"" ""%TARGET%"" >nul 2>&1
+goto launch
+
+:fallback
+rem Could not replace the exe. Leave the working one in place and start it, so
+rem the machine keeps its agent rather than going dark.
+if exist ""%NEW%"" del /f /q ""%NEW%"" >nul 2>&1
+
+:launch
+if exist ""%TARGET%"" start """" ""%TARGET%""
 del /f /q ""%~f0"" >nul 2>&1
 ";
             File.WriteAllText(updateScript, scriptContent, System.Text.Encoding.ASCII);
