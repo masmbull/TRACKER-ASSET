@@ -125,4 +125,68 @@ class AgentCommand extends Model
             default => 'in progress',
         };
     }
+
+    /**
+     * The named phases of this command, for the progress dialog's checklist.
+     *
+     * The bar alone answers "how far" but not "how far to what" - an operator who
+     * sees 40% has no idea whether that is most of an update or a third of a scan.
+     * Each command has a short, fixed sequence of phases; this returns them with a
+     * state per phase so the dialog can show the whole journey, not a lone bar.
+     *
+     * @return array<int, array{label: string, state: string}>
+     */
+    public function steps(): array
+    {
+        $phases = match ($this->command) {
+            'update' => ['Queued', 'Downloading the build', 'Installing and restarting', 'Done'],
+            'scan' => ['Queued', 'Collecting inventory', 'Reporting results', 'Done'],
+            'elevate' => ['Queued', 'Requesting administrator', 'Approve the Windows prompt', 'Done'],
+            'script' => ['Queued', 'Preparing', 'Running', 'Done'],
+            'uninstall' => ['Queued', 'Removing the agent', 'Done'],
+            default => ['Queued', 'Working', 'Done'],
+        };
+
+        $last = count($phases) - 1;
+
+        // Where the work is now.
+        $current = match (true) {
+            $this->status === 'done' => $last,
+            $this->status === 'failed' => $this->failedStepIndex($last),
+            $this->isPending() => 0,
+            // A running command is somewhere in the middle: map its percentage
+            // across the phases that sit between the ends.
+            $this->progress === null => 1,
+            $last <= 1 => $last,
+            default => 1 + (int) min($last - 1, floor(max(0, min(100, $this->progress)) / 100 * ($last - 1))),
+        };
+
+        $steps = [];
+
+        foreach ($phases as $index => $label) {
+            $steps[] = [
+                'label' => $label,
+                'state' => match (true) {
+                    $index < $current => 'done',
+                    $index === $current => $this->status === 'failed' ? 'failed' : ($this->status === 'done' ? 'done' : 'active'),
+                    default => 'pending',
+                },
+            ];
+        }
+
+        return $steps;
+    }
+
+    /**
+     * Best-effort phase for a failed command, from how far its progress got. Used
+     * only to point at the phase that died, never to claim a completion.
+     */
+    private function failedStepIndex(int $last): int
+    {
+        if ($last <= 1 || $this->progress === null) {
+            return max(0, $last - 1);
+        }
+
+        return 1 + (int) min($last - 1, floor(max(0, min(100, $this->progress)) / 100 * ($last - 1)));
+    }
 }

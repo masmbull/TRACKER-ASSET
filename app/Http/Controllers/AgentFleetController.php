@@ -1091,6 +1091,9 @@ class AgentFleetController extends Controller
             'done' => $command->status === 'done',
             'failed' => $command->status === 'failed',
             'message' => $command->result['message'] ?? null,
+            // The phases of this command, so the dialog can show the whole
+            // journey as a checklist instead of a lone bar with no context.
+            'steps' => $command->steps(),
         ]);
     }
 }

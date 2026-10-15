@@ -416,7 +416,7 @@
     </div>
 
     <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-sm" role="presentation" aria-live="polite">
-        <section class="animate-scale-in w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
+        <section class="animate-scale-in w-full max-w-lg rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
             <div class="flex items-start gap-4">
                 <div id="ajax-action-spinner" class="mt-0.5 shrink-0" aria-hidden="true">
                     <x-mito-loader size="md" />
@@ -440,6 +440,11 @@
                     <div id="ajax-action-bar" class="h-full rounded-full bg-brand-500 transition-all duration-500" style="width: 5%"></div>
                 </div>
             </div>
+
+            {{-- The named phases of this action, as a checklist. The bar answers "how
+                 far"; this answers "how far to what", which a lone 40% cannot.
+                 Filled by watchCommand/watchBatch from the status endpoint. --}}
+            <ol id="ajax-action-steps" class="mt-4 hidden space-y-2"></ol>
 
             {{-- One line per device for a fleet-wide action. The aggregate bar
                  above says how far the rollout is, but "which laptop is stuck" is
@@ -471,6 +476,7 @@
             const percentEl = document.getElementById('ajax-action-percent');
             const barEl = document.getElementById('ajax-action-bar');
             const devicesEl = document.getElementById('ajax-action-devices');
+            const stepsEl = document.getElementById('ajax-action-steps');
 
             const busyBar = () => document.getElementById('top-progress');
             const setBar = (on) => busyBar()?.classList.toggle('is-busy', on);
@@ -482,6 +488,7 @@
                     window.clearInterval(pollTimer);
                     pollTimer = null;
                     clearDeviceList();
+                    clearSteps();
                 }
             };
 
@@ -585,6 +592,53 @@
             };
 
             /**
+             * The phase checklist: each step of the action, with a tick, a spinner
+             * or a dash. Uses the same escape helper as the device list.
+             */
+            const renderSteps = (steps) => {
+                if (!stepsEl) {
+                    return;
+                }
+
+                if (!Array.isArray(steps) || steps.length === 0) {
+                    stepsEl.classList.add('hidden');
+                    stepsEl.innerHTML = '';
+                    return;
+                }
+
+                stepsEl.classList.remove('hidden');
+                stepsEl.innerHTML = steps.map((step) => {
+                    const label = escapeHtml(step.label);
+                    let icon, tone;
+
+                    if (step.state === 'done') {
+                        tone = 'text-gray-500 dark:text-gray-400';
+                        icon = '<svg class="h-4 w-4 text-success-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.1 3.1 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>';
+                    } else if (step.state === 'active') {
+                        tone = 'font-medium text-gray-800 dark:text-gray-100';
+                        icon = '<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"></span>';
+                    } else if (step.state === 'failed') {
+                        tone = 'font-medium text-error-500';
+                        icon = '<svg class="h-4 w-4 text-error-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.7 7.3a1 1 0 0 1 1.4 0L10 8.6l-.1-.1.1.1 1.9-1.9a1 1 0 1 1 1.4 1.4L11.4 10l1.9 1.9a1 1 0 0 1-1.4 1.4L10 11.4l-1.9 1.9a1 1 0 0 1-1.4-1.4L8.6 10 6.7 8.1a1 1 0 0 1 0-1.4Z" clip-rule="evenodd"/></svg>';
+                    } else {
+                        tone = 'text-gray-400 dark:text-gray-500';
+                        icon = '<span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>';
+                    }
+
+                    return '<li class="flex items-center gap-2.5 text-theme-sm ' + tone + '">'
+                        + '<span class="flex h-4 w-4 shrink-0 items-center justify-center">' + icon + '</span>'
+                        + '<span>' + label + '</span>'
+                        + '</li>';
+                }).join('');
+            };
+            const clearSteps = () => {
+                if (stepsEl) {
+                    stepsEl.classList.add('hidden');
+                    stepsEl.innerHTML = '';
+                }
+            };
+
+            /**
              * Watch the queued command until it settles, patching the bar.
              *
              * The POST has already returned - the action is only *queued* at that
@@ -599,6 +653,7 @@
                 spinner.classList.add('hidden');
                 progressWrap.classList.remove('hidden');
                 clearDeviceList();
+                clearSteps();
                 title.textContent = 'Working';
                 pollStartedAt = Date.now();
                 setProgressBar(0, 'Waiting for the device…', false, false);
@@ -616,6 +671,21 @@
                             return;
                         }
                         const state = await response.json();
+
+                        // Name the action once the server tells us what it is, so
+                        // the dialog says "Updating", "Scanning", "Running script"
+                        // instead of a generic "Working".
+                        if (state.command) {
+                            title.textContent = {
+                                update: 'Updating agent',
+                                scan: 'Scanning device',
+                                elevate: 'Requesting administrator',
+                                script: 'Running script',
+                                uninstall: 'Removing agent',
+                            }[state.command] || 'Working';
+                        }
+
+                        renderSteps(state.steps);
 
                         if (state.done || state.failed) {
                             window.clearInterval(pollTimer);
@@ -655,7 +725,8 @@
             const watchBatch = (commandIds) => {
                 spinner.classList.add('hidden');
                 progressWrap.classList.remove('hidden');
-title.textContent = 'Updating fleet';
+                clearSteps();
+                title.textContent = 'Fleet action';
                 pollStartedAt = Date.now();
                 setProgressBar(0, '0 of ' + commandIds.length + ' devices...', false, false);
                 setBusy(true);

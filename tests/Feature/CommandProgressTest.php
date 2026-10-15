@@ -359,6 +359,61 @@ class CommandProgressTest extends TestCase
     }
 
     /**
+     * The dialog shows a phase checklist, so each command exposes its phases and
+     * which one is current. A settled command marks the last phase done; a queued
+     * one sits on the first; a running one is partway through.
+     */
+    public function test_steps_describe_the_phases_of_a_command(): void
+    {
+        $queued = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+
+        $steps = $queued->fresh()->steps();
+
+        $this->assertNotEmpty($steps);
+        $this->assertSame('Queued', $steps[0]['label']);
+        $this->assertSame('active', $steps[0]['state']);
+        $this->assertSame('pending', $steps[1]['state']);
+
+        $queued->forceFill(['status' => 'done', 'progress' => 100])->save();
+        $done = $queued->fresh()->steps();
+        $this->assertSame('done', $done[count($done) - 1]['state']);
+        $this->assertSame('done', $done[0]['state']);
+    }
+
+    public function test_a_failed_command_marks_a_failed_phase(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'script',
+            'status' => 'failed',
+            'progress' => 40,
+        ]);
+
+        $states = array_column($command->fresh()->steps(), 'state');
+
+        $this->assertContains('failed', $states);
+    }
+
+    public function test_step_payload_reaches_the_status_endpoint(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'scan',
+            'status' => 'in_progress',
+            'progress' => 50,
+        ]);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonStructure(['steps' => [['label', 'state']]]);
+    }
+
+    /**
      * A finished command is a record, not a promise. Last week's completed
      * update is not "stalled".
      */

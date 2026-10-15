@@ -734,9 +734,16 @@ public static class AgentRunner
                 inner + "\r\n" +
                 $"echo %errorlevel% > \"{markerPath}\"\r\n");
 
-            Api.ReportProgress(url, token, commandId, 40, "Running with elevated privilegesâ€¦");
+            Api.ReportProgress(url, token, commandId, 40, "Running with elevated privileges...");
 
-            if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", timeoutSeconds))
+            // Bounded, not timeoutSeconds. `schtasks /Create /RU SYSTEM` from a
+            // standard-user agent is an access-denied that should come back in a
+            // second, but it can also sit waiting - and waiting up to the script's
+            // own 300 s timeout pinned the command at 40% for minutes with no
+            // explanation. Twenty seconds is far longer than a create ever takes
+            // on success, so anything past it is the failure we are about to
+            // handle anyway.
+            if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", 20))
             {
                 // Creating a SYSTEM task is an administrative action, so a
                 // standard-user agent cannot do it. Settle the command NOW, before
