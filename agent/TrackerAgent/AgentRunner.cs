@@ -724,7 +724,7 @@ public static class AgentRunner
                 // installer does when run elevated). If someone is at the machine
                 // and grants it, the very next poll runs this script as SYSTEM and
                 // every future one needs no prompt.
-                if (TryPromoteToSystemService(url, token))
+                if (PromoteToSystemService(url, token))
                 {
                     Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
                     {
@@ -839,8 +839,11 @@ public static class AgentRunner
     ///
     /// Only the installed exe is relaunched, and only with --install-service, so
     /// the elevated child does one bounded thing (create the task) and exits.
+    ///
+    /// Public because both the script path (a run_as:system push that hit a
+    /// standard-user agent) and the standalone `elevate` command reach for it.
     /// </remarks>
-    private static bool TryPromoteToSystemService(string url, string token)
+    public static bool PromoteToSystemService(string url, string token)
     {
         if (IsElevated())
         {

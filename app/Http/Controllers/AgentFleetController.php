@@ -906,6 +906,37 @@ class AgentFleetController extends Controller
     }
 
     /**
+     * Ask one agent to become an administrator, from the browser.
+     *
+     * A machine-level script (USB disable, HKLM write) only runs from an
+     * elevated/SYSTEM agent. Pushing such a script makes the agent offer this
+     * once, but an operator who can already see the device is "no admin" should
+     * not have to push a script just to trigger the prompt. This queues an
+     * `elevate` command: the tray agent raises a UAC prompt, registers the
+     * boot-time SYSTEM task, and is admin from then on.
+     *
+     * It needs someone at the machine to approve the prompt - Windows will not
+     * elevate silently - so the message says so instead of promising it is done.
+     */
+    public function elevate(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
+    {
+        if (! $token->isUsable()) {
+            return $this->actionResponse($request, sprintf(
+                "'%s' is revoked, so the agent can no longer be reached and the elevation cannot be delivered.",
+                $token->name
+            ), false);
+        }
+
+        $command = $this->enqueue($token->id, 'elevate');
+
+        return $this->actionResponse($request, sprintf(
+            "Elevation requested for '%s'. Approve the Windows admin prompt on that machine; "
+            .'the agent becomes a system service and can then run machine-level scripts.',
+            $token->name
+        ), commandId: $command->id);
+    }
+
+    /**
      * Remove the agent from one machine, from the browser.
      *
      * The server has no access to the user's disk, so this queues an

@@ -257,6 +257,14 @@
                                     @if($device->isOutdated() === true)
                                         <button type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-warning-600 transition-all duration-200 hover:bg-warning-50 active:scale-95 dark:text-warning-300 dark:hover:bg-warning-500/10" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</button>
                                     @endif
+                                    {{-- Promote to admin. Only shown when the agent
+                                         has reported it is a standard user: asking an
+                                         already-elevated agent would pop a pointless
+                                         UAC prompt. Null (never reported) shows
+                                         nothing, since we do not know its state. --}}
+                                    @if($telemetry?->is_elevated === false)
+                                        <button type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-brand-600 transition-all duration-200 hover:bg-brand-50 active:scale-95 dark:text-brand-300 dark:hover:bg-brand-500/10" @click="$dispatch('open-modal', 'confirm-elevate-agent-{{ $device->id }}')">Make admin</button>
+                                    @endif
                                 @endif
 
                                 {{-- Removing an agent deletes files on someone else's
@@ -590,6 +598,27 @@
                     @csrf
                     <button type="button" @click="$dispatch('close-modal', 'confirm-update-agent-{{ $device->id }}')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
                     <x-button type="submit" variant="warning">Update agent</x-button>
+                </form>
+            </div>
+        </x-modal>
+    @endif
+@endforeach
+
+@foreach($paginatedDevices as $device)
+    @if($device->isUsable() && $device->telemetry?->is_elevated === false)
+        <x-modal id="confirm-elevate-agent-{{ $device->id }}" title="Make this agent an administrator" maxWidth="md">
+            <div class="space-y-4">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+                    Ask <span class="font-semibold text-gray-800 dark:text-white">{{ $device->name }}</span>
+                    to become a system service, so it can run machine-level scripts (USB disable, registry writes).
+                </p>
+                <p class="rounded-lg bg-warning-50 px-3 py-2 text-theme-xs text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">
+                    Someone must be at that machine to approve the Windows administrator prompt. Until it is approved, the agent stays a standard user.
+                </p>
+                <form method="POST" action="{{ route('agent.elevate', $device) }}" class="flex justify-end gap-3" data-modal-action data-close-modal="confirm-elevate-agent-{{ $device->id }}">
+                    @csrf
+                    <button type="button" @click="$dispatch('close-modal', 'confirm-elevate-agent-{{ $device->id }}')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                    <x-button type="submit" variant="primary">Request admin</x-button>
                 </form>
             </div>
         </x-modal>

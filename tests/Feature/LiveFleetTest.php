@@ -157,6 +157,30 @@ class LiveFleetTest extends TestCase
         $this->assertNull(AgentTelemetry::firstOrFail()->is_elevated);
     }
 
+    /**
+     * Make-admin queues an `elevate` command for a usable device, the same way
+     * every other fleet action queues one, and refuses a revoked device whose
+     * agent can no longer be reached.
+     */
+    public function test_admin_can_request_elevation_for_a_device(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload(['is_elevated' => '0']))
+            ->assertCreated();
+
+        $response = $this->actingAs($admin)->post(route('agent.elevate', $this->agentToken));
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('agent_commands', [
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'elevate',
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_repeated_scans_refresh_the_same_snapshot(): void
     {
         $this->withHeaders($this->agentHeaders())

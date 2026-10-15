@@ -324,6 +324,22 @@ public partial class App : System.Windows.Application
                                 Environment.Exit(0);
                             }
                         }
+                        else if (command == "elevate")
+                        {
+                            // Standalone "become admin" request, so an operator can
+                            // promote a laptop from the fleet without pushing a
+                            // script first. Same one-time UAC path the script uses.
+                            AgentLog.Write($"Elevate command #{id} received.");
+                            var promoted = AgentRunner.PromoteToSystemService(config.ServerUrl, config.Token);
+
+                            Api.Ack(config.ServerUrl, config.Token, id, promoted ? "done" : "failed",
+                                new Dictionary<string, string>
+                                {
+                                    ["message"] = promoted
+                                        ? "Administrator approval requested. Approve the Windows prompt; the agent becomes a system service."
+                                        : "Could not request administrator approval. The agent may already be elevated, or no one is at the machine to approve.",
+                                });
+                        }
                         else if (command == "uninstall")
                         {
                             // This branch used to be missing entirely, so an

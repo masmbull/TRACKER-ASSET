@@ -9,9 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.3: the agent reports whether it can act as an administrator, and
-          the update command reports download progress and acks only on success. -->
-        <Version>1.4.3</Version>
+        <!-- 1.4.4: a standalone `elevate` command lets the fleet promote one
+          laptop to an administrator from the browser, without pushing a script
+          first. -->
+        <Version>1.4.4</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
