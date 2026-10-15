@@ -122,6 +122,8 @@ public static class AgentRunner
         bool update = false;
         bool installService = false;
         bool removeService = false;
+        bool guard = false;
+        string? targetDir = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -137,6 +139,8 @@ public static class AgentRunner
                 case "--update": update = true; break;
                 case "--install-service": installService = true; break;
                 case "--remove-service": removeService = true; break;
+                case "--guard": guard = true; break;
+                case "--target-dir": targetDir = NextArg(args, ref i); break;
             }
         }
 
@@ -202,7 +206,24 @@ public static class AgentRunner
         // while every system-level script kept dying.
         if (installService)
         {
-            return InstallSystemTask(serverUrl, token, assetId, pollSeconds);
+            var result = InstallSystemTask(serverUrl, token, assetId, pollSeconds);
+
+            // The SYSTEM daemon and the self-heal guard are installed together:
+            // both need the one elevation the user just granted, and a machine
+            // with the daemon but no guard is exactly the one that goes dark when
+            // someone deletes the folder. A guard failure does not fail the
+            // install - the agent still works without it.
+            if (result == 0)
+            {
+                InstallGuard(pollSeconds);
+            }
+
+            return result;
+        }
+
+        if (guard)
+        {
+            return RunGuard(targetDir);
         }
 
         if (removeService)
@@ -287,7 +308,7 @@ public static class AgentRunner
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
         "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
-            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" => true,
+            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard" => true,
         _ => false,
     };
     /// <summary>
@@ -1565,11 +1586,272 @@ public static class AgentRunner
     static int RemoveSystemTask()
     {
         var removed = Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
+
+        // The guard task goes with it. Leaving a watchdog behind that restores the
+        // agent after an uninstall would be the worst possible bug: the operator
+        // removes the machine and it walks back in a minute later.
+        Run("schtasks", $"/Delete /TN \"{GuardTaskName}\" /F", 30);
+
+        RemoveProtectedCopy();
+
         Console.WriteLine(removed
             ? "[OK] SYSTEM task removed."
             : "[i] No SYSTEM task was registered (nothing to remove).");
 
         return 0;
+    }
+
+    /// <summary>
+    /// A second, independent SYSTEM task whose only job is to put the agent back
+    /// if it disappears.
+    /// </summary>
+    /// <remarks>
+    /// Not a Windows service, and not the same task as the daemon, on purpose: a
+    /// watchdog that shares a process with the thing it watches cannot notice that
+    /// thing was killed. This runs from a protected copy in ProgramData, so even
+    /// deleting the whole %LOCALAPPDATA%\TRACKER folder leaves it intact.
+    /// </remarks>
+    private const string GuardTaskName = "MitoAuditTrackerGuard";
+
+    /// <summary>Where the tamper-proof copy of the agent lives (SYSTEM-only write).</summary>
+    static string ProtectedDir =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "MITO");
+
+    static string ProtectedExe => Path.Combine(ProtectedDir, "TrackerAgent.exe");
+
+    /// <summary>
+    /// A sibling of the install folder that, when present, tells the guard this
+    /// removal is authorised and it must tear everything down instead of
+    /// restoring.
+    /// </summary>
+    /// <remarks>
+    /// This is what stops the guard from turning into malware. The guard runs as
+    /// SYSTEM and the uninstall runs as the user, so the user cannot delete the
+    /// guard task; without a handshake, every uninstall would be undone a minute
+    /// later and the machine could never be removed. The flag is the handshake: a
+    /// user-writable file in the same folder the install lives under, which the
+    /// guard reads before deciding to restore.
+    /// </remarks>
+    static string UninstallFlag(string installDir) => installDir.TrimEnd('\\', '/') + ".uninstall";
+
+    /// <summary>
+    /// Install the self-heal guard: copy the running binary to PROGRAMDATA,
+    /// register a SYSTEM task that re-checks it every minute, and start it.
+    /// </summary>
+    /// <remarks>
+    /// Must be called elevated (both the copy and the task need admin). The
+    /// protected copy is what makes the guard meaningful: a per-user install in
+    /// %LOCALAPPDATA% can always be deleted by the user, so protection has to live
+    /// somewhere the user cannot write.
+    /// </remarks>
+    static int InstallGuard(int pollSeconds)
+    {
+        if (!IsElevated())
+        {
+            Console.Error.WriteLine("[X] Guard install needs administrator rights.");
+            return 1;
+        }
+
+        var exe = SelfBinaryPath();
+        if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+        {
+            Console.Error.WriteLine("[X] Could not resolve the agent executable path.");
+            return 1;
+        }
+
+        try
+        {
+            // The install directory must be baked into the task, not derived at
+            // run time. The guard runs as SYSTEM, whose %LOCALAPPDATA% is the
+            // system profile - so a guard that recomputed the path would restore
+            // the agent into the wrong place and leave the user's folder empty.
+            // The source of truth is where the agent actually lives right now.
+            var installDir = Path.GetDirectoryName(exe);
+            if (string.IsNullOrWhiteSpace(installDir))
+            {
+                Console.Error.WriteLine("[X] Could not resolve the install directory.");
+                return 1;
+            }
+
+            Directory.CreateDirectory(ProtectedDir);
+            File.Copy(exe, ProtectedExe, overwrite: true);
+            Console.WriteLine($"[OK] Protected copy stored at {ProtectedExe}.");
+
+            // The guard task runs the PROTECTED copy with --guard, not the
+            // %LOCALAPPDATA% one: if the install folder is gone there is nothing
+            // there to run, which is exactly the case this handles.
+            var taskCommand = $"\\\"{ProtectedExe}\\\" --guard --target-dir \\\"{installDir}\\\" --poll {pollSeconds}";
+
+            // /SC MINUTE /MO 1: every minute. A user who deletes the folder gets
+            // it back inside a minute - fast enough to be obvious, slow enough not
+            // to hammer the disk.
+            var create = $"/Create /TN \"{GuardTaskName}\" /TR \"{taskCommand}\" /SC MINUTE /MO 1 /RU SYSTEM /RL HIGHEST /F";
+
+            if (!Run("schtasks", create, 60))
+            {
+                Console.Error.WriteLine("[X] Could not register the guard task.");
+                return 1;
+            }
+
+            Console.WriteLine("[OK] Guard task registered (checks every minute).");
+            Run("schtasks", $"/Run /TN \"{GuardTaskName}\"", 30);
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X] Guard install failed: {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// The guard itself: if the agent is missing from its install folder, put it
+    /// back and re-arm autostart, then exit. Runs from the protected copy as
+    /// SYSTEM once a minute.
+    /// </summary>
+    /// <remarks>
+    /// The install folder is passed in (--target-dir) rather than recomputed:
+    /// this runs as SYSTEM, whose %LOCALAPPDATA% is the system profile, so the
+    /// user's real path has to be baked into the task at install time.
+    /// </remarks>
+    static int RunGuard(string? targetDir)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(targetDir))
+            {
+                Console.Error.WriteLine("[!] Guard has no target directory; nothing to check.");
+                return 1;
+            }
+
+            // An authorised removal, marked before the user-side uninstall ran.
+            // Do the elevated parts the user could not: drop the tasks and the
+            // protected copy. Restoring here would undo a deliberate uninstall.
+            if (File.Exists(UninstallFlag(targetDir)))
+            {
+                Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
+                Run("schtasks", $"/Delete /TN \"{GuardTaskName}\" /F", 30);
+                RemoveProtectedCopy();
+                TryDeleteQuietly(UninstallFlag(targetDir));
+
+                Console.WriteLine("[OK] Uninstall authorised; guard and system tasks removed.");
+                return 0;
+            }
+
+            var installedExe = Path.Combine(targetDir, "TrackerAgent.exe");
+
+            // Healthy: nothing to do. The common case, and it must be cheap - it
+            // runs every minute on every laptop.
+            if (GuardSeesHealthyAgent(targetDir))
+            {
+                return 0;
+            }
+
+            if (!File.Exists(ProtectedExe))
+            {
+                Console.Error.WriteLine("[!] Agent is missing and no protected copy exists to restore from.");
+                return 1;
+            }
+
+            Directory.CreateDirectory(targetDir);
+            File.Copy(ProtectedExe, installedExe, overwrite: true);
+            Console.WriteLine($"[OK] Restored agent to {installedExe}.");
+
+            // Re-arm the machine-wide autostart. The user's HKCU Run is not
+            // writable from SYSTEM, so the restore uses the HKLM Run key - it
+            // launches for every user and survives the folder being deleted with
+            // the per-user entry.
+            RestoreAutostartBestEffort(installedExe);
+
+            // Start it now rather than waiting for a login, so the machine is
+            // reporting again within the same minute it was tampered with.
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = installedExe,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[!] Restored but could not start: {ex.Message}");
+            }
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X] Guard failed: {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// True when the agent is present and plausibly intact at the install folder.
+    /// Split out so the "do no harm" decision is one testable line: the guard must
+    /// restore only when the agent is actually gone, never on a machine that is
+    /// already fine.
+    /// </summary>
+    internal static bool GuardSeesHealthyAgent(string targetDir)
+    {
+        try
+        {
+            var installedExe = Path.Combine(targetDir, "TrackerAgent.exe");
+
+            return File.Exists(installedExe) && new FileInfo(installedExe).Length > 1024 * 1024;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void RestoreAutostartBestEffort(string installedExe)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.CreateSubKey(RunKeyPath);
+            key?.SetValue(RunValueName, $"\"{installedExe}\"");
+        }
+        catch
+        {
+            // Not elevated to write HKLM; the protected copy is still restored,
+            // which is the part that matters most.
+        }
+    }
+
+    static void RemoveProtectedCopy()
+    {
+        try
+        {
+            if (Directory.Exists(ProtectedDir))
+            {
+                Directory.Delete(ProtectedDir, true);
+            }
+        }
+        catch
+        {
+            // Locked or already gone; the uninstall carries on regardless.
+        }
+    }
+
+    static void TryDeleteQuietly(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Best effort.
+        }
     }
 
     static void RegisterAutostart()
@@ -1694,11 +1976,31 @@ public static class AgentRunner
     {
         try
         {
-            // 0. The SYSTEM task, if this machine was installed elevated. It runs
-            //    as SYSTEM, so deleting it needs elevation too - a non-elevated
-            //    uninstall reports the refusal but carries on removing what it can,
-            //    rather than leaving the run key and folder half-deleted.
+            var installDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TRACKER");
+
+            // 0. Authorise the removal for the guard FIRST, before anything else
+            //    is touched. The guard runs as SYSTEM and cannot be deleted by this
+            //    user-level process, so if it is not told to stand down it restores
+            //    the agent a minute later and the uninstall quietly undoes itself.
+            //    The flag is the only channel the user side controls.
+            try
+            {
+                File.WriteAllText(UninstallFlag(installDir), DateTimeOffset.UtcNow.ToString("o"));
+                Console.WriteLine("[OK] Uninstall authorised for the guard.");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[!] Could not write the uninstall flag: {ex.Message}");
+            }
+
+            // 0b. The SYSTEM tasks, if installed elevated. Deleting them needs
+            //     elevation too; when this runs unelevated the guard picks the
+            //     removals up from the flag above.
             Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
+            Run("schtasks", $"/Delete /TN \"{GuardTaskName}\" /F", 30);
+            RemoveProtectedCopy();
 
             // 1. Autostart first - nothing may restart the agent after this.
             using (var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
@@ -1708,6 +2010,22 @@ public static class AgentRunner
                     runKey.DeleteValue(RunValueName, false);
                     Console.WriteLine("[OK] Autostart entry removed.");
                 }
+            }
+
+            // The guard's restore may have written the machine-wide key; clear it
+            // too so nothing relaunches a machine that was deliberately removed.
+            try
+            {
+                using var machineRun = Registry.LocalMachine.OpenSubKey(RunKeyPath, true);
+                if (machineRun?.GetValue(RunValueName) is not null)
+                {
+                    machineRun.DeleteValue(RunValueName, false);
+                    Console.WriteLine("[OK] Machine autostart entry removed.");
+                }
+            }
+            catch
+            {
+                // Not elevated to write HKLM; the guard task removal covers this.
             }
 
             // 2. Device identity (Live Fleet ties telemetry to this).
@@ -1722,10 +2040,6 @@ public static class AgentRunner
                 }
             }
             Console.WriteLine("[OK] Device identity cleared from registry.");
-
-            var installDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "TRACKER");
 
             // 3. Stop the resident daemon (it holds TrackerAgent.exe open).
             var self = Environment.ProcessId;

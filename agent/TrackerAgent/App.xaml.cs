@@ -148,7 +148,7 @@ public partial class App : System.Windows.Application
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
         "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
-            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" => true,
+            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard" => true,
         _ => false,
     };
 

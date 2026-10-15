@@ -235,6 +235,23 @@ internal static class Program
 
         Check("--install-service is a CLI flag", AgentRunner.IsCliFlagForTest("--install-service"));
         Check("--remove-service is a CLI flag", AgentRunner.IsCliFlagForTest("--remove-service"));
+        Check("--guard is a CLI flag", AgentRunner.IsCliFlagForTest("--guard"));
+
+        // The guard must judge a machine healthy unless the agent is genuinely
+        // gone, or it would be rewrites on every tick - onto machines that never
+        // needed touching.
+        var dir = Path.Combine(Path.GetTempPath(), "ta_guard_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        Check("guard treats an empty folder as unhealthy", !AgentRunner.GuardSeesHealthyAgent(dir));
+
+        var full = Path.Combine(dir, "TrackerAgent.exe");
+        File.WriteAllBytes(full, new byte[2 * 1024 * 1024]);
+        Check("guard treats a present exe as healthy", AgentRunner.GuardSeesHealthyAgent(dir));
+
+        File.WriteAllBytes(full, new byte[1024]);
+        Check("guard treats a truncated exe as unhealthy", !AgentRunner.GuardSeesHealthyAgent(dir));
+
+        try { Directory.Delete(dir, recursive: true); } catch { }
 
         // Casing must not decide it: the launcher lower-cases, and a mixed-case
         // spelling from a script should still be treated as the same mode.
