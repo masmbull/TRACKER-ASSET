@@ -71,7 +71,15 @@ public partial class App : System.Windows.Application
 
         var installed = ReadInstalledConfig();
 
-        if (installed != null && !string.IsNullOrWhiteSpace(installed.Token))
+        // A config with no executable is NOT an installed agent. The old updater
+        // deleted the exe before moving the new one in, so a machine whose agent
+        // died mid-swap is left with config.json and no binary. Treating that as
+        // installed sent the freshly downloaded installer down the "already here"
+        // path: no window, no install, no agent - the exact dead end an operator
+        // hit where double-clicking did nothing and no folder appeared.
+        var exePresent = InstallCheck.HasInstalledExe();
+
+        if (installed != null && !string.IsNullOrWhiteSpace(installed.Token) && exePresent)
         {
             // Double-click state check (agent/README.md): when the clicked exe
             // is a *different* copy — the installer someone just downloaded —

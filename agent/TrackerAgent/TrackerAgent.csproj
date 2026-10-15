@@ -9,10 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.8: a SYSTEM guard task restores the agent from a protected
-          ProgramData copy if its install folder is deleted, so a per-user
-          install cannot be trivially removed. -->
-        <Version>1.4.8</Version>
+        <!-- 1.4.9: an installed agent is the executable, not config.json. A config
+          left behind without the exe now reinstalls instead of doing nothing. -->
+        <Version>1.4.9</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

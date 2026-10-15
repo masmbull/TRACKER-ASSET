@@ -37,6 +37,19 @@ public static class InstallCheck
 
     public static string InstalledConfig => Path.Combine(InstallDir, "config.json");
 
+    /// <summary>
+    /// True when the agent is really installed: an executable is present at the
+    /// install path.
+    /// </summary>
+    /// <remarks>
+    /// The exe is the agent. A leftover config.json with no binary is the state
+    /// the old updater produced when it deleted the exe and then failed to move
+    /// the new one in, and treating it as "installed" sent a freshly downloaded
+    /// installer down the already-installed path: no window, no install, no
+    /// agent. The config alone must never be enough.
+    /// </remarks>
+    public static bool HasInstalledExe() => File.Exists(InstalledExe);
+
     internal static string BuildTrayAutostartCommand(string exePath) => $"\"{exePath}\"";
 
     /// <summary>
