@@ -717,6 +717,23 @@ public static class AgentRunner
 
             if (!Run("schtasks", $"/Create /TN \"{taskName}\" /TR \"cmd.exe /c \\\"{wrapperPath}\\\"\" /SC ONCE /ST 00:00 /RL HIGHEST /RU SYSTEM /F", timeoutSeconds))
             {
+                // Creating a SYSTEM task is an administrative action, so a
+                // standard-user agent cannot do it. Before giving up, try to
+                // become the SYSTEM agent for good: a one-time UAC prompt
+                // registers the boot-time SYSTEM task (the same thing the
+                // installer does when run elevated). If someone is at the machine
+                // and grants it, the very next poll runs this script as SYSTEM and
+                // every future one needs no prompt.
+                if (TryPromoteToSystemService(url, token))
+                {
+                    Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                    {
+                        ["message"] = "Requested administrator approval to run scripts as SYSTEM. "
+                            + "Approve the Windows prompt on the machine; the script runs automatically on the next poll.",
+                    });
+                    return 1;
+                }
+
                 // The honest failure: creating a SYSTEM task is itself an
                 // administrative action, so an agent running as a plain user
                 // cannot perform it. Say what to do rather than "not enough
@@ -798,6 +815,61 @@ public static class AgentRunner
         }
         catch
         {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Ask Windows to relaunch this binary elevated and register the boot-time
+    /// SYSTEM task, so machine-level scripts stop needing a human.
+    /// </summary>
+    /// <remarks>
+    /// Windows will not elevate a process silently: the UAC consent dialog needs
+    /// someone at the machine. So this intentionally hands off to a
+    /// ShellExecute "runas" launch and does NOT wait for it - the agent keeps
+    /// polling, and the operator who approves the prompt gets a SYSTEM daemon on
+    /// the next boot. A UAC the user cancels throws (Win32Exception 1223); that
+    /// is a normal outcome, reported by the caller as "needs admin", not a crash.
+    ///
+    /// Only the installed exe is relaunched, and only with --install-service, so
+    /// the elevated child does one bounded thing (create the task) and exits.
+    /// </remarks>
+    private static bool TryPromoteToSystemService(string url, string token)
+    {
+        if (IsElevated())
+        {
+            // Already elevated: schtasks would have worked, so the failure was
+            // something else. Do not pop a pointless UAC prompt.
+            return false;
+        }
+
+        try
+        {
+            var exe = SelfBinaryPath();
+            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+            {
+                return false;
+            }
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = $"--install-service --quiet --url \"{url}\" --token \"{token}\"",
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+
+            // Do not wait: the consent dialog blocks until a human answers, and
+            // the daemon must keep polling. The child registers the task itself.
+            Process.Start(psi);
+
+            return true;
+        }
+        catch
+        {
+            // UAC declined, or no interactive session to raise it in. The caller
+            // falls through to the plain "needs admin" message.
             return false;
         }
     }

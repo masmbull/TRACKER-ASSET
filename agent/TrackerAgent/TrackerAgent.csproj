@@ -9,11 +9,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.0: the installer can register the daemon as a SYSTEM scheduled
-          task (install-service), so a pushed run_as:system script can write
-          HKLM on a machine whose user is a standard local account. Bump so
+        <!-- 1.4.1: a standard-user agent that hits a run_as:system script now
+          raises a one-time UAC prompt to register the boot-time SYSTEM task, so
+          the fleet can promote a laptop without a manual reinstall. Bump so
           installed machines pick the new binary up. -->
-        <Version>1.4.0</Version>
+        <Version>1.4.1</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
