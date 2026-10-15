@@ -844,14 +844,16 @@ class AgentFleetController extends Controller
             ->whereNotIn('id', $pending)
             ->get();
 
+        $commandIds = [];
+
         foreach ($tokens as $token) {
-            $this->enqueue($token->id, 'scan', ['source' => 'scan-all']);
+            $commandIds[] = $this->enqueue($token->id, 'scan', ['source' => 'scan-all'])->id;
         }
 
         return $this->actionResponse($request, sprintf(
             'Scan queued for %d device(s) — each agent picks it up within a few seconds.',
             $tokens->count()
-        ));
+        ), commandIds: $commandIds);
     }
 
     /**
@@ -869,20 +871,37 @@ class AgentFleetController extends Controller
      */
     public function updateAll(Request $request): JsonResponse|RedirectResponse
     {
-        $command = $this->enqueue(null, 'update', ['url' => URL::route('agent.download.latest')]);
-
-        $current = AgentApiToken::query()
+        $tokens = AgentApiToken::query()
             ->where('is_active', true)
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->get()
-            ->filter(fn (AgentApiToken $t) => $t->isOutdated() === false)
-            ->count();
+            ->get();
+
+        // One command per device, not one broadcast row.
+        //
+        // A broadcast is a single row every agent shares: each agent reports its
+        // download progress onto that one row and acks it, so the first agent to
+        // finish settled it "done" while the rest were still pulling 160 MB - the
+        // progress dialog closed on a fleet that was still updating, or sat on a
+        // progress figure belonging to some other machine. Per-device rows are
+        // what the batch watcher can track honestly, one bar over N rows.
+        $commandIds = [];
+
+        foreach ($tokens as $token) {
+            if ($token->isOutdated() === false) {
+                continue;
+            }
+
+            $command = $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
+            $commandIds[] = $command->id;
+        }
+
+        $current = $tokens->count() - count($commandIds);
 
         $note = $current > 0
             ? " {$current} already on the release will be left alone."
             : '';
 
-        return $this->actionResponse($request, "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.", commandId: $command->id);
+        return $this->actionResponse($request, "Update queued for every agent that is behind{$note} — each re-pulls the binary and restarts in the background.", commandIds: $commandIds);
     }
 
     /**
@@ -990,6 +1009,7 @@ class AgentFleetController extends Controller
             ->get();
 
         $queued = 0;
+        $commandIds = [];
 
         foreach ($tokens as $token) {
             $busy = AgentCommand::query()
@@ -1004,14 +1024,14 @@ class AgentFleetController extends Controller
                 continue;
             }
 
-            $this->enqueue($token->id, 'scan', ['source' => 'manual-sweep']);
+            $commandIds[] = $this->enqueue($token->id, 'scan', ['source' => 'manual-sweep'])->id;
             $queued++;
         }
 
-        return $this->actionResponse($request, sprintf('Sweep queued %d agent(s).', $queued));
+        return $this->actionResponse($request, sprintf('Sweep queued %d agent(s).', $queued), commandIds: $commandIds);
     }
 
-    private function actionResponse(Request $request, string $message, bool $success = true, ?int $commandId = null): JsonResponse|RedirectResponse
+    private function actionResponse(Request $request, string $message, bool $success = true, ?int $commandId = null, array $commandIds = []): JsonResponse|RedirectResponse
     {
         if ($request->expectsJson()) {
             return response()->json([
@@ -1020,6 +1040,10 @@ class AgentFleetController extends Controller
                 // Present when the action queued work: the progress modal needs a
                 // command to poll. Null for actions that do not queue one.
                 'command_id' => $commandId,
+                // A multi-device action carries every queued id so the batch
+                // watcher can show one bar over N rows, instead of one row whose
+                // status any single agent can settle on its own.
+                'command_ids' => $commandIds,
             ], $success ? 200 : 422);
         }
 

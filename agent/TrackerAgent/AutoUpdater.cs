@@ -133,7 +133,35 @@ public static class AutoUpdater
 
                 using var stream = resp.Content.ReadAsStream();
                 using var fs = new FileStream(tempNewExe, FileMode.Create, FileAccess.Write, FileShare.None);
-                stream.CopyTo(fs);
+
+                // Chunked copy so the bar moves and, more importantly, so the
+                // command keeps a fresh updated_at while the 160 MB downloads. A
+                // single CopyTo reported nothing for the whole transfer, and the
+                // server's stall detector then declared a slow-but-healthy download
+                // dead after its grace window.
+                var total = resp.Content.Headers.ContentLength ?? 0;
+                var buffer = new byte[81920];
+                long copied = 0;
+                var lastReport = 0;
+
+                int read;
+                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    fs.Write(buffer, 0, read);
+                    copied += read;
+
+                    if (total > 0 && onProgress != null)
+                    {
+                        // 5%..85% spans the transfer; the rest is the swap. Only
+                        // every ~5% so we are not posting a request per 80 KB.
+                        var pct = 5 + (int)(copied * 80 / total);
+                        if (pct >= lastReport + 5)
+                        {
+                            lastReport = pct;
+                            onProgress(pct, $"Downloading the new version… ({pct}%)");
+                        }
+                    }
+                }
             }
 
             var fi = new FileInfo(tempNewExe);

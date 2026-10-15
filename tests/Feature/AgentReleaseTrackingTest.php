@@ -213,10 +213,11 @@ class AgentReleaseTrackingTest extends TestCase
     }
 
     /**
-     * Both update actions must hand the browser the queued command's id, or the
+     * Both update actions must hand the browser the queued command(s), or the
      * progress modal never opens: the async-action handler only watches a command
-     * when the JSON carries `command_id`. Without it the Update button looked
-     * inert - the command was queued and ran, but the operator saw nothing move.
+     * when the JSON carries `command_id` (single) or `command_ids` (a fleet
+     * action). Without one the Update button looked inert - the command was
+     * queued and ran, but the operator saw nothing move.
      */
     public function test_update_actions_return_a_command_id_for_the_progress_modal(): void
     {
@@ -234,7 +235,12 @@ class AgentReleaseTrackingTest extends TestCase
         $all = $this->actingAs($admin)->postJson(route('agent.updateAll'));
 
         $all->assertOk();
-        $this->assertNotNull($all->json('command_id'), 'update-all must expose its command id');
+        // Update All queues one command per behind device, so it reports a list:
+        // a single broadcast row was settled by whichever agent acked first,
+        // closing the dialog while the rest of the fleet was still updating.
+        $ids = $all->json('command_ids');
+        $this->assertIsArray($ids, 'update-all must expose the queued command ids');
+        $this->assertNotEmpty($ids, 'the device behind the release must get a command');
     }
 
     /**

@@ -9,11 +9,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.4.5: the elevation prompt is raised on its own thread (never the
-          WPF UI thread, where Process.Start(runas) froze the pump and the prompt
-          never painted), and the command is acked before the blocking prompt so
-          it no longer sits in_progress for the whole timeout. -->
-        <Version>1.4.5</Version>
+        <!-- 1.4.6: the update download reports real progress as it streams, so
+          the bar moves and a slow-but-healthy transfer is not mistaken for a
+          stalled command. -->
+        <Version>1.4.6</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

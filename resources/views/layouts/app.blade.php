@@ -606,29 +606,40 @@
 
                         const settled = states.filter((s) => s && (s.done || s.failed));
                         const failed = settled.filter((s) => s && s.failed).length;
-                        const total = commandIds.length;
-                        const percent = Math.round((settled.length / total) * 100);
-                        const failedNote = failed > 0 ? ' (' + failed + ' failed)' : '';
 
-                        if (settled.length === total) {
+                        // A device whose agent never answers must not pin the bar
+                        // open forever. Once a command reads as stalled (the agent
+                        // went quiet past the grace window) it is counted as
+                        // settled-unfinished, so the rollout can report itself
+                        // rather than sitting at "2 of 5 devices" for an hour on a
+                        // laptop that is simply switched off.
+                        const stalled = states.filter((s) => s && s.stalled && !s.done && !s.failed).length;
+                        const accounted = settled.length + stalled;
+
+                        const total = commandIds.length;
+                        const percent = Math.round((accounted / total) * 100);
+                        const failedNote = failed > 0 ? ' (' + failed + ' failed)' : '';
+                        const stalledNote = stalled > 0 ? ' (' + stalled + ' not responding)' : '';
+
+                        if (accounted === total) {
                             window.clearInterval(pollTimer);
                             pollTimer = null;
                             setBusy(false);
-                            setProgressBar(100, total + ' of ' + total + ' devices updated' + failedNote, false, failed > 0);
+                            setProgressBar(100, total + ' of ' + total + ' devices settled' + failedNote + stalledNote, false, failed > 0 || stalled > 0);
                             modal.dataset.busy = 'false';
                             modal.removeAttribute('aria-busy');
                             spinner.classList.remove('hidden');
                             closeButton.classList.remove('hidden');
                             setBar(false);
-                            title.textContent = failed > 0 ? 'Update finished with errors' : 'Done';
-                            message.textContent = (settled.length - failed) + ' of ' + total + ' devices updated successfully' + failedNote + '.';
-                            window.showToast?.('Fleet update: ' + (settled.length - failed) + '/' + total + ' updated' + failedNote + '.', failed > 0 ? 'error' : 'success');
+                            title.textContent = (failed + stalled) > 0 ? 'Update finished with issues' : 'Done';
+                            message.textContent = (settled.length - failed) + ' of ' + total + ' devices updated successfully' + failedNote + stalledNote + '.';
+                            window.showToast?.('Fleet update: ' + (settled.length - failed) + '/' + total + ' updated' + failedNote + stalledNote + '.', (failed + stalled) > 0 ? 'error' : 'success');
                             window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: '' } }));
                             return;
                         }
 
-                        const furthest = states.find((s) => s && s.status === 'in_progress') || states.find((s) => s && !s.done && !s.failed);
-                        const detail = furthest?.label || 'Waiting for devices…';
+                        const furthest = states.find((s) => s && s.status === 'in_progress') || states.find((s) => s && !s.done && !s.failed && !s.stalled);
+                        const detail = furthest?.label || (stalled > 0 ? stalled + ' not responding' : 'Waiting for devices…');
                         setProgressBar(percent, settled.length + ' of ' + total + ' devices · ' + detail, false, false);
                         setBusy(true);
                         startElapsedTicker(settled.length + ' of ' + total + ' devices · ' + detail);
