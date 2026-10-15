@@ -286,16 +286,19 @@ class ResidentDaemonTest extends TestCase
         ]);
     }
 
-    public function test_update_all_broadcasts_to_null()
+    public function test_update_all_targets_each_behind_device()
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
         $this->actingAs($admin)->post(route('agent.updateAll'))->assertRedirect();
 
+        // One command per behind device, not one broadcast row. A shared row was
+        // settled by whichever agent acked first, closing the rollout dialog
+        // while the rest of the fleet was still updating.
         $this->assertDatabaseCount('agent_commands', 1);
         $this->assertDatabaseHas('agent_commands', [
             'command' => 'update',
-            'agent_token_id' => null,
+            'agent_token_id' => $this->apiToken->id,
             'status' => 'pending',
         ]);
     }

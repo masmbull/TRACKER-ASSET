@@ -296,11 +296,16 @@ class AgentLongPollTest extends TestCase
         $response->assertRedirect(route('agent.fleet'));
         $this->assertStringContainsString('1 already on the release', (string) session('success'));
 
-        // The broadcast exists; the per-device filtering happens at hand-out.
+        // Only the behind device gets a command; the current one is skipped.
         $this->assertDatabaseHas('agent_commands', [
             'command' => 'update',
             'status' => 'pending',
-            'agent_token_id' => null,
+            'agent_token_id' => AgentApiToken::where('name', 'behind-laptop')->value('id'),
+        ]);
+
+        $this->assertDatabaseMissing('agent_commands', [
+            'command' => 'update',
+            'agent_token_id' => $this->agent->id,
         ]);
     }
 
