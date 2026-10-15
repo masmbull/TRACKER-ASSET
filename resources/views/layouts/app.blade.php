@@ -441,6 +441,13 @@
                 </div>
             </div>
 
+            {{-- One line per device for a fleet-wide action. The aggregate bar
+                 above says how far the rollout is, but "which laptop is stuck" is
+                 the question an operator actually has, and a count of "0 of 3"
+                 cannot answer it. Filled by watchBatch from the per-command
+                 status endpoint, which now carries the device name. --}}
+            <ul id="ajax-action-devices" class="mt-3 hidden max-h-52 space-y-1.5 overflow-y-auto"></ul>
+
             <div class="mt-5 flex justify-end">
                 <button id="ajax-action-close" type="button" class="hidden rounded-lg bg-brand-600 px-4 py-2 text-theme-sm font-medium text-white transition hover:bg-brand-700">Done</button>
             </div>
@@ -463,6 +470,7 @@
             const stageEl = document.getElementById('ajax-action-stage');
             const percentEl = document.getElementById('ajax-action-percent');
             const barEl = document.getElementById('ajax-action-bar');
+            const devicesEl = document.getElementById('ajax-action-devices');
 
             const busyBar = () => document.getElementById('top-progress');
             const setBar = (on) => busyBar()?.classList.toggle('is-busy', on);
@@ -473,6 +481,7 @@
                     modal.classList.remove('flex');
                     window.clearInterval(pollTimer);
                     pollTimer = null;
+                    clearDeviceList();
                 }
             };
 
@@ -518,6 +527,64 @@
             };
 
             /**
+             * One row per device for a fleet-wide action: name, state, and the
+             * agent's own stage sentence when it has one. Rendered from the
+             * status poll every couple of seconds, so it stays current without any
+             * server-side push.
+             */
+            const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+            }[ch]));
+
+            const renderDeviceList = (states) => {
+                if (!devicesEl) {
+                    return;
+                }
+
+                // Only for a real batch: a single command already has the bar and
+                // a device list of one would just repeat its name.
+                if (!Array.isArray(states) || states.length < 2) {
+                    devicesEl.classList.add('hidden');
+                    devicesEl.innerHTML = '';
+                    return;
+                }
+
+                devicesEl.classList.remove('hidden');
+                devicesEl.innerHTML = states.map((s) => {
+                    const name = escapeHtml((s && s.device) ? s.device : 'device');
+                    let badge, tone, detail = '';
+
+                    if (s && s.done) {
+                        badge = 'done'; tone = 'text-success-600 dark:text-success-400';
+                    } else if (s && s.failed) {
+                        badge = 'failed'; tone = 'text-error-500'; detail = s.message || '';
+                    } else if (s && s.stalled) {
+                        badge = 'not responding'; tone = 'text-error-500';
+                    } else if (s && s.progress !== null && s.progress !== undefined) {
+                        badge = s.progress + '%'; tone = 'text-gray-600 dark:text-gray-300';
+                        detail = s.label || '';
+                    } else {
+                        badge = 'queued'; tone = 'text-gray-500 dark:text-gray-400';
+                    }
+
+                    const sub = detail
+                        ? '<span class="block truncate text-theme-xs text-gray-400">' + escapeHtml(detail) + '</span>'
+                        : '';
+
+                    return '<li class="flex items-start justify-between gap-3 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-800/60">'
+                        + '<span class="min-w-0"><span class="block truncate text-theme-sm font-medium text-gray-700 dark:text-gray-200">' + name + '</span>' + sub + '</span>'
+                        + '<span class="shrink-0 text-theme-xs font-medium ' + tone + '">' + badge + '</span>'
+                        + '</li>';
+                }).join('');
+            };
+            const clearDeviceList = () => {
+                if (devicesEl) {
+                    devicesEl.classList.add('hidden');
+                    devicesEl.innerHTML = '';
+                }
+            };
+
+            /**
              * Watch the queued command until it settles, patching the bar.
              *
              * The POST has already returned - the action is only *queued* at that
@@ -531,6 +598,7 @@
             const watchCommand = (commandId) => {
                 spinner.classList.add('hidden');
                 progressWrap.classList.remove('hidden');
+                clearDeviceList();
                 title.textContent = 'Working';
                 pollStartedAt = Date.now();
                 setProgressBar(0, 'Waiting for the device…', false, false);
@@ -587,11 +655,11 @@
             const watchBatch = (commandIds) => {
                 spinner.classList.add('hidden');
                 progressWrap.classList.remove('hidden');
-                title.textContent = 'Updating fleet';
+title.textContent = 'Updating fleet';
                 pollStartedAt = Date.now();
-                setProgressBar(0, '0 of ' + commandIds.length + ' devices…', false, false);
+                setProgressBar(0, '0 of ' + commandIds.length + ' devices...', false, false);
                 setBusy(true);
-                startElapsedTicker('0 of ' + commandIds.length + ' devices…');
+                startElapsedTicker('0 of ' + commandIds.length + ' devices...');
 
                 window.clearInterval(pollTimer);
                 pollTimer = window.setInterval(async () => {
@@ -603,6 +671,8 @@
                             });
                             return response.ok ? response.json() : null;
                         }));
+
+                        renderDeviceList(states);
 
                         const settled = states.filter((s) => s && (s.done || s.failed));
                         const failed = settled.filter((s) => s && s.failed).length;

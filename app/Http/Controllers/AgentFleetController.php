@@ -1077,6 +1077,10 @@ class AgentFleetController extends Controller
         return response()->json([
             'id' => $command->id,
             'command' => $command->command,
+            // Which machine this row is for. The batch dialog lists one line per
+            // command, and "MSI-2: stalled" is the whole reason an operator opens
+            // it - a bare count of "0 of 3" says nothing about who is stuck.
+            'device' => $command->token?->name,
             'status' => $command->status,
             'progress' => $command->progress,
             // The label already says "stalled at 45%" when the agent has gone

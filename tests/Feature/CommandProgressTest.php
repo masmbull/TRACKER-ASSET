@@ -285,6 +285,61 @@ class CommandProgressTest extends TestCase
     }
 
     /**
+     * A command queued for an agent that never comes back is the same failure
+     * seen from the other side, and it must read as stalled too - otherwise a
+     * fleet-wide action waits forever on a laptop that is switched off.
+     */
+    public function test_a_pending_command_nobody_picked_up_is_stalled(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+
+        $command->forceFill(['updated_at' => now()->subMinutes(10)])->save();
+
+        $fresh = AgentCommand::find($command->id);
+
+        $this->assertTrue($fresh->isStalled());
+        $this->assertStringContainsString('waiting for the agent', $fresh->progressLabel());
+    }
+
+    /**
+     * A freshly queued command is not stalled: the agent has not had its 10s
+     * poll yet, and flagging it would flash "not responding" on every click.
+     */
+    public function test_a_freshly_queued_command_is_not_stalled(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+
+        $this->assertFalse($command->fresh()->isStalled());
+    }
+
+    /**
+     * The batch dialog labels each row by device, so the status endpoint has to
+     * carry the name. A bare count of "0 of 3" cannot tell an operator which
+     * laptop is behind.
+     */
+    public function test_command_status_reports_the_device_name(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('device', $this->agentToken->name);
+    }
+
+    /**
      * The page and the inbox used to hold separate copies of the same number,
      * kept in step only by a comment. Nothing would have failed if they drifted.
      *

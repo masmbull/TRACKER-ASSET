@@ -57,26 +57,37 @@ class AgentCommand extends Model
     }
 
     /**
-     * True when an operation claims to be running but has stopped reporting.
+     * True when an operation is running (or waiting to be picked up) but has
+     * stopped making progress.
      *
      * The agent dies in the middle of things - a locked binary, a killed
      * process, a machine that simply went away - and without this the page keeps
      * rendering whatever percentage it last received, so a dead install looks
      * identical to a slow one.
      *
-     * Only applies while running. A settled command is a record, not a promise,
-     * and a finished update from last week is not "stalled".
+     * Pending counts too, once it is older than the grace window. A command the
+     * agent never came back for is the same failure seen from the other side: the
+     * machine is gone, and the row would otherwise sit "queued" forever. This is
+     * what lets a fleet-wide action finish and report "2 of 3, 1 not responding"
+     * instead of a dialog pinned at "0 of 3" for a laptop that is switched off.
+     *
+     * A settled command is a record, not a promise: last week's finished update
+     * is not "stalled".
      *
      * @param  int  $graceMinutes  Defaults to STALL_GRACE_MINUTES so the page and
      *                             the inbox cannot drift apart.
      */
     public function isStalled(int $graceMinutes = self::STALL_GRACE_MINUTES): bool
     {
-        if (! $this->isRunning()) {
+        if (! $this->isRunning() && ! $this->isPending()) {
             return false;
         }
 
-        $lastMovement = $this->updated_at ?? $this->started_at;
+        // A pending command has no started_at; the moment it was queued is the
+        // only clock it has, so fall back to created_at.
+        $lastMovement = $this->updated_at
+            ?? $this->started_at
+            ?? $this->created_at;
 
         return $lastMovement === null
             || $lastMovement->lt(now()->subMinutes($graceMinutes));
@@ -92,7 +103,12 @@ class AgentCommand extends Model
     public function progressLabel(): ?string
     {
         if ($this->isStalled()) {
-            return 'stalled at '.$this->progressLabelNoStall();
+            // A pending command never reported progress, so "stalled at in
+            // progress" would be nonsense. Say what is actually true: nobody
+            // picked it up.
+            return $this->isPending()
+                ? 'waiting for the agent to respond'
+                : 'stalled at '.$this->progressLabelNoStall();
         }
 
         return $this->progressLabelNoStall();
