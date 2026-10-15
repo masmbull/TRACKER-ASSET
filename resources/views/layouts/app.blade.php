@@ -704,16 +704,25 @@
                         window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
                     }
 
-                    // A queued command is not a finished action: keep the
-                    // dialog open and watch it. A broadcast rollout carries
-                    // several ids and is watched as a batch. Everything else
-                    // has no work to follow, so it closes as before.
-                    if (payload.command_ids && payload.command_ids.length > 1) {
+                    // A queued command is not a finished action: keep the dialog
+                    // open and watch it. `command_ids` is the shape every
+                    // multi-command action returns (Push Script, update-all), and
+                    // it may hold exactly one id when the target was a single
+                    // device - so it is watched as a batch from one upward, not
+                    // from two. Requiring more than one made a one-laptop push
+                    // skip the modal entirely and close on a bare toast.
+                    if (payload.command_ids && payload.command_ids.length >= 1) {
                         submitButtons.forEach((button) => {
                             button.disabled = false;
                             button.classList.remove('opacity-80');
                         });
-                        watchBatch(payload.command_ids);
+
+                        if (payload.command_ids.length === 1) {
+                            watchCommand(payload.command_ids[0]);
+                        } else {
+                            watchBatch(payload.command_ids);
+                        }
+
                         return;
                     }
 
