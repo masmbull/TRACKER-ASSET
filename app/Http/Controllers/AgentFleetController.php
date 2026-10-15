@@ -754,13 +754,16 @@ class AgentFleetController extends Controller
             'created_by' => $request->user()?->name ?? 'system',
         ];
 
+        $commandIds = [];
         foreach ($targetIds as $targetTokenId) {
-            AgentCommand::create([
+            $command = AgentCommand::create([
                 'agent_token_id' => $targetTokenId,
                 'command' => 'script',
                 'payload' => $payload,
                 'status' => 'pending',
             ]);
+
+            $commandIds[] = $command->id;
         }
 
         $targetLabel = match ($validated['target']) {
@@ -770,7 +773,23 @@ class AgentFleetController extends Controller
             default => 'selected devices',
         };
 
-        return back()->with('success', "Script queued for {$targetLabel}. The next poll will fetch and execute it.");
+        $message = "Script queued for {$targetLabel}. The next poll will fetch and execute it.";
+
+        // Same JSON contract as every other fleet action: the browser's action
+        // handler watches the queued command(s) when the response carries their
+        // ids. `command_ids` (plural) routes a multi-device push through the
+        // batch watcher, which is the only shape that can show one bar for
+        // several machines; a single target still comes back as a one-element
+        // array and the handler treats it as a single command.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'message' => $message,
+                'command_ids' => $commandIds,
+            ]);
+        }
+
+        return back()->with('success', $message);
     }
 
     /**

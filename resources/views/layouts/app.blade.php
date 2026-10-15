@@ -638,103 +638,117 @@
                 }, 2000);
             };
 
-            document.querySelectorAll('form[data-modal-action]').forEach((form) => {
-                form.addEventListener('submit', async (event) => {
-                    event.preventDefault();
+            // Delegated on document, not bound per form.
+            //
+            // The per-form binding this replaces ran once, at load, over a
+            // querySelectorAll snapshot. The Update button on Live Fleet lives in
+            // an Alpine modal whose markup is teleported to <body>, so the form
+            // it submits could be moved or (re)rendered outside that snapshot -
+            // and a form with no listener fell through to a normal browser submit,
+            // which the server answered with a redirect. The symptom was exactly
+            // "the Update button does nothing and no progress modal appears".
+            // Listening on the document catches every current and future
+            // data-modal-action form, wherever Alpine puts it.
+            document.addEventListener('submit', async (event) => {
+                const form = event.target.closest('form[data-modal-action]');
+                if (form === null) {
+                    return;
+                }
 
-                    if (modal.dataset.busy === 'true') {
-                        return;
+                event.preventDefault();
+
+                if (modal.dataset.busy === 'true') {
+                    return;
+                }
+
+                window.clearInterval(pollTimer);
+                pollTimer = null;
+                progressWrap.classList.add('hidden');
+                modal.dataset.busy = 'true';
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                modal.setAttribute('aria-busy', 'true');
+                title.textContent = 'Working';
+                message.textContent = 'Sending your request. Please wait.';
+                spinner.classList.remove('hidden');
+                closeButton.classList.add('hidden');
+                setBar(true);
+
+                const submitButtons = [...form.querySelectorAll('button[type="submit"]')];
+                submitButtons.forEach((button) => {
+                    button.disabled = true;
+                    button.classList.add('opacity-80');
+                });
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    });
+                    const payload = response.headers.get('content-type')?.includes('application/json')
+                        ? await response.json()
+                        : {};
+
+                    if (!response.ok || payload.ok !== true) {
+                        throw new Error(payload.message || (response.redirected
+                            ? 'Your session expired. Sign in again, then retry.'
+                            : 'The action could not be completed. Please try again.'));
                     }
 
-                    window.clearInterval(pollTimer);
-                    pollTimer = null;
-                    progressWrap.classList.add('hidden');
-                    modal.dataset.busy = 'true';
-                    modal.classList.remove('hidden');
-                    modal.classList.add('flex');
-                    modal.setAttribute('aria-busy', 'true');
-                    title.textContent = 'Working';
-                    message.textContent = 'Sending your request. Please wait.';
-                    spinner.classList.remove('hidden');
-                    closeButton.classList.add('hidden');
-                    setBar(true);
+                    if (form.dataset.closeModal) {
+                        window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
+                    }
 
-                    const submitButtons = [...form.querySelectorAll('button[type="submit"]')];
-                    submitButtons.forEach((button) => {
-                        button.disabled = true;
-                        button.classList.add('opacity-80');
-                    });
-
-                    try {
-                        const response = await fetch(form.action, {
-                            method: 'POST',
-                            body: new FormData(form),
-                            headers: {
-                                Accept: 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
-                            credentials: 'same-origin',
-                        });
-                        const payload = response.headers.get('content-type')?.includes('application/json')
-                            ? await response.json()
-                            : {};
-
-                        if (!response.ok || payload.ok !== true) {
-                            throw new Error(payload.message || (response.redirected
-                                ? 'Your session expired. Sign in again, then retry.'
-                                : 'The action could not be completed. Please try again.'));
-                        }
-
-                        if (form.dataset.closeModal) {
-                            window.dispatchEvent(new CustomEvent('close-modal', { detail: form.dataset.closeModal }));
-                        }
-
-                        // A queued command is not a finished action: keep the
-                        // dialog open and watch it. A broadcast rollout carries
-                        // several ids and is watched as a batch. Everything else
-                        // has no work to follow, so it closes as before.
-                        if (payload.command_ids && payload.command_ids.length > 1) {
-                            submitButtons.forEach((button) => {
-                                button.disabled = false;
-                                button.classList.remove('opacity-80');
-                            });
-                            watchBatch(payload.command_ids);
-                            return;
-                        }
-
-                        if (payload.command_id) {
-                            submitButtons.forEach((button) => {
-                                button.disabled = false;
-                                button.classList.remove('opacity-80');
-                            });
-                            watchCommand(payload.command_id);
-                            return;
-                        }
-
-                        modal.dataset.busy = 'false';
-                        modal.removeAttribute('aria-busy');
-                        closeModal();
-                        setBar(false);
-                        window.showToast?.(payload.message || 'Done.', 'success');
-                        window.dispatchEvent(new CustomEvent('async-action-done', {
-                            detail: { action: form.action, message: payload.message || '' },
-                        }));
-                    } catch (error) {
-                        title.textContent = 'Action not completed';
-                        message.textContent = error.message;
-                        modal.dataset.busy = 'false';
-                        modal.removeAttribute('aria-busy');
-                        spinner.classList.add('hidden');
-                        closeButton.classList.remove('hidden');
-                        setBar(false);
-                        closeButton.focus();
-                    } finally {
+                    // A queued command is not a finished action: keep the
+                    // dialog open and watch it. A broadcast rollout carries
+                    // several ids and is watched as a batch. Everything else
+                    // has no work to follow, so it closes as before.
+                    if (payload.command_ids && payload.command_ids.length > 1) {
                         submitButtons.forEach((button) => {
                             button.disabled = false;
                             button.classList.remove('opacity-80');
                         });
+                        watchBatch(payload.command_ids);
+                        return;
                     }
-                });
+
+                    if (payload.command_id) {
+                        submitButtons.forEach((button) => {
+                            button.disabled = false;
+                            button.classList.remove('opacity-80');
+                        });
+                        watchCommand(payload.command_id);
+                        return;
+                    }
+
+                    modal.dataset.busy = 'false';
+                    modal.removeAttribute('aria-busy');
+                    closeModal();
+                    setBar(false);
+                    window.showToast?.(payload.message || 'Done.', 'success');
+                    window.dispatchEvent(new CustomEvent('async-action-done', {
+                        detail: { action: form.action, message: payload.message || '' },
+                    }));
+                } catch (error) {
+                    title.textContent = 'Action not completed';
+                    message.textContent = error.message;
+                    modal.dataset.busy = 'false';
+                    modal.removeAttribute('aria-busy');
+                    spinner.classList.add('hidden');
+                    closeButton.classList.remove('hidden');
+                    setBar(false);
+                    closeButton.focus();
+                } finally {
+                    submitButtons.forEach((button) => {
+                        button.disabled = false;
+                        button.classList.remove('opacity-80');
+                    });
+                }
             });
 
             closeButton.addEventListener('click', closeModal);

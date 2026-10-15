@@ -258,6 +258,34 @@ class LiveFleetTest extends TestCase
     }
 
     /**
+     * Push Script must answer the browser's action fetch with the queued
+     * command ids, the same contract Update and Scan already use - otherwise the
+     * Push Script modal submitted as a plain form and the operator saw a page
+     * reload with no progress, however many devices the script was queued for.
+     */
+    public function test_push_script_returns_command_ids_for_the_progress_modal(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $response = $this->actingAs($admin)->postJson(route('agent.commands.script'), [
+            'target' => 'all',
+            'script_body' => 'Write-Host "deploy"',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
+
+        $ids = $response->json('command_ids');
+        $this->assertIsArray($ids);
+        $this->assertNotEmpty($ids, 'the modal needs at least one command id to watch');
+        $this->assertDatabaseHas('agent_commands', ['id' => $ids[0], 'command' => 'script']);
+    }
+
+    /**
      * Every preset must survive the pipeline as a runnable batch script: detect
      * as `cmd`, keep the matching `.bat` name, and queue as a pending command.
      * A preset the server reads as binary or PowerShell would be a one-click

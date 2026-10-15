@@ -114,7 +114,7 @@
 </x-modal>
 
 <x-modal id="push-script-modal" title="Push script to devices" maxWidth="2xl">
-    <form method="POST" action="{{ route('agent.commands.script') }}" class="space-y-5"
+    <form method="POST" action="{{ route('agent.commands.script') }}" class="space-y-5" data-modal-action data-close-modal="push-script-modal"
           x-data="{
               target: 'all',
               body: '',
