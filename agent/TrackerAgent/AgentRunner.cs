@@ -124,6 +124,7 @@ public static class AgentRunner
         bool removeService = false;
         bool guard = false;
         string? targetDir = null;
+        int? parentProcessId = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -141,6 +142,7 @@ public static class AgentRunner
                 case "--remove-service": removeService = true; break;
                 case "--guard": guard = true; break;
                 case "--target-dir": targetDir = NextArg(args, ref i); break;
+                case "--parent-pid": parentProcessId = int.Parse(NextArg(args, ref i)); break;
             }
         }
 
@@ -206,7 +208,7 @@ public static class AgentRunner
         // while every system-level script kept dying.
         if (installService)
         {
-            var result = InstallSystemTask(serverUrl, token, assetId, pollSeconds);
+            var result = InstallSystemTask(serverUrl, token, assetId, pollSeconds, parentProcessId);
 
             // The SYSTEM daemon and the self-heal guard are installed together:
             // both need the one elevation the user just granted, and a machine
@@ -308,7 +310,8 @@ public static class AgentRunner
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
         "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
-            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard" => true,
+            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard"
+            or "--parent-pid" => true,
         _ => false,
     };
     /// <summary>
@@ -749,26 +752,37 @@ public static class AgentRunner
                 // standard-user agent cannot do it. Settle the command NOW, before
                 // asking for elevation: Process.Start(runas) blocks until the
                 // prompt is answered, and acking after it left the command
-                // in_progress for the whole timeout - the progress bar sat at 40%
-                // for minutes. The elevation request is fire-and-forget by design.
-                if (PromoteToSystemService(url, token))
+                // in_progress for that whole wait - the progress bar sat at 40%
+                // for minutes with no heartbeat underneath it either, because the
+                // elevation ran on the command loop. The request itself is
+                // fire-and-forget by design (and runs off the loop for the same
+                // reason): the script runs on the next poll, once the SYSTEM
+                // task exists.
+                if (CanPromote())
                 {
                     Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
                     {
                         ["message"] = "Requested administrator approval to run scripts as SYSTEM. "
                             + "Approve the Windows prompt on the machine; the script runs automatically on the next poll.",
                     });
+
+                    _ = Task.Run(() => PromoteToSystemService(url, token));
+
                     return 1;
                 }
 
-                // The honest failure: creating a SYSTEM task is itself an
-                // administrative action, so an agent running as a plain user
-                // cannot perform it. Say what to do rather than "not enough
-                // rights", which reads like a bug in the click.
+                // The honest failure: either the agent runs as a plain user and
+                // cannot perform an administrative action, or it is already
+                // elevated and Windows still refused the task. Say what to do
+                // rather than "not enough rights", which reads like a bug in the
+                // click - and do not promise a prompt that will never appear.
                 Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
                 {
-                    ["message"] = "This script needs administrator rights, but the agent is running as a standard user. "
-                        + "Reinstall or start the agent as an administrator (or as a service) on this machine, then push the script again.",
+                    ["message"] = IsElevated()
+                        ? "Windows refused to create the SYSTEM task even though this agent is already elevated. "
+                            + "Check the Task Scheduler service on the machine, then push the script again."
+                        : "This script needs administrator rights, but the agent is running as a standard user. "
+                            + "Reinstall or start the agent as an administrator (or as a service) on this machine, then push the script again.",
                 });
                 return 1;
             }
@@ -896,26 +910,52 @@ public static class AgentRunner
     }
 
     /// <summary>
+    /// Whether a UAC request from this process is still worth showing: not
+    /// elevated already, and an installed binary to relaunch.
+    /// </summary>
+    /// <remarks>
+    /// Shared with the script path, which has to know whether a prompt will
+    /// actually appear before it settles its command - the request itself blocks
+    /// until somebody answers that prompt, so it cannot be used to find out.
+    /// </remarks>
+    private static bool CanPromote()
+    {
+        if (IsElevated())
+        {
+            return false;
+        }
+
+        var exe = SelfBinaryPath();
+
+        return !string.IsNullOrWhiteSpace(exe) && File.Exists(exe);
+    }
+
+    /// <summary>
     /// Ask Windows to relaunch this binary elevated and register the boot-time
     /// SYSTEM task, so machine-level scripts stop needing a human.
     /// </summary>
     /// <remarks>
     /// Windows will not elevate a process silently: the UAC consent dialog needs
-    /// someone at the machine. So this intentionally hands off to a
-    /// ShellExecute "runas" launch and does NOT wait for it - the agent keeps
-    /// polling, and the operator who approves the prompt gets a SYSTEM daemon on
-    /// the next boot. A UAC the user cancels throws (Win32Exception 1223); that
-    /// is a normal outcome, reported by the caller as "needs admin", not a crash.
+    /// someone at the machine. The launch therefore runs on a dedicated
+    /// background thread and this method joins it, so it blocks its caller for
+    /// as long as that human takes - first for the prompt, then until the
+    /// elevated child has registered the task. No caller may run it on a command
+    /// loop: a blocked loop stops the heartbeats the fleet page reads as proof
+    /// of life, so both callers schedule it off-loop and report progress while
+    /// it runs. A UAC the user cancels throws (Win32Exception 1223); that is a
+    /// normal outcome, reported as false - "needs admin", not a crash.
     ///
     /// Only the installed exe is relaunched, and only with --install-service, so
-    /// the elevated child does one bounded thing (create the task) and exits.
+    /// the elevated child does one bounded thing (create the task, start the
+    /// daemon) and exits. It is handed this process's id as --parent-pid so its
+    /// KillUserTrays spares the caller long enough to settle its own command.
     ///
     /// Public because both the script path (a run_as:system push that hit a
     /// standard-user agent) and the standalone `elevate` command reach for it.
     /// </remarks>
     public static bool PromoteToSystemService(string url, string token)
     {
-        if (IsElevated())
+        if (!CanPromote())
         {
             // Already elevated: schtasks would have worked, so the failure was
             // something else. Do not pop a pointless UAC prompt.
@@ -928,14 +968,12 @@ public static class AgentRunner
             return false;
         }
 
-        // The UAC dialog is a shell UI, and raising it reliably needs a thread
-        // with a message pump on the interactive desktop. The tray (WPF) has one;
-        // the headless `--daemon` process does not, and a runas launch from there
-        // was accepted by Process.Start yet produced no visible prompt - the
-        // failure this fixes. So when a WPF Application exists, marshal the launch
-        // onto its UI thread; otherwise fall through to a direct attempt, which
-        // is all a non-GUI process can do.
-        var launched = false;
+        // The UAC dialog is a shell UI and Process.Start(runas) does not return
+        // until somebody answers it, so the wait belongs on a thread of its own:
+        // neither the WPF UI thread (the tray would freeze while somebody walks
+        // over to the laptop) nor a headless daemon, which has no UI thread to
+        // offer anyway, may sit inside that call.
+        var succeeded = false;
 
         void Launch()
         {
@@ -944,26 +982,20 @@ public static class AgentRunner
                 var psi = new ProcessStartInfo
                 {
                     FileName = exe,
-                    Arguments = $"--install-service --quiet --url \"{url}\" --token \"{token}\"",
+                    Arguments = $"--install-service --quiet --url \"{url}\" --token \"{token}\" --parent-pid {Environment.ProcessId}",
                     UseShellExecute = true,
                     Verb = "runas",
                 };
 
-                // Marked before the blocking call: Process.Start(runas) does not
-                // return until the consent dialog is answered, so setting this
-                // afterwards would report "not requested" while the prompt is
-                // still on screen. "We asked" is the truthful state here; a
-                // decline is a separate outcome the machine simply does not act on.
-                launched = true;
-
-                // Blocks until the consent dialog is answered, which is why this
-                // runs on its own thread and never on the WPF UI thread - freezing
-                // that pump is what stopped the prompt painting at all.
-                Process.Start(psi);
+                // Keep the tray alive through service installation so it can ACK
+                // this command before the SYSTEM daemon takes over polling.
+                using var process = Process.Start(psi);
+                process?.WaitForExit();
+                succeeded = process?.ExitCode == 0;
             }
             catch (Exception ex)
             {
-                launched = false;
+                succeeded = false;
 
                 // Win32Exception 1223 is "the user declined"; no interactive
                 // session is the other common case.
@@ -971,14 +1003,13 @@ public static class AgentRunner
             }
         }
 
-        // Off the UI thread deliberately (see Launch). The join is short: enough
-        // for Process.Start to raise the prompt or throw, not so long that it
-        // blocks the caller waiting on the user.
+        // Off the UI thread deliberately: Process.Start with runas waits for
+        // the user to answer the consent dialog.
         var worker = new Thread(Launch) { IsBackground = true };
         worker.Start();
-        worker.Join(TimeSpan.FromSeconds(3));
+        worker.Join();
 
-        return launched;
+        return succeeded;
     }
 
     /// <summary>Run a script in this (already elevated) process and report its exit code.</summary>
@@ -1438,7 +1469,7 @@ public static class AgentRunner
     {
         try
         {
-            var payload = HardwareCollector.Collect();
+            var payload = HardwareCollector.Collect("service");
 
             var deviceId = TryReadDeviceId();
             if (!string.IsNullOrWhiteSpace(deviceId))
@@ -1581,7 +1612,7 @@ public static class AgentRunner
     /// standard user, and the failure mode is the one this task exists to fix,
     /// so it returns non-zero and prints why rather than pretending.
     /// </remarks>
-    static int InstallSystemTask(string url, string token, string? assetId, int pollSeconds)
+    static int InstallSystemTask(string url, string token, string? assetId, int pollSeconds, int? parentProcessId = null)
     {
         if (!IsElevated())
         {
@@ -1629,7 +1660,7 @@ public static class AgentRunner
         // flipping per poll. Remove it for every real user profile and kill any
         // tray already running in one.
         RemoveAllUserAutostarts();
-        KillUserTrays(exe);
+        KillUserTrays(exe, parentProcessId);
 
         // Start it now so the machine is on-system without waiting for a reboot.
         Run("schtasks", $"/Run /TN \"{SystemTaskName}\"", 30);
@@ -1705,13 +1736,13 @@ public static class AgentRunner
     /// Stop any tray-mode agent still running in a user session. The SYSTEM
     /// daemon is now the one agent; a surviving tray would double-poll.
     /// </summary>
-    static void KillUserTrays(string systemExe)
+    static void KillUserTrays(string systemExe, int? preserveProcessId = null)
     {
         var self = Environment.ProcessId;
 
         foreach (var proc in Process.GetProcessesByName("TrackerAgent"))
         {
-            if (proc.Id == self)
+            if (proc.Id == self || proc.Id == preserveProcessId)
             {
                 continue;
             }

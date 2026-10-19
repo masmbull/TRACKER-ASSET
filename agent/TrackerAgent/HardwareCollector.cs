@@ -9,9 +9,10 @@ namespace TrackerAgent;
 
 public static class HardwareCollector
 {
-    public static Dictionary<string, string> Collect()
+    public static Dictionary<string, string> Collect(string agentMode = "scan")
     {
         var data = new Dictionary<string, string>();
+        data["agent_mode"] = agentMode;
 
         try { data["hostname"] = Environment.MachineName; } catch { }
 
@@ -266,38 +267,101 @@ public static class HardwareCollector
         catch { }
     }
 
-    /// <summary>RAM modules, total size and speed, e.g. "2x 8GB @ 3200 MHz".</summary>
+    /// <summary>Installed module sizes and speed, e.g. "2x 8GB @ 3200 MHz".</summary>
     static void CollectMemoryLayout(Dictionary<string, string> data)
     {
         try
         {
-            using var memory = new ManagementObjectSearcher("SELECT * FROM Win32_PhysicalMemory");
+            var modules = ReadMemoryModules();
 
-            var modules = 0;
-            var speed = 0;
-            double totalBytes = 0;
-
-            foreach (var obj in memory.Get())
+            if (modules.Count > 0)
             {
-                modules++;
-                totalBytes += Convert.ToDouble(obj["Capacity"] ?? 0);
-                speed = Math.Max(speed, Convert.ToInt32(obj["Speed"] ?? 0));
-            }
-
-            if (modules > 0)
-            {
-                var layout = $"{modules}x {FormatBytes(totalBytes)}";
-
-                if (speed > 0)
-                {
-                    layout += $" @ {speed} MHz";
-                }
-
-                data["ram_config"] = layout;
+                data["ram_config"] = FormatMemoryLayout(modules);
             }
         }
         catch { }
     }
+
+    internal static int InstalledMemoryModuleCount() => ReadMemoryModules().Count;
+
+    internal static string FormatMemoryLayout(IEnumerable<MemoryModuleReading> modules)
+    {
+        var installed = DeduplicateMemoryModules(modules);
+
+        if (installed.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var sizes = installed
+            .GroupBy(module => module.Capacity)
+            .OrderByDescending(group => group.Key)
+            .Select(group => group.Count() == 1
+                ? FormatBytes(group.Key)
+                : $"{group.Count()}x {FormatBytes(group.Key)}");
+        var layout = string.Join(" + ", sizes);
+        var speed = installed.Max(module => module.Speed);
+
+        return speed > 0 ? $"{layout} @ {speed} MHz" : layout;
+    }
+
+    private static List<MemoryModuleReading> ReadMemoryModules()
+    {
+        using var memory = new ManagementObjectSearcher(
+            "SELECT Capacity, DeviceLocator, SerialNumber, Tag, Speed FROM Win32_PhysicalMemory");
+        var modules = new List<MemoryModuleReading>();
+
+        foreach (var obj in memory.Get())
+        {
+            var capacity = Convert.ToUInt64(obj["Capacity"] ?? 0);
+
+            if (capacity == 0)
+            {
+                continue;
+            }
+
+            modules.Add(new MemoryModuleReading(
+                obj["DeviceLocator"]?.ToString(),
+                obj["SerialNumber"]?.ToString(),
+                obj["Tag"]?.ToString(),
+                capacity,
+                Convert.ToInt32(obj["Speed"] ?? 0)));
+        }
+
+        return DeduplicateMemoryModules(modules);
+    }
+
+    private static List<MemoryModuleReading> DeduplicateMemoryModules(IEnumerable<MemoryModuleReading> modules)
+    {
+        var unique = new Dictionary<string, MemoryModuleReading>(StringComparer.OrdinalIgnoreCase);
+        var unlocated = new List<MemoryModuleReading>();
+
+        foreach (var module in modules.Where(module => module.Capacity > 0))
+        {
+            var identity = FirstIdentity(module.SerialNumber, module.Tag, module.DeviceLocator);
+
+            if (identity is null)
+            {
+                unlocated.Add(module);
+                continue;
+            }
+
+            unique.TryAdd(identity, module);
+        }
+
+        return unique.Values.Concat(unlocated).ToList();
+    }
+
+    private static string? FirstIdentity(params string?[] identities) => identities
+        .Select(identity => identity?.Trim())
+        .FirstOrDefault(identity => !string.IsNullOrWhiteSpace(identity));
+
+    internal sealed record MemoryModuleReading(
+        string? DeviceLocator,
+        string? SerialNumber,
+        string? Tag,
+        ulong Capacity,
+        int Speed);
 
     /// <summary>Primary GPU name (Live Fleet hardware summary).</summary>
     /// <remarks>

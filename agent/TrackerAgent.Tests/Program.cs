@@ -24,6 +24,7 @@ internal static class Program
         TokenFromConfigCases();
         TrayAutostartCases();
         ScanResultCases();
+        MemoryLayoutCases();
         FullScanCases();
         ServiceTaskCases();
 
@@ -160,6 +161,28 @@ internal static class Program
             Prints("""{ "result": "MATCH", "asset": "MITO-0001", "mismatches": "nope" }""").Ok);
     }
 
+    private static void MemoryLayoutCases()
+    {
+        Console.WriteLine("[*] physical memory layout");
+
+        var singleModule = new HardwareCollector.MemoryModuleReading("DIMM 0", "SERIAL-1", "Physical Memory 0", 16UL * 1024 * 1024 * 1024, 3200);
+        var duplicateRow = new HardwareCollector.MemoryModuleReading("DIMM 0", "SERIAL-1", "Physical Memory 0", 16UL * 1024 * 1024 * 1024, 3200);
+        var movedDuplicateRow = new HardwareCollector.MemoryModuleReading("ChannelA-DIMM0", "SERIAL-1", "Physical Memory 9", 16UL * 1024 * 1024 * 1024, 3200);
+        var invalidRow = new HardwareCollector.MemoryModuleReading("DIMM 1", "", "Physical Memory 1", 0, 0);
+
+        Check(
+            "one populated 16GB slot is reported as one 16GB module",
+            HardwareCollector.FormatMemoryLayout([singleModule]) == "16GB @ 3200 MHz");
+        Check(
+            "duplicate and zero-capacity WMI rows do not inflate RAM",
+            HardwareCollector.FormatMemoryLayout([singleModule, duplicateRow, movedDuplicateRow, invalidRow]) == "16GB @ 3200 MHz");
+
+        var eightGbModule = new HardwareCollector.MemoryModuleReading("DIMM 1", "SERIAL-2", "Physical Memory 1", 8UL * 1024 * 1024 * 1024, 2666);
+        Check(
+            "different module capacities stay distinguishable",
+            HardwareCollector.FormatMemoryLayout([singleModule, eightGbModule]) == "16GB + 8GB @ 3200 MHz");
+    }
+
     private static void FullScanCases()
     {
         Console.WriteLine("[*] full scan request");
@@ -236,6 +259,7 @@ internal static class Program
         Check("--install-service is a CLI flag", AgentRunner.IsCliFlagForTest("--install-service"));
         Check("--remove-service is a CLI flag", AgentRunner.IsCliFlagForTest("--remove-service"));
         Check("--guard is a CLI flag", AgentRunner.IsCliFlagForTest("--guard"));
+        Check("--parent-pid is a CLI flag", AgentRunner.IsCliFlagForTest("--parent-pid"));
 
         // The guard must judge a machine healthy unless the agent is genuinely
         // gone, or it would be rewrites on every tick - onto machines that never

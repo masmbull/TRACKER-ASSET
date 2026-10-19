@@ -31,6 +31,31 @@ public partial class App : System.Windows.Application
     /// </remarks>
     private static readonly SemaphoreSlim ScanGate = new(1, 1);
 
+    /// <summary>
+    /// While an elevate command is waiting on its UAC prompt, so a second one
+    /// is refused instead of stacking a second prompt on the first.
+    /// </summary>
+    private int _elevationInFlight;
+
+    /// <summary>
+    /// Set once the tray is closing, so the elevation that just succeeded and
+    /// the daemon check in the command loop cannot both tear the icon down.
+    /// </summary>
+    private int _trayStopped;
+
+    /// <summary>
+    /// How often an elevate command re-reports progress while a human decides,
+    /// and how long it may wait. The server calls a command stalled after two
+    /// minutes of silence, so the ping has to stay well inside that.
+    /// </summary>
+    private static readonly TimeSpan ElevationPing = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// A prompt nobody answers must not hold the progress dialog - or the
+    /// one-elevation-at-a-time guard - open forever.
+    /// </summary>
+    private static readonly TimeSpan ElevationTimeout = TimeSpan.FromMinutes(5);
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -156,7 +181,8 @@ public partial class App : System.Windows.Application
     {
         "--url" or "-u" or "--token" or "-t" or "--asset-id" or "-a" or
         "--quiet" or "-q" or "--daemon" or "-d" or "--poll" or "--uninstall" or "--update"
-            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard" => true,
+            or "--status" or "--self-test-icon" or "--install-service" or "--remove-service" or "--guard"
+            or "--parent-pid" => true,
         _ => false,
     };
 
@@ -261,6 +287,21 @@ public partial class App : System.Windows.Application
         // whole application was restarted.
         while (true)
         {
+            // StartTray checks this once, at launch; check it on every poll as
+            // well. A SYSTEM daemon can appear while this tray is running - an
+            // elevation fired off earlier just completed, or the boot task
+            // started on its own - and from that moment two agents poll one
+            // token: the inbox is fetched twice per poll and is_elevated flips
+            // between the tray and the service. Skipped while our own elevation
+            // is still in flight, because that task owns the ack and the
+            // close-down for its command.
+            if (Volatile.Read(ref _elevationInFlight) == 0 && AgentRunner.IsSystemDaemonAlive())
+            {
+                AgentLog.Write("SYSTEM daemon came up while the tray was running; standing down to avoid two agents on one token.");
+                StopTray();
+                return;
+            }
+
             try
             {
                 var commands = Api.GetInbox(config.ServerUrl, config.Token, AgentRunner.LongPollSeconds, out var unauthorized);
@@ -355,16 +396,31 @@ public partial class App : System.Windows.Application
                             // Standalone "become admin" request, so an operator can
                             // promote a laptop from the fleet without pushing a
                             // script first. Same one-time UAC path the script uses.
+                            //
+                            // It runs on its own task rather than on this loop:
+                            // Process.Start(runas) does not return until somebody
+                            // answers the consent dialog, and a blocked loop stops
+                            // every heartbeat - the device went stale on Live Fleet
+                            // exactly while somebody was walking over to approve
+                            // it. One at a time, so a repeated click cannot stack a
+                            // second prompt on the first.
                             AgentLog.Write($"Elevate command #{id} received.");
-                            var promoted = AgentRunner.PromoteToSystemService(config.ServerUrl, config.Token);
 
-                            Api.Ack(config.ServerUrl, config.Token, id, promoted ? "done" : "failed",
-                                new Dictionary<string, string>
-                                {
-                                    ["message"] = promoted
-                                        ? "Administrator approval requested. Approve the Windows prompt; the agent becomes a system service."
-                                        : "Could not request administrator approval. The agent may already be elevated, or no one is at the machine to approve.",
-                                });
+                            if (Interlocked.CompareExchange(ref _elevationInFlight, 1, 0) != 0)
+                            {
+                                Api.Ack(config.ServerUrl, config.Token, id, "failed",
+                                    new Dictionary<string, string>
+                                    {
+                                        ["message"] = "This device is already waiting for administrator approval. Answer the Windows prompt that is open on it.",
+                                    });
+
+                                continue;
+                            }
+
+                            var elevationConfig = config;
+                            _ = Task.Run(() => RequestAdministratorApproval(elevationConfig, id));
+
+                            continue;
                         }
                         else if (command == "uninstall")
                         {
@@ -466,6 +522,124 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// Ask Windows for administrator rights and settle command <paramref name="id"/>
+    /// with what actually happened - always off the command loop.
+    /// </summary>
+    /// <remarks>
+    /// Process.Start(runas) does not return until somebody answers the consent
+    /// dialog, so this can wait for minutes; running that on the loop would stop
+    /// the long-poll, the heartbeat and the fingerprint cadence the fleet page
+    /// reads as proof of life. While it waits it re-reports every 30 seconds,
+    /// because the server calls a command stalled after two minutes of silence
+    /// and "stalled" is what turns the progress dialog into "Device not
+    /// responding" while the operator is still on their way to the machine.
+    ///
+    /// The wait is bounded: on timeout the command is settled as refused and the
+    /// dialog released, but the request itself keeps running - if somebody
+    /// approves the prompt late the install still completes, and the daemon check
+    /// at the top of the command loop is what closes this tray then.
+    /// </remarks>
+    private async Task RequestAdministratorApproval(AgentConfig config, long id)
+    {
+        try
+        {
+            var (status, message) = await AskForAdministratorApproval(config, id);
+
+            Api.Ack(config.ServerUrl, config.Token, id, status,
+                new Dictionary<string, string> { ["message"] = message });
+
+            if (status == "done")
+            {
+                StopTray();
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Elevate command #{id} failed: {ex.Message}");
+
+            Api.Ack(config.ServerUrl, config.Token, id, "failed",
+                new Dictionary<string, string>
+                {
+                    ["message"] = "The elevation request failed before Windows could show a prompt. Check agent.log on the machine.",
+                });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _elevationInFlight, 0);
+        }
+    }
+
+    /// <summary>
+    /// Fire the one-time UAC promotion and wait for its verdict, pinging
+    /// progress so the command never reads as stalled while a human decides.
+    /// </summary>
+    private async Task<(string Status, string Message)> AskForAdministratorApproval(AgentConfig config, long id)
+    {
+        Api.ReportProgress(config.ServerUrl, config.Token, id, 10, "Approve the Windows prompt...");
+
+        var promotion = Task.Run(() =>
+            AgentRunner.PromoteToSystemService(config.ServerUrl, config.Token));
+        var deadline = DateTimeOffset.UtcNow.Add(ElevationTimeout);
+
+        while (!promotion.IsCompleted && DateTimeOffset.UtcNow < deadline)
+        {
+            if (await Task.WhenAny(promotion, Task.Delay(ElevationPing)) == promotion)
+            {
+                break;
+            }
+
+            Api.ReportProgress(config.ServerUrl, config.Token, id, 50,
+                "Waiting for the Windows prompt to be approved...");
+        }
+
+        if (!promotion.IsCompleted)
+        {
+            return ("failed",
+                $"Nobody approved the Windows prompt within {(int)ElevationTimeout.TotalMinutes} minutes. Trigger the request again when someone is at the machine.");
+        }
+
+        var promoted = await promotion;
+
+        return promoted
+            ? ("done", "Administrator approval granted: the SYSTEM task is registered and this tray is closing so the service takes over.")
+            : ("failed", "Windows did not grant administrator rights - the prompt was cancelled, or the agent is already elevated. Nothing was installed.");
+    }
+
+    /// <summary>
+    /// Close the tray exactly once. The elevation that just succeeded and the
+    /// daemon check in the command loop can both get here within the same poll.
+    /// </summary>
+    private void StopTray()
+    {
+        if (Interlocked.Exchange(ref _trayStopped, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    _trayIcon.Visible = false;
+                    _trayIcon.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    AgentLog.Write($"Could not remove the tray icon: {ex.Message}");
+                }
+
+                Shutdown();
+            });
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Could not close the tray: {ex.Message}");
+        }
+    }
+
     /** Matches AgentRunner so both runtime modes report on the same cadence. */
     private const int HeartbeatSeconds = 60;
 
@@ -484,7 +658,11 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            var payload = HardwareCollector.Collect();
+            // This process IS the tray, whatever the icon is doing: it is hidden
+            // for a moment while the tray closes (after a successful elevation,
+            // before an uninstall), and reporting "unknown" in that window
+            // downgraded a healthy device's mode a second before it went away.
+            var payload = HardwareCollector.Collect("tray");
             payload["device_id"] = config.DeviceId;
 
             Api.Heartbeat(config.ServerUrl, config.Token, payload, out var needsFullScan);

@@ -1524,13 +1524,7 @@ Write-Output ('PENDING_SECURITY=' + $security)
                 }
             }
 
-            using (var searcher = new ManagementObjectSearcher("SELECT DeviceLocator FROM Win32_PhysicalMemory"))
-            {
-                foreach (var _ in searcher.Get())
-                {
-                    populated++;
-                }
-            }
+            populated = HardwareCollector.InstalledMemoryModuleCount();
 
             if (populated > 0)
             {
