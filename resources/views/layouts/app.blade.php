@@ -68,7 +68,10 @@
     <div id="toast-stack" aria-live="polite"></div>
 
     <!-- Page Wrapper -->
-    <div class="flex min-h-screen overflow-x-hidden bg-gray-50">
+    {{-- h-screen + overflow-hidden, not min-h-screen: the page itself must not
+         scroll, or the sidebar scrolls away with the content. The viewport is
+         locked and the content column owns the only scrollbar. --}}
+    <div class="flex h-screen overflow-hidden bg-gray-50">
         <!-- Sidebar Overlay (mobile) -->
         <div @click="sidebarToggle = false"
              x-show="sidebarToggle"
@@ -280,7 +283,9 @@
         </aside>
 
         <!-- Content Area -->
-        <div class="relative flex flex-col flex-1 overflow-x-hidden overflow-y-auto">
+        {{-- The only scrolling region on the page. min-w-0 lets it shrink beside
+             the sidebar instead of forcing the flex row wider. --}}
+        <div class="relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
             <!-- Header -->
             <header class="sticky top-0 z-99999 flex w-full border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                 <div class="flex w-full flex-col gap-3 px-3 py-2.5 sm:px-4 sm:py-3 xl:flex-row xl:items-center xl:justify-between xl:px-6">
