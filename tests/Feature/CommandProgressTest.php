@@ -339,6 +339,23 @@ class CommandProgressTest extends TestCase
             ->assertJsonPath('device', $this->agentToken->name);
     }
 
+    public function test_command_status_marks_an_uncollected_update_as_stalled(): void
+    {
+        $command = AgentCommand::create([
+            'agent_token_id' => $this->agentToken->id,
+            'command' => 'update',
+            'status' => 'pending',
+        ]);
+        $command->forceFill(['updated_at' => now()->subMinutes(10)])->save();
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('stalled', true)
+            ->assertJsonPath('label', 'waiting for the agent to respond');
+    }
+
     /**
      * The page and the inbox used to hold separate copies of the same number,
      * kept in step only by a comment. Nothing would have failed if they drifted.

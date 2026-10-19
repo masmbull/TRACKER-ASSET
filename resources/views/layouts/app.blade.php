@@ -709,6 +709,28 @@
                             return;
                         }
 
+                        if (state.stalled) {
+                            // Release the dialog but keep watching. A dead agent
+                            // must not pin the modal open, and "not responding" is
+                            // what an operator can act on - but the inbox redelivers
+                            // a stalled command, so this device can still come back
+                            // and finish, and a dialog frozen on a failure it no
+                            // longer owes is its own lie.
+                            setBusy(false);
+                            modal.dataset.busy = 'false';
+                            modal.removeAttribute('aria-busy');
+                            closeButton.classList.remove('hidden');
+                            setBar(false);
+                            const device = state.device ? state.device + ': ' : '';
+                            const explanation = state.status === 'pending'
+                                ? 'The agent has not collected this command. It stays queued and is retried once the device is online.'
+                                : 'The agent stopped reporting progress. Check the device before trying again.';
+                            setProgressBar(state.progress, device + explanation, true, false);
+                            title.textContent = 'Device not responding';
+                            message.textContent = explanation;
+                            return;
+                        }
+
                         setProgressBar(state.progress, state.label || 'In progress…', state.stalled, false);
                         setBusy(!state.stalled);
                         startElapsedTicker(state.label || 'In progress…');

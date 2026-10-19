@@ -94,6 +94,19 @@ class AuditApiController extends Controller
             }
         }
 
+        // The agent's own mode is a reading like any other: a heartbeat that
+        // does not carry it - an agent predating the field, or one that sent
+        // only the readings it had - must not downgrade a known tray/SYSTEM
+        // report to "unknown". Partial updates keep what they were not told
+        // (PRD §11), and this is the one field the fleet's status column is
+        // built from.
+        $currentPayload = $current->payload ?? [];
+
+        $updates['payload'] = [
+            ...$currentPayload,
+            'agent_mode' => $payload['agent_mode'] ?? ($currentPayload['agent_mode'] ?? 'unknown'),
+        ];
+
         // Disk free is a percentage derived from both halves, so a heartbeat
         // that only sends one of them would otherwise recompute a wrong ratio.
         if ($request->has('disk_free_gb') || $request->has('disk_total_gb')) {
@@ -132,6 +145,7 @@ class AuditApiController extends Controller
             'ip_address' => 'nullable|string|max:255',
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
+            'agent_mode' => 'nullable|string|in:tray,service,unknown',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',
@@ -167,6 +181,7 @@ class AuditApiController extends Controller
             'device_id' => 'nullable|string|max:255',
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
+            'agent_mode' => 'nullable|string|in:scan,tray,service,unknown',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',

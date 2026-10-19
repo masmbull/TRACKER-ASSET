@@ -307,12 +307,43 @@ document.addEventListener('DOMContentLoaded', () => {
                         reported.textContent = state.reported_at;
                     }
 
-                    // Why the device is offline, when the server can say. Only
-                    // shown while it is not online, so a healthy machine gains no
-                    // extra line.
+                    const badge = row.querySelector('[data-fleet-status-badge]');
+                    if (badge && state.status !== 'revoked') {
+                        // Same vocabulary as the first paint, in one table rather
+                        // than a nested ternary: anything the server invents later
+                        // renders as itself instead of falling through a chain.
+                        const labels = {
+                            online: 'online',
+                            service: 'service active · tray not detected',
+                            stale: 'stale',
+                            'never scanned': 'never scanned',
+                        };
+                        badge.textContent = labels[state.status] ?? state.status;
+                        badge.classList.toggle('bg-success-50', state.status === 'online');
+                        badge.classList.toggle('text-success-600', state.status === 'online');
+                        badge.classList.toggle('dark:bg-success-500/15', state.status === 'online');
+                        badge.classList.toggle('dark:text-success-500', state.status === 'online');
+                        badge.classList.toggle('bg-brand-50', state.status === 'service');
+                        badge.classList.toggle('text-brand-500', state.status === 'service');
+                        badge.classList.toggle('dark:bg-brand-500/15', state.status === 'service');
+                        badge.classList.toggle('dark:text-brand-400', state.status === 'service');
+                        badge.classList.toggle('bg-warning-50', state.status === 'stale');
+                        badge.classList.toggle('text-warning-600', state.status === 'stale');
+                        badge.classList.toggle('dark:bg-warning-500/15', state.status === 'stale');
+                        badge.classList.toggle('dark:text-warning-500', state.status === 'stale');
+                        badge.classList.toggle('bg-gray-100', !['online', 'service', 'stale'].includes(state.status));
+                        badge.classList.toggle('text-gray-600', !['online', 'service', 'stale'].includes(state.status));
+                        badge.classList.toggle('dark:bg-white/10', !['online', 'service', 'stale'].includes(state.status));
+                        badge.classList.toggle('dark:text-gray-400', !['online', 'service', 'stale'].includes(state.status));
+                    }
+
+                    // Why the device is offline, when the server can say. The
+                    // server sends no reason for a device it has heard from, so
+                    // this is a straight show/hide rather than a second copy of
+                    // "which statuses count as healthy".
                     const reason = row.querySelector('[data-fleet-reason]');
                     if (reason) {
-                        if (state.reason && state.status !== 'online') {
+                        if (state.reason) {
                             reason.textContent = state.reason;
                             reason.classList.remove('hidden');
                         } else {

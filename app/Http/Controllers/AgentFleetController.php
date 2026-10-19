@@ -25,8 +25,10 @@ class AgentFleetController extends Controller
      * How recently an agent must have hit the inbox to count as alive.
      *
      * The daemon polls every 10s by default, so 90s tolerates nine missed
-     * polls. Widened from the 2-minute telemetry window because an agent
-     * predating the heartbeat still polls, it just never re-reports readings.
+     * polls. It is the fallback half of "is this device alive": an agent
+     * predating the heartbeat still polls, it just never re-reports readings,
+     * and calling those machines offline during a rollout is how a firmware
+     * push gets read as a fleet-wide outage (PRD §11, Telemetry Heartbeat).
      */
     private const POLL_WINDOW_SECONDS = 90;
 
@@ -92,24 +94,20 @@ class AgentFleetController extends Controller
                 continue;
             }
 
-            $telemetry = $device->telemetry;
-            $isOnline = ($device->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false)
-                || ($telemetry?->isOnline() ?? false);
+            $state = $this->deviceState(
+                $device,
+                $activeOperations->get($device->id),
+                $lastSettled->get($device->id),
+            );
 
-            if ($isOnline) {
+            if ($state['status'] === 'online') {
                 $onlineCount++;
             }
 
-            $operation = $activeOperations->get($device->id);
-            $status = $isOnline
-                ? 'online'
-                : ($telemetry === null && $operation !== null
-                    ? $operation->command.'ing'
-                    : ($telemetry === null ? 'never scanned' : 'stale'));
+            $telemetry = $device->telemetry;
 
             $deviceStates[$device->id] = [
-                'status' => $status,
-                'reason' => $isOnline ? null : $this->offlineReason($device, $operation, $lastSettled->get($device->id)),
+                ...$state,
                 'reported_at' => $telemetry?->reported_at?->diffForHumans() ?? 'no report yet',
                 'is_elevated' => $telemetry?->is_elevated,
                 'battery_percent' => $telemetry?->battery_percent,
@@ -129,6 +127,68 @@ class AgentFleetController extends Controller
             'online' => $onlineCount,
             'devices' => $deviceStates,
         ]);
+    }
+
+    /**
+     * What one device's Status cell says, why it says it, and who reported.
+     *
+     * The single definition of the fleet's status vocabulary, shared by this
+     * refresh and by the first paint in `index()`. Two copies of the rule is
+     * how they drifted: the refresh had moved onto tray/SYSTEM modes while the
+     * page still painted every heartbeat green, so a device changed status
+     * fifteen seconds after loading with nobody touching it.
+     *
+     * - `online` — the agent is alive and is not a SYSTEM daemon reporting on
+     *   its own. Alive means a fresh heartbeat *or* a recent inbox poll; the
+     *   poll half is what keeps an agent predating the heartbeat from reading
+     *   offline mid-rollout (PRD §11).
+     * - `service` — a SYSTEM daemon reported within the window, so the machine
+     *   is up but no per-user tray is running on it. Deliberately not counted
+     *   as online: "online" is the number of laptops somebody can walk up to,
+     *   and a box at the login screen is not one.
+     * - `never scanned` / `installing` / `updating` / `stale` — the rest, in
+     *   the order the page has always rendered them.
+     *
+     * @return array{status: string, reason: ?string, agent_mode: string}
+     */
+    private function deviceState(AgentApiToken $device, ?AgentCommand $operation, ?AgentCommand $lastSettled): array
+    {
+        $telemetry = $device->telemetry;
+        $agentMode = $telemetry?->agentMode() ?? 'unknown';
+
+        if (! $device->isUsable()) {
+            return ['status' => 'revoked', 'reason' => null, 'agent_mode' => $agentMode];
+        }
+
+        $hasFreshReport = $telemetry?->isOnline() ?? false;
+        $serviceActive = $hasFreshReport && $agentMode === 'service';
+
+        $isAlive = $hasFreshReport
+            || ($device->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false);
+
+        // A machine being installed has no telemetry row yet, so "alive" would
+        // otherwise paint it green and hide the one thing happening on it. The
+        // install wins the status, and stays alive enough to gain no offline
+        // reason underneath it.
+        $installing = $telemetry === null
+            && $operation !== null
+            && in_array($operation->command, ['install', 'update'], true);
+
+        $status = match (true) {
+            $installing => $operation->command.'ing',
+            $serviceActive => 'service',
+            $isAlive => 'online',
+            $telemetry === null => 'never scanned',
+            default => 'stale',
+        };
+
+        return [
+            'status' => $status,
+            'reason' => $isAlive
+                ? null
+                : $this->offlineReason($device, $operation, $lastSettled),
+            'agent_mode' => $agentMode,
+        ];
     }
 
     /**
@@ -152,6 +212,11 @@ class AgentFleetController extends Controller
                         'battery_cycle_count', 'disk_free_gb', 'disk_total_gb',
                         'disk_free_percent', 'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
                         'network_type', 'network_adapter', 'network_speed', 'uptime_hours',
+                        // payload carries agent_mode, which deviceState() reads for
+                        // every status cell on this page. Leaving it out of the
+                        // select made that access lazy-load: one extra query per
+                        // device, per page view.
+                        'payload',
                         'reported_at',
                     ],
                 )),
@@ -213,20 +278,12 @@ class AgentFleetController extends Controller
 
         $telemetries = $devices->map(fn (AgentApiToken $token) => $token->telemetry)->filter();
 
-        // An agent deployed before the heartbeat existed keeps polling the
-        // inbox (which refreshes last_used_at) but never refreshes telemetry, so
-        // counting on the 2-minute reading window alone would paint every
-        // un-updated machine offline. Treat a recent inbox poll as proof of
-        // life so a rollout does not look like a mass outage.
-        $onlineDevices = $devices->filter(function (AgentApiToken $token) {
-            $polling = $token->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false;
-
-            return $polling || ($token->telemetry?->isOnline() ?? false);
-        })->count();
-
         $stats = [
             'devices' => $devices->count(),
-            'online' => $onlineDevices,
+            // Filled in below, once the per-device states exist: the KPI and the
+            // status column have to come from one rule or the header says "3
+            // online" over a table that shows two.
+            'online' => 0,
             'battery_alerts' => $telemetries->filter(fn ($t) => $t->hasLowBattery() || $t->hasWeakBattery())->count(),
             'disk_alerts' => $telemetries->filter(fn ($t) => $t->hasLowDisk())->count(),
             'avg_battery_health' => $telemetries->whereNotNull('battery_health')->avg('battery_health'),
@@ -294,22 +351,29 @@ class AgentFleetController extends Controller
             ->groupBy('agent_token_id')
             ->map(fn ($rows) => $rows->first());
 
-        // Why each offline device is offline, for the status column. Computed here
-        // (the same helper the live refresh uses) so the first paint already
-        // explains a dark machine, not only after the next 15 s poll.
-        $offlineReasons = $devices
-            ->filter(fn (AgentApiToken $t) => $t->isUsable() && $t->telemetry !== null)
-            ->filter(fn (AgentApiToken $t) => ! $t->telemetry->isOnline()
-                && ! ($t->last_used_at?->gt(now()->subSeconds(self::POLL_WINDOW_SECONDS)) ?? false))
-            ->mapWithKeys(function (AgentApiToken $t) use ($activeOperations) {
-                $lastSettled = AgentCommand::query()
-                    ->where('agent_token_id', $t->id)
-                    ->whereIn('status', ['done', 'failed'])
-                    ->orderByDesc('executed_at')
-                    ->first();
+        // Why each device is offline, and what its status cell says, computed
+        // once here so the first paint already explains a dark machine instead
+        // of waiting for the next 15 s poll - and so the two can never disagree
+        // about the same row.
+        $lastSettled = AgentCommand::query()
+            ->whereIn('agent_token_id', $deviceIds)
+            ->whereIn('status', ['done', 'failed'])
+            ->orderByDesc('executed_at')
+            ->get(['agent_token_id', 'command', 'status', 'executed_at', 'result'])
+            ->unique('agent_token_id')
+            ->keyBy('agent_token_id');
 
-                return [$t->id => $this->offlineReason($t, $activeOperations->get($t->id), $lastSettled)];
-            });
+        $deviceStates = $devices->mapWithKeys(fn (AgentApiToken $device) => [
+            $device->id => $this->deviceState(
+                $device,
+                $activeOperations->get($device->id),
+                $lastSettled->get($device->id),
+            ),
+        ]);
+
+        $stats['online'] = $deviceStates
+            ->filter(fn (array $state) => $state['status'] === 'online')
+            ->count();
 
         // Revoked devices are split off: their agent can never authenticate
         // again, so every action column entry for them is dead weight and they
@@ -404,7 +468,7 @@ class AgentFleetController extends Controller
             'pendingUninstalls' => $pendingUninstalls,
             'activeOperations' => $activeOperations,
             'findingsByToken' => $findingsByToken,
-            'offlineReasons' => $offlineReasons,
+            'deviceStates' => $deviceStates,
         ]);
     }
 

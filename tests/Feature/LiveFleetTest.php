@@ -715,6 +715,10 @@ class LiveFleetTest extends TestCase
             ]))
             ->assertCreated();
 
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/agent/heartbeat', ['agent_mode' => 'tray'])
+            ->assertOk();
+
         $this->actingAs($admin)
             ->getJson(route('agent.fleet.refresh'))
             ->assertOk()
@@ -722,7 +726,108 @@ class LiveFleetTest extends TestCase
             ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'online')
             ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_percent', 18)
             ->assertJsonPath('devices.'.$this->agentToken->id.'.battery_alert', true)
-            ->assertJsonPath('devices.'.$this->agentToken->id.'.disk_free_percent', 2);
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.disk_free_percent', 2)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.agent_mode', 'tray');
+    }
+
+    public function test_a_system_service_heartbeat_does_not_count_as_tray_online(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/agent/heartbeat', ['agent_mode' => 'service'])
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->getJson(route('agent.fleet.refresh'))
+            ->assertOk()
+            ->assertJsonPath('online', 0)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'service')
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.agent_mode', 'service')
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.reason', null);
+    }
+
+    /**
+     * The page must agree with the refresh on the first paint, or a device
+     * loads green and flips to "service active" a poll later with nobody
+     * touching it.
+     */
+    public function test_the_service_badge_is_painted_on_the_first_load_too(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/agent/heartbeat', ['agent_mode' => 'service'])
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('service active · tray not detected', false)
+            ->assertSee('data-fleet-online>0</span>/1 online', false);
+    }
+
+    /**
+     * Proof of life is not only a heartbeat: PRD §11 lets a fresh inbox poll
+     * (90 s) count too, so an agent predating the heartbeat endpoint does not
+     * read offline in the middle of a rollout.
+     */
+    public function test_a_recent_inbox_poll_keeps_a_pre_heartbeat_agent_online(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        // The telemetry row is hours old (this agent never heartbeats), but it
+        // polled the inbox a few seconds ago.
+        AgentTelemetry::firstOrFail()->forceFill(['reported_at' => now()->subHours(3)])->save();
+        $this->agentToken->forceFill(['last_used_at' => now()->subSeconds(15)])->save();
+
+        $refresh = $this->actingAs($admin)->getJson(route('agent.fleet.refresh'));
+        $refresh->assertOk()
+            ->assertJsonPath('online', 1)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'online')
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.reason', null);
+
+        $this->actingAs($admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('data-fleet-online>1</span>/1 online', false);
+    }
+
+    /**
+     * A device that reports nothing at all - no recent telemetry and no recent
+     * inbox poll - is stale, and the operator is told why.
+     */
+    public function test_a_silent_device_reads_stale_with_a_reason(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->withHeaders($this->agentHeaders())
+            ->postJson('/api/audits', $this->telemetryPayload())
+            ->assertCreated();
+
+        $this->agentToken->forceFill(['last_used_at' => now()->subHours(5)])->save();
+        AgentTelemetry::firstOrFail()->forceFill(['reported_at' => now()->subHours(5)])->save();
+
+        $refresh = $this->actingAs($admin)->getJson(route('agent.fleet.refresh'));
+        $refresh->assertOk()
+            ->assertJsonPath('online', 0)
+            ->assertJsonPath('devices.'.$this->agentToken->id.'.status', 'stale');
+
+        $state = collect($refresh->json('devices'))->first();
+
+        $this->assertNotNull($state['reason']);
     }
 
     /**

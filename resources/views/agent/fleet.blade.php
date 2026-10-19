@@ -92,12 +92,13 @@
                         $telemetry = $device->telemetry;
                         $fp = $device->fingerprint;
                         $audit = $telemetry?->asset_id ? ($latestAudits[$device->id] ?? null) : null;
-                        // An agent older than the heartbeat never re-reports readings, but
-                        // it still polls the inbox, so a recent last_used_at is proof of
-                        // life. Without this every un-updated machine would show "stale"
-                        // once the 2-minute telemetry window lapsed.
-                        $polling = $device->last_used_at?->gt(now()->subSeconds(90)) ?? false;
-                        $online = $telemetry?->isOnline() ?? false;
+                        // Computed by the controller and shared with the 15-second
+                        // refresh: this page used to derive its own copy of the same
+                        // rule, so a device could load as "stale" and flip to "online"
+                        // a quarter of a minute later without anyone touching it.
+                        $state = $deviceStates[$device->id]
+                            ?? ['status' => 'revoked', 'reason' => null, 'agent_mode' => 'unknown'];
+                        $status = $state['status'];
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
                     @endphp
@@ -143,16 +144,23 @@
                                     && in_array($deviceOperation->command, ['install', 'update'], true);
                             @endphp
 
-                            @if(! $device->isUsable())
+                            @if($status === 'revoked')
                                 <x-badge variant="error" :dot="true" data-fleet-status-badge>revoked</x-badge>
-                            @elseif($online || $polling)
+                            @elseif($status === 'online')
                                 <x-badge variant="success" :dot="true" data-fleet-status-badge>online</x-badge>
-                            @elseif($telemetry === null && $isSettingUp)
+                            @elseif($status === 'service')
+                                {{-- A SYSTEM daemon answered, so the box is up but no
+                                     per-user tray is running on it. Said plainly rather
+                                     than as "online": the operator's next question is
+                                     "is anybody signed in to that laptop?", and a green
+                                     dot hides it. --}}
+                                <x-badge variant="brand" :dot="true" data-fleet-status-badge>service active · tray not detected</x-badge>
+                            @elseif(in_array($status, ['installing', 'updating'], true))
                                 {{-- A machine mid-install has no telemetry yet, and
                                      "never scanned" reads as a fault with the machine
                                      rather than an install still running on it. --}}
-                                <x-badge variant="gray" :dot="true" data-fleet-status-badge>{{ $deviceOperation->command }}ing</x-badge>
-                            @elseif($telemetry === null)
+                                <x-badge variant="gray" :dot="true" data-fleet-status-badge>{{ $status }}</x-badge>
+                            @elseif($status === 'never scanned')
                                 <x-badge variant="gray" :dot="true" data-fleet-status-badge>never scanned</x-badge>
                             @else
                                 <x-badge variant="warning" :dot="true" data-fleet-status-badge>stale</x-badge>
@@ -162,12 +170,14 @@
                             </span>
 
                             {{-- Why an offline device is offline, when the server can
-                                 say. Hidden while online so a healthy machine gains
-                                 no extra line. --}}
+                                 say. The controller only produces a reason for a
+                                 device nobody has heard from, so a healthy machine -
+                                 and a SYSTEM daemon that is reporting fine - gains no
+                                 extra line. --}}
                             <span @class([
                                 'mt-1 block max-w-[16rem] text-theme-xs text-warning-600 dark:text-warning-300',
-                                'hidden' => ! isset($offlineReasons[$device->id]) || ($online ?? false) || ($polling ?? false),
-                            ]) data-fleet-reason>{{ $offlineReasons[$device->id] ?? '' }}</span>
+                                'hidden' => ($state['reason'] ?? null) === null,
+                            ]) data-fleet-reason>{{ $state['reason'] ?? '' }}</span>
 
                             {{-- Install and update progress. Without this a rollout is
                                  a blank wait: there is no way to tell a machine working

@@ -51,6 +51,21 @@ class AgentTelemetry extends Model
     }
 
     /**
+     * Which agent process reported last: `tray`, `service`, or `unknown`.
+     *
+     * Only those two modes are facts about the machine. Anything else - an
+     * agent that predates the field, or a full scan, which reports the message
+     * type rather than a process - reads as `unknown`, and `unknown` is an
+     * absence of information: it never means "the tray is missing".
+     */
+    public function agentMode(): string
+    {
+        $mode = $this->payload['agent_mode'] ?? 'unknown';
+
+        return in_array($mode, ['tray', 'service'], true) ? $mode : 'unknown';
+    }
+
+    /**
      * Telemetry is considered live when the device reported within the window.
      *
      * The window is deliberately twice the daemon's 60-second heartbeat: that
