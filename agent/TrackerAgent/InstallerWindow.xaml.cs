@@ -132,8 +132,50 @@ public partial class InstallerWindow : Window
         _progressTimer.Start();
     }
 
-    private void BeginShimmer() { }
-    private void EndShimmer() { }
+    private void BeginShimmer()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (ShimmerBar.Visibility != Visibility.Visible)
+            {
+                ShimmerBar.Visibility = Visibility.Visible;
+            }
+
+            var trackWidth = ProgressTrack.ActualWidth;
+            if (trackWidth <= 0)
+            {
+                trackWidth = 480; // fallback before layout
+            }
+
+            var slide = new DoubleAnimation
+            {
+                From = -140,
+                To = trackWidth + 40,
+                Duration = TimeSpan.FromSeconds(1.4),
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            };
+
+            var sb = new Storyboard();
+            sb.Children.Add(slide);
+            Storyboard.SetTarget(slide, ShimmerTransform);
+            Storyboard.SetTargetProperty(slide, new PropertyPath(TranslateTransform.XProperty));
+            _shimmerStoryboard = sb;
+            sb.Begin();
+        });
+    }
+
+    private void EndShimmer()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _shimmerStoryboard?.Stop();
+            _shimmerStoryboard = null;
+            ShimmerBar.Visibility = Visibility.Collapsed;
+        });
+    }
+
+    private Storyboard? _shimmerStoryboard;
 
     /// <summary>Thread-safe progress report (called from the worker thread).</summary>
     private void Report(int percent, string message)
@@ -542,7 +584,9 @@ public partial class InstallerWindow : Window
     {
         try
         {
-            var args = $"--install-service --url \"{serverUrl}\" --token \"{token}\"";
+            // Pass --parent-pid so the elevated child's KillUserTrays spares this
+            // installer process (same pattern as AgentRunner's update swap at line 985).
+            var args = $"--install-service --url \"{serverUrl}\" --token \"{token}\" --parent-pid {Environment.ProcessId}";
 
             var psi = new ProcessStartInfo
             {
@@ -863,6 +907,7 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
+            EndShimmer();
 
             SubtitleText.Text = "Update complete";
             StatusPanel.Visibility = Visibility.Collapsed;
@@ -889,6 +934,7 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
+            EndShimmer();
 
             SubtitleText.Text = "Installation complete";
             StatusPanel.Visibility = Visibility.Collapsed;
@@ -915,6 +961,7 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
+            EndShimmer();
 
             SubtitleText.Text = _mode == InstallerMode.Update ? "Update failed" : "Installation failed";
             StatusPanel.Visibility = Visibility.Collapsed;
@@ -935,6 +982,8 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
+            EndShimmer();
+
             SubtitleText.Text = "Update available";
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
@@ -950,6 +999,8 @@ public partial class InstallerWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             _progressTimer.Stop();
+            EndShimmer();
+
             SubtitleText.Text = "Update check complete";
             StatusPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;

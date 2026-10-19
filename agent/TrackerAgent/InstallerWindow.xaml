@@ -125,6 +125,14 @@
                                 Height="14" CornerRadius="7" ClipToBounds="True"/>
                         <Rectangle x:Name="ProgressFill" Fill="{StaticResource BrandBrush}"
                                    Width="0" HorizontalAlignment="Left" RadiusX="7" RadiusY="7"/>
+                        <!-- Shimmer overlay: sweeps across the track while working -->
+                        <Rectangle x:Name="ShimmerBar" Fill="White" Opacity="0.35"
+                                   Width="100" HorizontalAlignment="Left" RadiusX="7" RadiusY="7"
+                                   Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="ShimmerTransform" X="0"/>
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
                     </Grid>
 
                     <TextBlock x:Name="PercentText" Text="0%" FontSize="14" FontWeight="SemiBold"
