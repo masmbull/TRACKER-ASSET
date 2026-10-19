@@ -1652,17 +1652,14 @@ public static class AgentRunner
         }
         Console.WriteLine("[OK] Registered SYSTEM task (runs at boot as SYSTEM).");
 
-        // The task replaces every per-user autostart entry, not just this
-        // profile's. The old code deleted only the SYSTEM profile's Run value (the
-        // only one this elevated process can see), so a logged-in user's tray
-        // survived, started at their next logon and ran the command loop
-        // alongside the SYSTEM daemon - two agents, one token, is_elevated
-        // flipping per poll. Remove it for every real user profile and kill any
-        // tray already running in one.
-        RemoveAllUserAutostarts();
-        KillUserTrays(exe, parentProcessId);
+        // Per user request: keep the tray running (visible in system tray) even
+        // after elevating to SYSTEM. The tray remains the primary reporter
+        // (agent_mode=tray, counted online). The SYSTEM daemon runs alongside
+        // for run_as:system script capability, but the tray owns the inbox poll
+        // and heartbeat so fleet status stays "online" with tray icon visible.
+        // RemoveAllUserAutostarts() and KillUserTrays() are intentionally skipped.
 
-        // Start it now so the machine is on-system without waiting for a reboot.
+        // Start the SYSTEM daemon now so run_as:system scripts work immediately.
         Run("schtasks", $"/Run /TN \"{SystemTaskName}\"", 30);
 
         return 0;

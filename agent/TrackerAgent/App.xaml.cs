@@ -549,10 +549,9 @@ public partial class App : System.Windows.Application
             Api.Ack(config.ServerUrl, config.Token, id, status,
                 new Dictionary<string, string> { ["message"] = message });
 
-            if (status == "done")
-            {
-                StopTray();
-            }
+            // Elevation no longer stops the tray (user request: tray must stay visible).
+            // The tray continues running as the primary reporter (agent_mode=tray).
+            // The SYSTEM daemon runs alongside for run_as:system script capability.
         }
         catch (Exception ex)
         {
@@ -602,13 +601,17 @@ public partial class App : System.Windows.Application
         var promoted = await promotion;
 
         return promoted
-            ? ("done", "Administrator approval granted: the SYSTEM task is registered and this tray is closing so the service takes over.")
+            ? ("done", "Administrator approval granted: the SYSTEM task is registered. The tray continues running so the device stays online with a visible icon.")
             : ("failed", "Windows did not grant administrator rights - the prompt was cancelled, or the agent is already elevated. Nothing was installed.");
     }
 
     /// <summary>
     /// Close the tray exactly once. The elevation that just succeeded and the
     /// daemon check in the command loop can both get here within the same poll.
+    /// </summary>
+    /// <remarks>
+    /// Kept for uninstall flow. Elevation no longer stops the tray (user request:
+    /// tray must stay visible after "Make admin").
     /// </summary>
     private void StopTray()
     {
