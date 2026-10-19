@@ -570,6 +570,11 @@ on a timer.
    heartbeat interval, so exactly one dropped ping is tolerated. A recent inbox
    poll also counts as proof of life, so an agent predating the heartbeat is not
    reported offline during a rollout.
+6. The same payload carries `agent_mode` (`tray` | `service` | `unknown`), also as
+   a partial update. A machine whose **SYSTEM daemon** is the reporter is shown as
+   `service active · tray not detected` and is **not** counted as online: "online"
+   is the number of laptops somebody can walk up to, and a box at the login screen
+   is not one.
 
 ### Decisions Taken During Implementation
 

@@ -110,6 +110,14 @@ interval, so exactly one dropped ping is tolerated before a machine flips to
 offline. The fleet page also treats a recent inbox poll (90 s) as proof of life,
 so an agent predating the heartbeat is not reported offline mid-rollout.
 
+`agent_mode` says *who* is reporting: `tray` (a per-user tray), `service` (the
+SYSTEM daemon) or `unknown` (an agent that does not report one — full scans send
+`scan`, which is a message type, not a mode). It is a partial update like every
+other reading, so a heartbeat that omits it keeps the last known mode. A device
+whose SYSTEM daemon is the reporter reads **service active · tray not detected**
+on Live Fleet and is **not** counted as online: "online" is the number of
+laptops somebody can walk up to, and a box at the login screen is not one.
+
 See `tests/Feature/LiveFleetTest.php` for the heartbeat contract.
 
 ### Deep inventory — `POST /api/agent/fingerprint`
@@ -185,8 +193,10 @@ See `tests/Feature/FingerprintTest.php` for the endpoint contract.
 
 ## Fleet Command Center — `/agent/commands`
 
-Admin-only. The page shows agent online status (poll within 90 s = 🟢 online)
-and provides 1-click fleet actions:
+Admin-only. The page shows agent online status — a heartbeat within 2 minutes or
+a poll within 90 s = 🟢 online, while a device reporting from its SYSTEM daemon
+shows `service active · tray not detected` instead and is left out of the online
+count — and provides 1-click fleet actions:
 
 | Action | Effect |
 |---|---|
