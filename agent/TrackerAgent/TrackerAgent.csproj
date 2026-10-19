@@ -9,8 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TrackerAgent</RootNamespace>
     <AssemblyName>TrackerAgent</AssemblyName>
-        <!-- 1.6.2: report tray and SYSTEM service heartbeat modes separately. -->
-        <Version>1.6.2</Version>
+        <!-- 1.6.3: elevation runs off the command loop, with a progress ping, a
+             5-minute bound, a one-at-a-time guard and a single-close tray stop. -->
+        <Version>1.6.3</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
