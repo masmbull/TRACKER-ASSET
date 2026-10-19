@@ -9,6 +9,7 @@ use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
 use App\Services\ScriptPayload;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -184,7 +185,10 @@ class AgentFleetController extends Controller
 
         return [
             'status' => $status,
-            'reason' => $isAlive
+            // When installing/updating, suppress the offline reason: the progress
+            // bar already explains the state, and "No contact..." under an
+            // "installing" badge reads as a contradiction (docblock promises this).
+            'reason' => ($isAlive || $installing)
                 ? null
                 : $this->offlineReason($device, $operation, $lastSettled),
             'agent_mode' => $agentMode,
@@ -1154,7 +1158,13 @@ class AgentFleetController extends Controller
             return 'Went offline right after an update: the agent downloaded the new build but did not restart. Reinstall the agent on this machine.';
         }
 
-        $quiet = $device->last_used_at?->diffForHumans();
+        // Use absolute English duration: "5 minutes" not "5 minutes ago".
+        $quiet = $device->last_used_at
+            ?->diffForHumans([
+                'syntax' => CarbonInterface::DIFF_ABSOLUTE,
+                'locale' => 'en',
+                'parts' => 1,
+            ]);
 
         return $quiet === null
             ? 'The agent has never reported in.'

@@ -166,7 +166,7 @@
                                 <x-badge variant="warning" :dot="true" data-fleet-status-badge>stale</x-badge>
                             @endif
                             <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400" data-fleet-reported-at>
-                                {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans() : 'no report yet' }}
+                                {{ $telemetry?->reported_at ? $telemetry->reported_at->diffForHumans(['locale' => 'en']) : 'no report yet' }}
                             </span>
 
                             {{-- Why an offline device is offline, when the server can
@@ -184,8 +184,8 @@
                                  through its first inventory from one that hung
                                  halfway, and the first inventory is the slow step. --}}
                             @if($isSettingUp)
-                                <div class="mt-2 w-full max-w-[12rem]">
-                                    <div class="mb-1 truncate text-theme-xs {{ $deviceOperation->isStalled() ? 'font-medium text-error-500' : 'text-gray-500 dark:text-gray-400' }}">
+                                <div class="mt-2 w-full max-w-[16rem]">
+                                    <div class="mb-1 text-theme-xs break-words {{ $deviceOperation->isStalled() ? 'font-medium text-error-500' : 'text-gray-500 dark:text-gray-400' }}">
                                         {{ $deviceOperation->progressLabel() }}
                                     </div>
                                     <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
@@ -458,9 +458,9 @@
                          not evidence of anything. --}}
                     <div class="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
                         <p class="text-theme-xs text-gray-500 dark:text-gray-400">
-                            Last audit {{ $audit->result }} · {{ $audit->audit_date?->diffForHumans() }}
+                            Last audit {{ $audit->result }} · {{ $audit->audit_date?->diffForHumans(['locale' => 'en']) }}
                             @if($fp?->collected_at)
-                                · inventory {{ $fp->collected_at->diffForHumans() }}
+                                · inventory {{ $fp->collected_at->diffForHumans(['locale' => 'en']) }}
                             @endif
                         </p>
 
@@ -495,7 +495,7 @@
                     </div>
                 @elseif($fp?->collected_at)
                     <p class="mt-4 border-t border-gray-100 pt-3 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                        Inventory {{ $fp->collected_at->diffForHumans() }}
+                        Inventory {{ $fp->collected_at->diffForHumans(['locale' => 'en']) }}
                     </p>
                 @endif
             </div>
@@ -585,7 +585,7 @@
                         @endif
                     </td>
                     <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">
-                        {{ $device->last_used_at?->diffForHumans() ?? 'never' }}
+                        {{ $device->last_used_at?->diffForHumans(['locale' => 'en']) ?? 'never' }}
                     </td>
                     <td class="py-3 px-4">
                         <x-badge variant="error" :dot="true">revoked</x-badge>
