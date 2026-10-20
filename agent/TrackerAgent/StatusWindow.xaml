@@ -127,6 +127,10 @@
                         </StackPanel>
 
                         <StackPanel Grid.Row="4" Grid.Column="0">
+                            <TextBlock Text="VERSION" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock x:Name="VersionText" Text="—" Style="{StaticResource FieldValue}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="4" Grid.Column="2">
                             <TextBlock Text="IP LOCAL" Style="{StaticResource FieldLabel}"/>
                             <TextBlock x:Name="IpText" Text="—" Style="{StaticResource FieldValue}"/>
                         </StackPanel>
