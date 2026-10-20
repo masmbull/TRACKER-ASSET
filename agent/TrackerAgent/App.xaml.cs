@@ -305,14 +305,6 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Scan Now", null, (_, _) => RunScan(config));
         menu.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
 
-        menu.Items.Add(new ToolStripSeparator());
-
-        menu.Items.Add("Exit", null, (_, _) =>
-        {
-            _trayIcon.Visible = false;
-            Current.Shutdown();
-        });
-
         return menu;
     }
 
