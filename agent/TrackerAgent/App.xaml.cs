@@ -239,10 +239,10 @@ public partial class App : System.Windows.Application
             // which is a request for information rather than an interruption.
             //
             // Windows caps NotifyIcon.Text at 63 characters and throws past it, so
-            // this stays short and says where results went now the balloons are gone.
-            Text = "Mito Audit Tracker - running. See the web.",
+            // this stays short but informative: version + last sync status.
+            Text = BuildTrayTooltip(config),
             Visible = true,
-            ContextMenuStrip = new ContextMenuStrip()
+            ContextMenuStrip = BuildContextMenu(config)
         };
 
         _trayIcon.ContextMenuStrip.Items.Add("Status", null, (_, _) =>
@@ -272,6 +272,48 @@ public partial class App : System.Windows.Application
         {
             AgentLog.Write($"Could not register tray autostart: {ex.Message}");
         }
+    }
+
+    private string BuildTrayTooltip(AgentConfig config)
+    {
+        // 63 char limit - keep it concise: version + last sync
+        var version = InstallCheck.ReadBuildIdentity(Environment.ProcessPath) ?? "?";
+        var lastSync = config.LastHeartbeat > DateTimeOffset.MinValue
+            ? $"last sync {(DateTimeOffset.Now - config.LastHeartbeat).TotalMinutes:F0}m ago"
+            : "never synced";
+        return $"Mito Audit Tracker v{version} • {lastSync}";
+    }
+
+    private ContextMenuStrip BuildContextMenu(AgentConfig config)
+    {
+        var menu = new ContextMenuStrip
+        {
+            ShowImageMargin = false,
+            Font = new System.Drawing.Font("Segoe UI", 9F)
+        };
+
+        menu.Items.Add("Status", null, (_, _) =>
+            Dispatcher.Invoke(() =>
+            {
+                var window = new StatusWindow(config.ServerUrl, config.InstalledAt);
+                window.Show();
+                window.Activate();
+            }));
+
+        menu.Items.Add(new ToolStripSeparator());
+
+        menu.Items.Add("Scan Now", null, (_, _) => RunScan(config));
+        menu.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
+
+        menu.Items.Add(new ToolStripSeparator());
+
+        menu.Items.Add("Exit", null, (_, _) =>
+        {
+            _trayIcon.Visible = false;
+            Current.Shutdown();
+        });
+
+        return menu;
     }
 
     private async Task CommandLoop(AgentConfig config)
@@ -670,6 +712,18 @@ public partial class App : System.Windows.Application
 
             Api.Heartbeat(config.ServerUrl, config.Token, payload, out var needsFullScan);
 
+            // Update last heartbeat time for tray tooltip
+            config.LastHeartbeat = DateTimeOffset.UtcNow;
+
+            // Update tray tooltip with fresh sync time
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_trayIcon != null)
+                {
+                    _trayIcon.Text = BuildTrayTooltip(config);
+                }
+            });
+
             // 202: the server has no snapshot of this device at all, so another
             // heartbeat would get the same answer. The poll loop runs the scan
             // the server asked for instead.
@@ -949,5 +1003,8 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
     }
 
-    private record AgentConfig(string DeviceId, string Token, string ServerUrl, string InstalledAt);
+    private record AgentConfig(string DeviceId, string Token, string ServerUrl, string InstalledAt)
+{
+    public DateTimeOffset LastHeartbeat { get; set; } = DateTimeOffset.MinValue;
+}
 }
