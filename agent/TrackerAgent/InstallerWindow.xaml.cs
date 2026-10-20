@@ -835,6 +835,8 @@ public partial class InstallerWindow : Window
     /// <summary>Clicked build == installed build: ensure the tray agent is running.</summary>
     private void ShowAlreadyInstalled()
     {
+        EnsureInstalledTrayIsRunning();
+
         StatusPanel.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Visible;
         RetryButton.Visibility = Visibility.Collapsed;
@@ -897,7 +899,13 @@ public partial class InstallerWindow : Window
 
         if (!trayIsRunning)
         {
+            Debug.WriteLine("[INSTALL] No tray running, starting detached tray...");
             StartDetached(_installedExe, string.Empty);
+            Debug.WriteLine("[INSTALL] StartDetached called");
+        }
+        else
+        {
+            Debug.WriteLine("[INSTALL] Tray already running from installed exe");
         }
     }
 
