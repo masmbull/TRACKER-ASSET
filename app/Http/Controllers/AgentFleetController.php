@@ -1020,6 +1020,21 @@ class AgentFleetController extends Controller
      */
     public function updateOne(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
     {
+        // If there's already a pending/in-progress update for this device, return it
+        // instead of creating a duplicate. The agent processes commands sequentially,
+        // and a targeted update will run after any in-progress bulk update anyway.
+        $existing = AgentCommand::where('agent_token_id', $token->id)
+            ->where('command', 'update')
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->latest('id')
+            ->first();
+
+        if ($existing) {
+            return $this->actionResponse($request,
+                "Update already queued/in-progress for {$token->name}. The agent will install the latest build after the current operation completes.",
+                commandId: $existing->id);
+        }
+
         $command = $this->enqueue($token->id, 'update', ['url' => URL::route('agent.download.latest')]);
 
         return $this->actionResponse($request, "Update queued for {$token->name} — it re-pulls the latest binary and restarts.", commandId: $command->id);
