@@ -11,7 +11,7 @@
     <AssemblyName>TrackerAgent</AssemblyName>
         <!-- 1.6.3: elevation runs off the command loop, with a progress ping, a
              5-minute bound, a one-at-a-time guard and a single-close tray stop. -->
-        <Version>1.6.7</Version>
+        <Version>1.6.9</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
