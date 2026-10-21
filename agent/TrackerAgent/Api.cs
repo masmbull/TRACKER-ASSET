@@ -154,9 +154,17 @@ public static class Api
                 pair => pair.Key,
                 pair => (object?)pair.Value);
 
+            // Deserialised with the snake_case options, not the camelCase ones
+            // the rest of the body uses. PropertyNameCaseInsensitive does not
+            // bridge the two conventions: it compares "driver_name" to
+            // "DriverName" case-insensitively and they still differ by the
+            // underscore, so every multi-word field came back null and was then
+            // written out as "driver_name": null. Single-word fields - name,
+            // status, location, version - looked fine precisely because they
+            // have the same spelling either way.
             if (payload.TryGetValue("software", out var rawSoftware) && !string.IsNullOrWhiteSpace(rawSoftware))
             {
-                var software = JsonSerializer.Deserialize<List<SoftwareEntry>>(rawSoftware, JsonOptions)
+                var software = JsonSerializer.Deserialize<List<SoftwareEntry>>(rawSoftware, SnakeJson)
                     ?? new List<SoftwareEntry>();
 
                 body["software"] = JsonSerializer.SerializeToElement(software, SnakeJson);
@@ -171,9 +179,13 @@ public static class Api
             // this turns them back into an array the server can validate. A
             // printer list that stayed a string would be rejected with 422 and
             // the machine would lose its whole inventory over one field.
+            //
+            // SnakeJson here for the same reason as above: the collector wrote
+            // driver_name, and a camelCase deserialiser reads that back as
+            // nothing at all.
             if (payload.TryGetValue("printers", out var rawPrinters) && !string.IsNullOrWhiteSpace(rawPrinters))
             {
-                var printers = JsonSerializer.Deserialize<List<PrinterEntry>>(rawPrinters, JsonOptions)
+                var printers = JsonSerializer.Deserialize<List<PrinterEntry>>(rawPrinters, SnakeJson)
                     ?? new List<PrinterEntry>();
 
                 body["printers"] = JsonSerializer.SerializeToElement(printers, SnakeJson);

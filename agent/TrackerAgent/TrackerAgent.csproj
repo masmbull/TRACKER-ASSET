@@ -17,8 +17,13 @@
              1.7.1: the two nested inventory lists now go out snake_case, so the
              printer driver/port/network/offline fields reach the server instead
              of being dropped by its validation; and the tray menu is built once,
-             not twice. -->
-        <Version>1.7.1</Version>
+             not twice.
+             1.7.2: those same lists are read back with snake_case options too.
+             1.7.1 wrote driver_name and then read it with camelCase settings,
+             where case-insensitive matching still cannot bridge the underscore,
+             so every multi-word field came back null and was posted as
+             "driver_name": null. Software lost installed_at the same way. -->
+        <Version>1.7.2</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

@@ -26,6 +26,7 @@ internal static class Program
         ScanResultCases();
         MemoryLayoutCases();
         InventoryPayloadCases();
+        FingerprintRoundTripCases();
         FullScanCases();
         ServiceTaskCases();
 
@@ -244,6 +245,78 @@ internal static class Program
     /// <summary>Mirrors Api.SoftwareEntry, which is private to that class.</summary>
     private sealed record SoftwareEntryForTest(string? Name, string? Version, string? Publisher, string? InstalledAt);
 
+    /// <summary>
+    /// The whole fingerprint leg, end to end, against a real listening server.
+    /// </summary>
+    /// <remarks>
+    /// The key-name case above only pins half of it. The collector writes
+    /// snake_case into a string-typed dictionary, Api.Fingerprint reads those
+    /// strings back into records and re-emits them, and it is that second hop
+    /// that broke: the records were being read with camelCase options, where
+    /// PropertyNameCaseInsensitive still cannot match "driver_name" to
+    /// "DriverName" because of the underscore. Every multi-word field came back
+    /// null and was then posted as "driver_name": null - silently, with the
+    /// report succeeding. Only single-word fields, which are spelled the same
+    /// in both conventions, survived.
+    ///
+    /// Asserting on the request body is the point: the failure never surfaced
+    /// as an error anywhere, and only the bytes on the wire would show it.
+    /// </remarks>
+    private static void FingerprintRoundTripCases()
+    {
+        Console.WriteLine("[*] fingerprint round trip");
+
+        using var server = new RecordingHttpServer();
+
+        // Shaped exactly as FingerprintCollector writes them: snake_case, inside
+        // a Dictionary<string, string>.
+        var printers =
+            """[{"name":"HP LaserJet P1102","driver_name":"HP Universal Printing PCL 6","port_name":"10.20.30.50","location":"Finance","is_network":true,"is_default":true,"is_offline":false,"status_code":3,"status":"Idle"}]""";
+
+        var software =
+            """[{"name":"ACCURATE 4 Standard","version":"4.0.1","publisher":"CPNSi","installed_at":"2024-01-15"}]""";
+
+        var payload = new Dictionary<string, string>
+        {
+            ["device_id"] = "MITO-0001",
+            ["hostname"] = "HOST-ACTION-01",
+            ["software"] = software,
+            ["printers"] = printers,
+        };
+
+        var ok = Api.Fingerprint(server.Url + "api/agent/fingerprint", "tat_abc123", payload);
+
+        Check("the fingerprint report is accepted", ok);
+        Check("the fingerprint was posted", server.Bodies.Count == 1);
+
+        if (server.Bodies.Count != 1) return;
+
+        using var doc = JsonDocument.Parse(server.Bodies[0]);
+        var root = doc.RootElement;
+
+        var printer = root.GetProperty("printers")[0];
+
+        Check("driver survives the round trip",
+            printer.GetProperty("driver_name").GetString() == "HP Universal Printing PCL 6");
+        Check("port survives the round trip",
+            printer.GetProperty("port_name").GetString() == "10.20.30.50");
+        Check("a true flag is still a boolean after two hops",
+            printer.GetProperty("is_network").ValueKind == JsonValueKind.True);
+        Check("a false flag is still a boolean after two hops",
+            printer.GetProperty("is_offline").ValueKind == JsonValueKind.False);
+        Check("the status code survives the round trip",
+            printer.GetProperty("status_code").GetInt32() == 3);
+        Check("the printer name survives the round trip",
+            printer.GetProperty("name").GetString() == "HP LaserJet P1102");
+
+        var program = root.GetProperty("software")[0];
+
+        Check("the software install date survives the round trip",
+            program.GetProperty("installed_at").GetString() == "2024-01-15");
+        Check("the software publisher survives the round trip",
+            program.GetProperty("publisher").GetString() == "CPNSi");
+    }
+
     private static void FullScanCases()
     {
         Console.WriteLine("[*] full scan request");
@@ -347,6 +420,7 @@ internal static class Program
     {
         private readonly HttpListener _listener = new();
         private readonly List<string> _requests = new();
+        private readonly List<string> _bodies = new();
         private readonly Task _acceptLoop;
         private readonly bool _failFingerprint;
 
@@ -364,6 +438,9 @@ internal static class Program
 
         public IReadOnlyList<string> Requests => _requests;
 
+        /// <summary>The raw request body of each request, in the order received.</summary>
+        public IReadOnlyList<string> Bodies => _bodies;
+
         private async Task AcceptLoop()
         {
             while (_listener.IsListening)
@@ -373,6 +450,16 @@ internal static class Program
                     var context = await _listener.GetContextAsync();
                     var path = context.Request.Url?.AbsolutePath ?? string.Empty;
                     _requests.Add(path);
+
+                    string sent;
+
+                    using (var reader = new StreamReader(
+                        context.Request.InputStream, context.Request.ContentEncoding))
+                    {
+                        sent = await reader.ReadToEndAsync();
+                    }
+
+                    _bodies.Add(sent);
 
                     context.Response.StatusCode = _failFingerprint &&
                         path.EndsWith("agent/fingerprint", StringComparison.Ordinal) ? 500 : 200;
