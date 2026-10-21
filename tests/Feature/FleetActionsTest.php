@@ -429,6 +429,38 @@ class FleetActionsTest extends TestCase
     }
 
     /**
+     * The row actions are Blade components, and an Alpine attribute on a Blade
+     * component is the easy thing to lose there: the directive-looking @click
+     * has to survive compilation verbatim, or the chip renders perfectly and
+     * does nothing at all when clicked. Nothing else in the suite would notice.
+     */
+    public function test_the_row_actions_still_dispatch_their_modals(): void
+    {
+        $admin = $this->admin();
+        $id = $this->agentToken->id;
+
+        $page = $this->actingAs($admin)->get(route('agent.fleet'))->getContent();
+
+        $this->assertStringContainsString(
+            '@click="$dispatch(\'open-modal\', \'device-'.$id.'\')"',
+            $page,
+            'Detail no longer opens the device dialog.'
+        );
+
+        $this->assertStringContainsString(
+            '@click="$dispatch(\'open-modal\', \'power-agent-'.$id.'\')"',
+            $page,
+            'Power no longer opens the power dialog.'
+        );
+
+        $this->assertStringContainsString(
+            '@click="$dispatch(\'open-modal\', \'uninstall-agent-'.$id.'\')"',
+            $page,
+            'Uninstall no longer opens its confirmation dialog.'
+        );
+    }
+
+    /**
      * Bind a sender that records instead of touching the network.
      *
      * A magic packet is a broadcast: a test that actually sent one would be

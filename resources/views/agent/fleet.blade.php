@@ -256,28 +256,24 @@
                             @endif
                         </td>
                         <td class="py-3 px-3">
-                            <div class="flex flex-wrap items-center justify-end gap-1">
-                                <button type="button"
-                                        class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-brand-600 transition-all duration-200 hover:bg-brand-50 active:scale-95 dark:text-brand-300 dark:hover:bg-brand-500/10"
-                                        @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>
+                            <div class="flex flex-wrap items-center justify-end gap-1.5">
+                                <x-row-action variant="brand" @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</x-row-action>
 
                                 @if($device->isUsable())
                                     @if($device->canBeWoken())
                                         <form method="POST" action="{{ route('agent.wake', $device) }}" data-modal-action class="inline-flex">
                                             @csrf
-                                            <button type="submit" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-emerald-600 transition-all duration-200 hover:bg-emerald-50 active:scale-95 dark:text-emerald-300 dark:hover:bg-emerald-500/10" title="Send Wake on LAN magic packet">Wake</button>
+                                            <x-row-action type="submit" title="Send Wake on LAN magic packet">Wake</x-row-action>
                                         </form>
                                     @endif
                                     @if($telemetry?->ip_address)
-                                        <a href="rdp://{{ $telemetry->ip_address }}" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-cyan-600 transition-all duration-200 hover:bg-cyan-50 active:scale-95 dark:text-cyan-300 dark:hover:bg-cyan-500/10" title="Open Remote Desktop">RDP</a>
-                                        <a href="{{ route('agent.rdp', $device) }}" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-gray-600 transition-all duration-200 hover:bg-gray-100 active:scale-95 dark:text-gray-300 dark:hover:bg-white/5" title="Download .rdp file">.RDP</a>
+                                        <x-row-action variant="info" href="rdp://{{ $telemetry->ip_address }}" title="Open Remote Desktop">RDP</x-row-action>
+                                        <x-row-action href="{{ route('agent.rdp', $device) }}" title="Download .rdp file">.RDP</x-row-action>
                                     @endif
-                                    <button type="button"
-                                            class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-orange-600 transition-all duration-200 hover:bg-orange-50 active:scale-95 dark:text-orange-300 dark:hover:bg-orange-500/10"
-                                            @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</button>
+                                    <x-row-action @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
                                     <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
                                         @csrf
-                                        <button type="submit" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-gray-600 transition-all duration-200 hover:bg-gray-100 active:scale-95 dark:text-gray-300 dark:hover:bg-white/5">Scan</button>
+                                        <x-row-action type="submit">Scan</x-row-action>
                                     </form>
                                     {{-- Per-device update. Until this existed, moving one
                                          laptop onto a new build meant Update All, which
@@ -286,7 +282,7 @@
                                          device is actually behind: offering it on a
                                          current device invites a pointless restart. --}}
                                     @if($device->isOutdated() === true)
-                                        <button type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-warning-600 transition-all duration-200 hover:bg-warning-50 active:scale-95 dark:text-warning-300 dark:hover:bg-warning-500/10" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</button>
+                                        <x-row-action variant="warning" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</x-row-action>
                                     @endif
                                     {{-- Promote to admin. Only shown when the agent
                                          has reported it is a standard user: asking an
@@ -294,7 +290,7 @@
                                          UAC prompt. Null (never reported) shows
                                          nothing, since we do not know its state. --}}
                                     @if($telemetry?->is_elevated === false)
-                                        <button type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-brand-600 transition-all duration-200 hover:bg-brand-50 active:scale-95 dark:text-brand-300 dark:hover:bg-brand-500/10" @click="$dispatch('open-modal', 'confirm-elevate-agent-{{ $device->id }}')">Make admin</button>
+                                        <x-row-action @click="$dispatch('open-modal', 'confirm-elevate-agent-{{ $device->id }}')">Make admin</x-row-action>
                                     @endif
                                 @endif
 
@@ -332,6 +328,13 @@
                                         && ! $operation->isRunning();
                                 @endphp
 
+                                {{-- Everything above is routine; this is the one action
+                                     that changes someone else's machine, so it is set
+                                     apart by a rule rather than being one more chip in
+                                     the same row. Colour alone is not enough separation
+                                     when the cell wraps. --}}
+                                <span class="mx-0.5 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></span>
+
                                 @if($isUninstallRunning)
                                     {{-- Red, and labelled "stalled", when the agent has
                                          stopped reporting mid-operation. A confident
@@ -348,9 +351,7 @@
                                 @elseif($isUninstallQueued)
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
-                                    <button type="button"
-                                            class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-error-500 transition-all duration-200 hover:bg-error-50 active:scale-95 dark:text-error-400 dark:hover:bg-error-500/10"
-                                            @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</button>
+                                    <x-row-action variant="danger" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
                                 @endif
                             </div>
                         </td>
