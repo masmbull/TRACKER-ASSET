@@ -309,7 +309,7 @@
 
         {{-- Summary: the whole job in one strip, so the operator confirms what
              they are about to run before queueing it. --}}
-        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/5">
+        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/60">
             <p class="mb-2 text-theme-xs font-semibold uppercase tracking-wider text-gray-400">Summary</p>
             <dl class="grid gap-x-6 gap-y-1.5 text-theme-sm sm:grid-cols-[8rem_1fr]">
                 <dt class="text-gray-500 dark:text-gray-400">Script</dt>

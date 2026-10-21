@@ -83,7 +83,7 @@
                                         auto-filled
                                     </div>
                                 @endif
-                                <code class="mt-1.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-white/10 dark:text-gray-400">{{ $field['key'] }}</code>
+                                <code class="mt-1.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-700/50 dark:text-gray-400">{{ $field['key'] }}</code>
                             </dd>
                         </div>
                     @endforeach

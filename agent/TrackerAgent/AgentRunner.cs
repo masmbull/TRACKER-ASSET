@@ -1327,7 +1327,9 @@ public static class AgentRunner
                             // complete, stayed on the old build, and nothing said
                             // otherwise. The only honest moment to settle this row
                             // is after the call returns.
-                            if (AutoUpdater.PerformUpdate(url, token, downloadUrl, resumeAsDaemon: IsElevated()))
+                            if (AutoUpdater.PerformUpdate(url, token, downloadUrl,
+                                onProgress: (pct, stage) => Api.ReportProgress(url, token, id, pct, stage),
+                                resumeAsDaemon: IsElevated()))
                             {
                                 Api.Ack(url, token, id, "done", new Dictionary<string, string>
                                 {

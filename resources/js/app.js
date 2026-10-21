@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         badge.classList.toggle('dark:text-warning-500', state.status === 'stale');
                         badge.classList.toggle('bg-gray-100', !['online', 'service', 'stale'].includes(state.status));
                         badge.classList.toggle('text-gray-600', !['online', 'service', 'stale'].includes(state.status));
-                        badge.classList.toggle('dark:bg-white/10', !['online', 'service', 'stale'].includes(state.status));
+                        badge.classList.toggle('dark:bg-gray-700/50', !['online', 'service', 'stale'].includes(state.status));
                         badge.classList.toggle('dark:text-gray-400', !['online', 'service', 'stale'].includes(state.status));
                     }
 

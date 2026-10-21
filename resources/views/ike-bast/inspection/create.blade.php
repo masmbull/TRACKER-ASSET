@@ -75,7 +75,7 @@
             <div class="overflow-x-auto">
                 <table class="min-w-full text-theme-sm">
                     <thead>
-                        <tr class="border-b border-gray-100 bg-gray-50 text-theme-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">
+                        <tr class="border-b border-gray-100 bg-gray-50 text-theme-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-800/60">
                             <th class="px-3 py-2.5 text-left">#</th>
                             <th class="px-3 py-2.5 text-left">Item</th>
                             <th class="px-3 py-2.5 text-left">Item Code</th>

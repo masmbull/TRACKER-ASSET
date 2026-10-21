@@ -44,7 +44,7 @@
 
 <section class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-gray-200 py-3 dark:border-gray-800 sm:mt-5 sm:gap-x-8" aria-label="Other asset statuses">
     @foreach($secondaryStats as $stat)
-        <div class="flex items-center gap-2 rounded-full bg-gray-50 px-2.5 py-1 dark:bg-white/5">
+        <div class="flex items-center gap-2 rounded-full bg-gray-50 px-2.5 py-1 dark:bg-gray-800/60">
             <span class="text-[10px] font-medium text-gray-500 dark:text-gray-400 sm:text-theme-xs">{{ $stat['label'] }}</span>
             <span class="text-theme-sm font-semibold {{ $stat['text'] }}">{{ number_format($stat['value']) }}</span>
         </div>
@@ -208,8 +208,8 @@
 <x-card class="mt-6" title="Recent Activity">
     <div class="space-y-3">
         @forelse($recentActivity as $activity)
-            <div class="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+            <div class="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
+                <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700/50">
                     <span class="text-theme-xs font-semibold text-gray-500">{{ strtoupper(substr($activity->action, 0, 1)) }}</span>
                 </div>
                 <div class="flex-1 min-w-0">

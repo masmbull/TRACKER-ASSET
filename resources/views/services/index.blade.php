@@ -42,7 +42,7 @@
                 $isSkipped = $service['status'] === 'skipped';
             @endphp
             <div @class([
-                'animate-fade-up rounded-xl border border-l-4 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-theme-md dark:bg-white/[0.02]',
+                'animate-fade-up rounded-xl border border-l-4 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-theme-md dark:bg-gray-800/60',
                 'border-gray-200 border-l-success-500 dark:border-gray-800 dark:border-l-success-500' => $isOk,
                 'border-gray-200 border-l-gray-300 dark:border-gray-800 dark:border-l-gray-500' => $isSkipped,
                 'border-gray-200 border-l-error-500 dark:border-gray-800 dark:border-l-error-500' => ! $isOk && ! $isSkipped,

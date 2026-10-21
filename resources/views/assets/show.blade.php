@@ -257,8 +257,8 @@
             @if($asset->activityLogs->count() > 0)
                 <div class="space-y-0">
                     @foreach($asset->activityLogs as $log)
-                        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+                        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
+                            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700/50">
                                 <span class="text-theme-xs font-semibold text-gray-500">{{ strtoupper(substr($log->action, 0, 1)) }}</span>
                             </div>
                             <div class="flex-1 min-w-0">

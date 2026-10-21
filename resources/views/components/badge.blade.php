@@ -7,7 +7,7 @@ $colors = [
     'warning' => 'bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-warning-500',
     'orange' => 'bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-500',
     'danger' => 'bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-500',
-    'gray' => 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400',
+    'gray' => 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
 ];
 @endphp
 <span {{ $attributes->class(['inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-theme-xs font-medium transition-colors duration-200', $colors[$variant] ?? $colors['gray']]) }}>

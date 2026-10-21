@@ -1,5 +1,5 @@
 @props(['title' => null, 'subtitle' => null])
-<div {{ $attributes->class(['reveal rounded-2xl border border-gray-200 bg-white p-4 transition-shadow duration-200 hover:shadow-theme-md md:p-6 dark:border-gray-800 dark:bg-white/3']) }}>
+<div {{ $attributes->class(['reveal rounded-2xl border border-gray-200 bg-white p-4 transition-shadow duration-200 hover:shadow-theme-md md:p-6 dark:border-gray-800 dark:bg-[#1d2939']) }}>
     @if($title || $subtitle)
     <div class="flex items-center justify-between mb-4">
         <div>

@@ -23,7 +23,7 @@
     @endif
 
     <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.9fr)]">
-        <section class="flex flex-col self-start overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
+        <section class="flex flex-col self-start overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-800">
             <div class="border-b border-gray-200 p-4 dark:border-gray-800">
                 <form method="GET" action="{{ route('users.access') }}" class="relative">
                     @if($selectedUser)
@@ -50,7 +50,7 @@
                     <a href="{{ route('users.access', array_filter(['user' => $user->id, 'search' => request('search'), 'per_page' => request('per_page')])) }}"
                        @if($isSelected) aria-current="true" @endif
                        class="flex items-center gap-3 px-4 py-3 transition-colors {{ $isSelected ? 'bg-brand-50/70 shadow-[inset_3px_0_0_0_theme(colors.brand.500)] dark:bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-white/5' }}">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-theme-xs font-semibold uppercase {{ $isSelected ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300' }}">{{ $initials }}</span>
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-theme-xs font-semibold uppercase {{ $isSelected ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300' }}">{{ $initials }}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-theme-sm font-semibold text-gray-800 dark:text-white">{{ $user->name }}</span>
                             <span class="block truncate text-theme-xs text-gray-500 dark:text-gray-400">{{ $user->email }}</span>
@@ -88,9 +88,9 @@
                 {{ $users->links('components.pagination') }}
             @endif
         </section>
-        <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/3">
+        <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-800">
             @if($selectedUser)
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50/70 p-5 dark:border-gray-800 dark:bg-white/3">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50/70 p-5 dark:border-gray-800 dark:bg-gray-800/60">
                     <div class="flex min-w-0 items-center gap-3">
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-500 text-theme-sm font-bold uppercase text-white">{{ \Illuminate\Support\Str::of($selectedUser->name)->trim()->explode(' ')->filter()->map(fn ($part) => mb_substr($part, 0, 1))->take(2)->implode('') }}</span>
                         <div class="min-w-0">
@@ -146,7 +146,7 @@
                                 </div>
                             @endforeach
                         </div>
-                        <div class="flex items-center gap-3 border-t border-gray-200 bg-gray-50/70 px-5 py-4 dark:border-gray-800 dark:bg-white/3">
+                        <div class="flex items-center gap-3 border-t border-gray-200 bg-gray-50/70 px-5 py-4 dark:border-gray-800 dark:bg-gray-800/60">
                             <p class="text-theme-xs font-medium text-warning-600 dark:text-warning-500" x-show="dirty" x-cloak>Unsaved changes</p>
                             <button type="submit" class="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-theme-sm font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 focus:ring-brand-500/40 focus:ring-3 focus:outline-none">
                                 <svg fill="none" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h8l3 3v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm2 0v4h5V4M7 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>

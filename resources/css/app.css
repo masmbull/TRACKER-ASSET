@@ -425,6 +425,10 @@
   .bg-gray-50, main {
     background: var(--bg-page);
   }
+
+  .dark .bg-white {
+    background: var(--bg-card);
+  }
   
   .bg-white {
     background: var(--bg-card);
