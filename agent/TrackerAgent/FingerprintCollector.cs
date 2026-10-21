@@ -59,6 +59,7 @@ public static class FingerprintCollector
         CollectDefenderDetail(data);
         CollectPatchState(data);
         CollectSoftware(data);
+        CollectPrinters(data);
 
         return data.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
                    .ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -1693,6 +1694,141 @@ Write-Output ('PENDING_SECURITY=' + $security)
         // software.*.name, and System.Text.Json would otherwise emit "Name".
         data["software"] = JsonSerializer.Serialize(programs, SoftwareJson);
     }
+
+    /// <summary>One printer installed on the machine, as the spooler reports it.</summary>
+    public sealed record PrinterReport(
+        string Name,
+        string? DriverName,
+        string? PortName,
+        string? Location,
+        bool IsNetwork,
+        bool IsDefault,
+        bool IsOffline,
+        int? StatusCode,
+        string? Status);
+
+    /// <summary>
+    /// Printers installed on the machine, sent the same way software is.
+    /// </summary>
+    /// <remarks>
+    /// Win32_Printer rather than the newer Get-Printer cmdlet: the WMI class is
+    /// available on every Windows install this agent targets, including the
+    /// stripped-down ones, and it exposes the network/local and offline flags
+    /// directly instead of leaving them to be inferred from a port name.
+    ///
+    /// An operator asking "can this laptop still reach the office printer?" is
+    /// the question this answers, and the offline flag is the whole answer -
+    /// a printer that is installed but unreachable looks fine everywhere else.
+    /// </remarks>
+    static void CollectPrinters(Dictionary<string, string> data)
+    {
+        var printers = ReadPrinters();
+
+        if (printers.Count == 0) return;
+
+        data["printer_count"] = printers.Count.ToString(CultureInfo.InvariantCulture);
+        data["printers"] = JsonSerializer.Serialize(printers, SoftwareJson);
+    }
+
+    /// <summary>
+    /// Every print queue Windows knows about, with its default, network and
+    /// offline state.
+    /// </summary>
+    internal static List<PrinterReport> ReadPrinters()
+    {
+        var results = new List<PrinterReport>();
+
+        try
+        {
+            // "Default" is not a property of Win32_Printer; it is a flag on the
+            // queue. Win32_Printer gives Network and WorkOffline directly, which
+            // is why this is one query rather than a join with Get-Printer.
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Name, DriverName, PortName, Location, Network, WorkOffline, PrinterStatus, Default " +
+                "FROM Win32_Printer");
+
+            foreach (var obj in searcher.Get())
+            {
+                using (obj)
+                {
+                    var name = obj["Name"]?.ToString();
+
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    var status = DecodePrinterStatus(obj["PrinterStatus"]);
+
+                    results.Add(new PrinterReport(
+                        Name: name.Trim(),
+                        DriverName: Clean(obj["DriverName"]?.ToString()),
+                        PortName: Clean(obj["PortName"]?.ToString()),
+                        Location: Clean(obj["Location"]?.ToString()),
+                        IsNetwork: ReadBool(obj["Network"]),
+                        IsDefault: ReadBool(obj["Default"]),
+                        // WorkOffline is the spooler's own view, which is the one
+                        // that matters: a queue can be "ready" while the port is
+                        // dead, but it cannot be un-worked-offline while the
+                        // share is unreachable.
+                        IsOffline: ReadBool(obj["WorkOffline"]),
+                        StatusCode: ToIntOrNull(obj["PrinterStatus"]),
+                        Status: status));
+                }
+            }
+        }
+        catch
+        {
+            // A machine with no spooler service, or one whose WMI repository is
+            // damaged, simply reports no printers. The fingerprint is still
+            // worth sending.
+        }
+
+        return results
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The Win32_Printer status codes decoded into the words an operator reads.
+    /// </summary>
+    /// <remarks>
+    /// The numeric value is kept alongside, so a code this table does not know
+    /// about still reaches the register as something other than a blank.
+    /// </remarks>
+    internal static string? DecodePrinterStatus(object? raw)
+    {
+        if (raw is null) return null;
+
+        return Convert.ToInt32(raw, CultureInfo.InvariantCulture) switch
+        {
+            1 => "Other",
+            2 => "Unknown",
+            3 => "Idle",
+            4 => "Printing",
+            5 => "Warmup",
+            6 => "Stopped printing",
+            7 => "Offline",
+            _ => null,
+        };
+    }
+
+    private static bool ReadBool(object? raw)
+        => raw is bool value && value;
+
+    private static int? ToIntOrNull(object? raw)
+    {
+        if (raw is null) return null;
+
+        try
+        {
+            return Convert.ToInt32(raw, CultureInfo.InvariantCulture);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string? Clean(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public static List<InstalledProgram> ReadInstalledPrograms()
     {

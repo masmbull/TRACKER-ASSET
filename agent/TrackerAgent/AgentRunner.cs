@@ -512,6 +512,126 @@ public static class AgentRunner
     static int RunOnce(string url, string token, string? assetId = null, long? commandId = null)
         => RunFullScan(url, token, assetId, commandId);
 
+    /// <summary>
+    /// The power action the server asked for, normalised to lower case.
+    /// </summary>
+    internal static string ReadPowerAction(JsonElement command)
+    {
+        if (!command.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
+        return payload.TryGetProperty("action", out var action) && action.ValueKind == JsonValueKind.String
+            ? (action.GetString() ?? string.Empty).Trim().ToLowerInvariant()
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// How long Windows should wait before acting.
+    /// </summary>
+    /// <remarks>
+    /// Clamped rather than trusted: the value ends up on a command line, and a
+    /// negative or absurd delay is either a bug or an attempt to make the
+    /// machine disappear in a way the operator did not ask for. The upper bound
+    /// matches the server's own validation so the two cannot disagree.
+    /// </remarks>
+    internal static int ReadPowerDelay(JsonElement command)
+    {
+        if (!command.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+        {
+            return 60;
+        }
+
+        if (!payload.TryGetProperty("delay_seconds", out var delay) || delay.ValueKind != JsonValueKind.Number)
+        {
+            return 60;
+        }
+
+        try
+        {
+            return Math.Clamp(delay.GetInt32(), 0, 3600);
+        }
+        catch (Exception)
+        {
+            return 60;
+        }
+    }
+
+    /// <summary>
+    /// Hand the machine's power state to Windows.
+    /// </summary>
+    /// <remarks>
+    /// shutdown.exe rather than the Win32 ExitWindowsEx API: the built-in tool
+    /// is present on every Windows install, takes the same three verbs the
+    /// fleet page offers, and already handles the privilege negotiation that a
+    /// P/Invoke would have to reimplement. A standard user on a machine whose
+    /// policy blocks remote shutdown gets a refused command here, which is
+    /// reported back as a failure rather than swallowed.
+    ///
+    /// /l takes no timer - signing a user out is not something Windows will
+    /// schedule - so logoff is issued immediately and the caller does not
+    /// claim a delay it did not get.
+    /// </remarks>
+    internal static (bool ok, string message) ExecutePowerCommand(string action, int delaySeconds)
+    {
+        var arguments = action switch
+        {
+            "restart" => $"/r /t {delaySeconds} /d p:4:1 /c \"Restart requested by the asset tracker.\"",
+            "shutdown" => $"/s /t {delaySeconds} /d p:4:1 /c \"Shutdown requested by the asset tracker.\"",
+            "logoff" => "/l",
+            _ => string.Empty,
+        };
+
+        if (arguments.Length == 0)
+        {
+            return (false, $"Unknown power action '{action}'. The agent understands restart, shutdown and logoff.");
+        }
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "shutdown.exe",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+
+            using var process = Process.Start(startInfo);
+
+            if (process is null)
+            {
+                return (false, "shutdown.exe could not be started on this machine.");
+            }
+
+            // Generous: shutdown.exe returns promptly, but a slow or busy
+            // machine should not be left holding a handle open forever. Fifteen
+            // seconds is well past the point where the answer is already known.
+            if (!process.WaitForExit(15000))
+            {
+                return (false, "shutdown.exe did not respond within 15 seconds.");
+            }
+
+            if (process.ExitCode != 0)
+            {
+                return (false, $"Windows refused the '{action}' request (exit code {process.ExitCode}). " +
+                    "A machine that is not elevated, or one whose policy blocks it, will refuse here.");
+            }
+
+            return (action switch
+            {
+                "restart" => (true, $"Restarting in {delaySeconds} second(s)."),
+                "shutdown" => (true, $"Shutting down in {delaySeconds} second(s)."),
+                _ => (true, "Signing the user out now."),
+            });
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Could not run shutdown.exe: {ex.Message}");
+        }
+    }
+
     internal static int RunScriptCommand(string url, string token, long commandId, JsonElement command)
     {
         try
@@ -1379,6 +1499,41 @@ public static class AgentRunner
                             Api.ReportProgress(url, token, id, 10, "Preparing script...");
                             var scriptExitCode = RunScriptCommand(url, token, id, cmd);
                             Console.WriteLine($"[OK] Command #{id} script -> {(scriptExitCode == 0 ? "done" : "failed")}");
+                        }
+                        else if (command == "power")
+                        {
+                            Console.WriteLine($"[*] Command #{id} power received. Executing...");
+
+                            var powerAction = ReadPowerAction(cmd);
+                            var powerDelay = ReadPowerDelay(cmd);
+
+                            // Acked AFTER shutdown.exe returns rather than before.
+                            //
+                            // Unlike uninstall, this does not take the process down
+                            // the moment it is issued: /r and /s schedule the work
+                            // and give the operator a window. That window is what
+                            // makes an honest ack possible - a refused shutdown
+                            // (a standard user on a locked-down machine, or a
+                            // policy that blocks it) is reported as failed instead
+                            // of being recorded as a restart that never happened.
+                            //
+                            // The server enforces a minimum delay for exactly this
+                            // reason: with a floor of a few seconds there is always
+                            // time for this request to leave the machine before the
+                            // session goes away.
+                            var (powerOk, powerMessage) = ExecutePowerCommand(powerAction, powerDelay);
+
+                            Api.Ack(url, token, id, powerOk ? "done" : "failed", new Dictionary<string, string>
+                            {
+                                ["message"] = powerMessage,
+                            });
+
+                            Console.WriteLine($"[OK] Command #{id} power {powerAction} -> {(powerOk ? "done" : "failed")}");
+
+                            // A restart or shutdown is already scheduled by Windows
+                            // and will happen with or without this process, so the
+                            // poll loop is left to finish normally rather than
+                            // exiting early. There is nothing left to collect.
                         }
                         else
                         {

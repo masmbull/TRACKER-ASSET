@@ -113,10 +113,10 @@ public static class Api
     /// Pushes the deep-inventory report to /api/agent/fingerprint.
     /// </summary>
     /// <remarks>
-    /// The `software` entry arrives as a JSON string because the agent's payload
-    /// dictionary is string-typed; it is re-hydrated here into a real array so
-    /// the server can validate it as a structured list rather than trusting an
-    /// opaque blob.
+    /// The `software` and `printers` entries arrive as JSON strings because the
+    /// agent's payload dictionary is string-typed; they are re-hydrated here into
+    /// real arrays so the server can validate them as structured lists rather
+    /// than trusting opaque blobs.
     /// </remarks>
     public static bool Fingerprint(string url, string token, Dictionary<string, string> payload)
     {
@@ -137,6 +137,21 @@ public static class Api
             else
             {
                 body.Remove("software");
+            }
+
+            // Same treatment as the software list, for the same reason: the
+            // collector serialises printers into the string-typed dictionary and
+            // this turns them back into an array the server can validate. A
+            // printer list that stayed a string would be rejected with 422 and
+            // the machine would lose its whole inventory over one field.
+            if (payload.TryGetValue("printers", out var rawPrinters) && !string.IsNullOrWhiteSpace(rawPrinters))
+            {
+                body["printers"] = JsonSerializer.Deserialize<List<PrinterEntry>>(rawPrinters, JsonOptions)
+                    ?? new List<PrinterEntry>();
+            }
+            else
+            {
+                body.Remove("printers");
             }
 
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/agent/fingerprint")
@@ -222,6 +237,23 @@ private static void Authenticate(HttpRequestMessage req, string token)
 
 /// <summary>One entry of the installed-software list, as the server sees it.</summary>
 private sealed record SoftwareEntry(string? Name, string? Version, string? Publisher, string? InstalledAt);
+
+/// <summary>One entry of the printer list, as the server sees it.</summary>
+/// <remarks>
+/// Property names match Win32_Printer's own casing so the round trip through
+/// the collector's camelCase JSON is lossless: the collector writes "isNetwork"
+/// and this reads it back, and the server validates printers.*.name.
+/// </remarks>
+private sealed record PrinterEntry(
+    string? Name,
+    string? DriverName,
+    string? PortName,
+    string? Location,
+    bool IsNetwork,
+    bool IsDefault,
+    bool IsOffline,
+    int? StatusCode,
+    string? Status);
 
     public static List<JsonElement>? GetInbox(string url, string token) =>
         GetInbox(url, token, 0, out _);
