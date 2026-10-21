@@ -63,6 +63,67 @@
          visible in only one of them. Those three now live in the modal, so this
          page keeps the readings the modal cannot show: the full software list,
          with search and paging. --}}
+    {{-- Printers sit above the software list because they are the smaller and
+         more actionable of the two: an operator asking "can this laptop still
+         reach the office printer?" wants the answer in one glance, not after
+         scrolling past forty programs. --}}
+    @if($fingerprint->printers->isNotEmpty())
+        <x-card class="mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Printers
+                </p>
+                <div class="flex items-center gap-2">
+                    @if($fingerprint->printers->where('is_offline', true)->isNotEmpty())
+                        <x-badge variant="warning">
+                            {{ $fingerprint->printers->where('is_offline', true)->count() }} offline
+                        </x-badge>
+                    @endif
+                    <x-badge variant="brand">
+                        {{ $fingerprint->printers->count() }} installed
+                    </x-badge>
+                </div>
+            </div>
+
+            <div class="mt-4 overflow-x-auto">
+                <table class="w-full text-left text-theme-sm">
+                    <thead class="text-theme-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        <tr class="border-b border-gray-100 dark:border-gray-700">
+                            <th class="py-2 pr-4">Printer</th>
+                            <th class="py-2 pr-4">Driver</th>
+                            <th class="py-2 pr-4">Port</th>
+                            <th class="py-2 pr-4">Type</th>
+                            <th class="py-2">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($fingerprint->printers->sortBy('name') as $printer)
+                            <tr class="border-t border-gray-100 dark:border-gray-700">
+                                <td class="py-2 pr-4 font-medium text-gray-800 dark:text-white">
+                                    {{ $printer->name }}
+                                    @if($printer->is_default)
+                                        <x-badge variant="brand" class="ml-1">default</x-badge>
+                                    @endif
+                                </td>
+                                <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->driver_name ?? '—' }}</td>
+                                <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->port_name ?? '—' }}</td>
+                                <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->is_network ? 'Network' : 'Local' }}</td>
+                                <td class="py-2">
+                                    @if($printer->is_offline)
+                                        <x-badge variant="warning">offline</x-badge>
+                                    @elseif($printer->status)
+                                        <span class="text-gray-600 dark:text-gray-300">{{ $printer->status }}</span>
+                                    @else
+                                        <x-badge variant="success">ready</x-badge>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </x-card>
+    @endif
     <x-card>
         <div class="flex flex-wrap items-center justify-between gap-2">
             <p class="text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">

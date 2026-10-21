@@ -262,6 +262,19 @@
                                         @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</button>
 
                                 @if($device->isUsable())
+                                    @if($device->canBeWoken())
+                                        <form method="POST" action="{{ route('agent.wake', $device) }}" data-modal-action class="inline-flex">
+                                            @csrf
+                                            <button type="submit" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-emerald-600 transition-all duration-200 hover:bg-emerald-50 active:scale-95 dark:text-emerald-300 dark:hover:bg-emerald-500/10" title="Send Wake on LAN magic packet">Wake</button>
+                                        </form>
+                                    @endif
+                                    @if($telemetry?->ip_address)
+                                        <a href="rdp://{{ $telemetry->ip_address }}" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-cyan-600 transition-all duration-200 hover:bg-cyan-50 active:scale-95 dark:text-cyan-300 dark:hover:bg-cyan-500/10" title="Open Remote Desktop">RDP</a>
+                                        <a href="{{ route('agent.rdp', $device) }}" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-gray-600 transition-all duration-200 hover:bg-gray-100 active:scale-95 dark:text-gray-300 dark:hover:bg-white/5" title="Download .rdp file">.RDP</a>
+                                    @endif
+                                    <button type="button"
+                                            class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-orange-600 transition-all duration-200 hover:bg-orange-50 active:scale-95 dark:text-orange-300 dark:hover:bg-orange-500/10"
+                                            @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</button>
                                     <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
                                         @csrf
                                         <button type="submit" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-semibold whitespace-nowrap text-gray-600 transition-all duration-200 hover:bg-gray-100 active:scale-95 dark:text-gray-300 dark:hover:bg-white/5">Scan</button>
@@ -446,6 +459,44 @@
                     @endforeach
                 </div>
 
+                {{-- Printers, as a compact list rather than a full table.
+                     The inventory page has the detail; here an operator wants
+                     only to know whether the machine can still reach its
+                     printers, which is the count and the offline flag. --}}
+                @if(($printersByFingerprint[$fp?->id] ?? collect())->isNotEmpty())
+                    @php
+                        $devicePrinters = $printersByFingerprint[$fp->id];
+                    @endphp
+                    <section class="mt-5 border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <h4 class="mb-2 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Printers
+                            @if($devicePrinters->where('is_offline', true)->isNotEmpty())
+                                <span class="ml-1 rounded-full bg-warning-50 px-2 py-0.5 text-warning-600 dark:bg-warning-500/15 dark:text-warning-500">
+                                    {{ $devicePrinters->where('is_offline', true)->count() }} offline
+                                </span>
+                            @endif
+                        </h4>
+                        <ul class="space-y-1 text-theme-xs">
+                            @foreach($devicePrinters->sortBy('name') as $printer)
+                                <li class="flex items-baseline gap-3">
+                                    <span class="min-w-0 flex-1 break-words text-gray-800 dark:text-gray-200">
+                                        {{ $printer->name }}
+                                        @if($printer->is_default)
+                                            <span class="ml-1 text-gray-400">(default)</span>
+                                        @endif
+                                    </span>
+                                    <span class="shrink-0 text-gray-500 dark:text-gray-400">
+                                        {{ $printer->is_network ? 'network' : 'local' }}
+                                        @if($printer->is_offline)
+                                            · offline
+                                        @endif
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </section>
+                @endif
+
                 @if($audit)
                     {{-- The agent reports a difference and stops there; it never
                          writes to the register, because a compromised laptop
@@ -606,6 +657,49 @@
         </form>
     </div>
 </x-modal>
+
+@foreach($paginatedDevices as $device)
+    @if($device->isUsable())
+        <x-modal id="power-agent-{{ $device->id }}" title="Power — {{ $device->name }}" maxWidth="md">
+            <form method="POST" action="{{ route('agent.power', $device) }}" class="space-y-4" data-modal-action data-close-modal="power-agent-{{ $device->id }}">
+                @csrf
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+                    Ask <span class="font-semibold text-gray-800 dark:text-white">{{ $device->name }}</span> to restart, shut down, or log out the signed-in user.
+                </p>
+
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 hover:border-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                        <input type="radio" name="action" value="restart" class="h-4 w-4 text-brand-600 focus:ring-brand-500" required>
+                        <span>Restart</span>
+                    </label>
+                    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 hover:border-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                        <input type="radio" name="action" value="shutdown" class="h-4 w-4 text-brand-600 focus:ring-brand-500">
+                        <span>Shut down</span>
+                    </label>
+                    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 hover:border-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                        <input type="radio" name="action" value="logoff" class="h-4 w-4 text-brand-600 focus:ring-brand-500">
+                        <span>Log off</span>
+                    </label>
+                </div>
+
+                <label for="delay-{{ $device->id }}" class="block text-theme-sm font-medium text-gray-700 dark:text-gray-300">
+                    Delay (seconds)
+                    <input type="number" name="delay_seconds" id="delay-{{ $device->id }}"
+                           value="60" min="0" max="3600"
+                           class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-theme-sm text-gray-900 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                </label>
+                <p class="text-theme-xs text-gray-500 dark:text-gray-400">
+                    Default 60 seconds, so anyone at the machine sees the Windows warning before it happens. Set 0 for immediate.
+                </p>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" @click="$dispatch('close-modal', 'power-agent-{{ $device->id }}')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                    <x-button type="submit" variant="warning">Apply</x-button>
+                </div>
+            </form>
+        </x-modal>
+    @endif
+@endforeach
 
 @foreach($paginatedDevices as $device)
     @if($device->isUsable() && $device->isOutdated() === true)

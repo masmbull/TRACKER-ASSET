@@ -93,6 +93,14 @@ class AgentFingerprint extends Model
     }
 
     /**
+     * Printers installed on the machine this report describes.
+     */
+    public function printers(): HasMany
+    {
+        return $this->hasMany(AgentPrinter::class);
+    }
+
+    /**
      * Findings an operator must act on, as short codes the fleet table can badge.
      *
      * A device that is simply offline is not listed here: that is a liveness

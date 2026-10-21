@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\WakeOnLanService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -9,7 +10,7 @@ class AgentApiToken extends Model
 {
     protected $fillable = [
         'name', 'token_hash', 'token_plain', 'abilities', 'last_used_at', 'expires_at', 'is_active',
-        'device_id', 'platform', 'agent_version', 'last_seen_at', 'hardware_id',
+        'device_id', 'platform', 'agent_version', 'last_seen_at', 'hardware_id', 'mac_address',
     ];
 
     protected function casts(): array
@@ -65,5 +66,27 @@ class AgentApiToken extends Model
     public function fingerprint(): HasOne
     {
         return $this->hasOne(AgentFingerprint::class, 'agent_token_id')->latestOfMany('collected_at');
+    }
+
+    /**
+     * Can this device be woken over the network?
+     *
+     * Wake on LAN needs the NIC's hardware address, and only the agent can
+     * report it. A device that has never checked in therefore has no MAC and
+     * cannot be woken - which is worth saying plainly, because "Wake" silently
+     * doing nothing on a machine the operator cannot reach is exactly the kind
+     * of feature that gets distrusted after one use.
+     */
+    public function canBeWoken(): bool
+    {
+        return WakeOnLanService::normaliseMac($this->mac_address) !== null;
+    }
+
+    /**
+     * The address to send a magic packet to, or null when it is not known.
+     */
+    public function wakeMacAddress(): ?string
+    {
+        return WakeOnLanService::normaliseMac($this->mac_address);
     }
 }

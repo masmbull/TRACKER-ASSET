@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AgentApiToken;
 use App\Models\AgentFingerprint;
+use App\Models\AgentPrinter;
 use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\Asset;
@@ -30,6 +31,17 @@ class AgentFingerprintController extends Controller
     private const MAX_SOFTWARE_ROWS = 2000;
 
     /**
+     * Guard against an agent bug turning into an unbounded insert.
+     *
+     * A printer list is a fraction of the size of a software list - a busy
+     * office machine has a handful, not hundreds - but the cap is here for the
+     * same reason: the endpoint accepts whatever the agent sends, and a report
+     * that suddenly carries ten thousand printers is a bug, not a fact about
+     * the machine.
+     */
+    private const MAX_PRINTER_ROWS = 200;
+
+    /**
      * Fields the agent sends as "true"/"false" strings.
      */
     private const BOOLEAN_FIELDS = [
@@ -37,6 +49,13 @@ class AgentFingerprintController extends Controller
         'tpm_present', 'rdp_enabled', 'pending_reboot', 'smart_predicted_failure',
         'auto_logon_enabled', 'screen_lock_enabled', 'guest_account_enabled',
         'defender_realtime_enabled',
+    ];
+
+    /**
+     * The booleans inside each entry of the printer list.
+     */
+    private const PRINTER_BOOLEAN_FIELDS = [
+        'is_network', 'is_default', 'is_offline',
     ];
 
     /**
@@ -77,6 +96,56 @@ class AgentFingerprintController extends Controller
             }
         }
 
+        // The same conversion, one level down, for the printer list.
+        //
+        // The nested booleans arrive exactly like the top-level ones - the
+        // agent's payload dictionary is string-typed, so a printer's "is this
+        // offline" is the word "true". Laravel's boolean rule reads "1" and
+        // "0" but not "true", so without this the whole report is rejected
+        // with 422 and the machine loses its inventory over a spelling.
+        $printers = $request->input('printers');
+
+        if (is_array($printers)) {
+            $cleanPrinters = [];
+
+            foreach ($printers as $printer) {
+                if (! is_array($printer)) {
+                    continue;
+                }
+
+                // A queue whose name could not be read is dropped rather than
+                // rejected. Windows does emit such entries, and replacePrinters
+                // below already skips them - but printers.*.name is required, so
+                // a blank one would 422 the whole report and take several
+                // hundred software rows down with it. One unreadable sensor
+                // must not destroy the rest of the inventory, which is the same
+                // rule the top-level booleans follow just above.
+                if (trim((string) ($printer['name'] ?? '')) === '') {
+                    continue;
+                }
+
+                foreach (self::PRINTER_BOOLEAN_FIELDS as $field) {
+                    if (! array_key_exists($field, $printer) || is_bool($printer[$field])) {
+                        continue;
+                    }
+
+                    if (! is_string($printer[$field])) {
+                        continue;
+                    }
+
+                    $printer[$field] = match (strtolower(trim($printer[$field]))) {
+                        '1', 'true', 'yes', 'on' => true,
+                        '0', 'false', 'no', 'off' => false,
+                        default => null,
+                    };
+                }
+
+                $cleanPrinters[] = $printer;
+            }
+
+            $request->merge(['printers' => $cleanPrinters]);
+        }
+
         if ($clean !== []) {
             $request->merge($clean);
         }
@@ -107,9 +176,12 @@ class AgentFingerprintController extends Controller
 
         $software = $this->replaceSoftware($fingerprint, $payload['software'] ?? []);
 
+        $printers = $this->replacePrinters($fingerprint, $payload['printers'] ?? []);
+
         return response()->json([
             'ok' => true,
             'software' => $software,
+            'printers' => $printers,
             'collected_at' => $fingerprint->collected_at?->toIso8601String(),
         ]);
     }
@@ -157,6 +229,59 @@ class AgentFingerprintController extends Controller
         // drivers that cap a single multi-row statement.
         foreach (array_chunk($rows, 200) as $chunk) {
             AgentSoftware::insert($chunk);
+        }
+
+        return count($rows);
+    }
+
+    /**
+     * Replace the printer list wholesale.
+     *
+     * Same reasoning as the software list: the spooler gives no stable
+     * per-printer key, and a stale row would report a printer that has been
+     * removed from the machine.
+     */
+    private function replacePrinters(AgentFingerprint $fingerprint, array $printers): int
+    {
+        $fingerprint->printers()->delete();
+
+        $rows = [];
+
+        foreach (array_slice($printers, 0, self::MAX_PRINTER_ROWS) as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $name = trim((string) ($entry['name'] ?? ''));
+
+            // A print queue with no name is not a printer. Windows does have
+            // such entries - the "Microsoft Print to PDF" stubs and a few
+            // orphaned queues - but they carry a name; an empty one means the
+            // agent could not read it, and a nameless row on the register is
+            // noise rather than information.
+            if ($name === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'agent_fingerprint_id' => $fingerprint->id,
+                'asset_id' => $fingerprint->asset_id,
+                'name' => $name,
+                'driver_name' => $this->clean($entry['driver_name'] ?? null),
+                'port_name' => $this->clean($entry['port_name'] ?? null),
+                'location' => $this->clean($entry['location'] ?? null),
+                'is_network' => $this->boolOrNull($entry['is_network'] ?? null) ?? false,
+                'is_default' => $this->boolOrNull($entry['is_default'] ?? null) ?? false,
+                'is_offline' => $this->boolOrNull($entry['is_offline'] ?? null) ?? false,
+                'status_code' => $this->intOrNull($entry['status_code'] ?? null),
+                'status' => $this->clean($entry['status'] ?? null),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        if ($rows !== []) {
+            AgentPrinter::insert($rows);
         }
 
         return count($rows);
@@ -401,6 +526,20 @@ class AgentFingerprintController extends Controller
             'software.*.version' => 'nullable|string|max:255',
             'software.*.publisher' => 'nullable|string|max:255',
             'software.*.installed_at' => 'nullable|date',
+
+            // The printer list. The booleans are accepted as "true"/"false"
+            // strings because the agent's payload dictionary is string-typed -
+            // the same shape the software list arrives in.
+            'printers' => 'nullable|array|max:'.self::MAX_PRINTER_ROWS,
+            'printers.*.name' => 'required|string|max:255',
+            'printers.*.driver_name' => 'nullable|string|max:255',
+            'printers.*.port_name' => 'nullable|string|max:255',
+            'printers.*.location' => 'nullable|string|max:255',
+            'printers.*.is_network' => 'nullable|boolean',
+            'printers.*.is_default' => 'nullable|boolean',
+            'printers.*.is_offline' => 'nullable|boolean',
+            'printers.*.status_code' => 'nullable|integer|min:0',
+            'printers.*.status' => 'nullable|string|max:255',
         ];
     }
 

@@ -2,19 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
 use App\Models\AgentFingerprint;
+use App\Models\AgentPrinter;
 use App\Models\AgentSoftware;
 use App\Models\AgentTelemetry;
 use App\Models\AssetAudit;
 use App\Services\ScriptPayload;
+use App\Services\WakeOnLanService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 
 /**
  * Web command center for the agent fleet (PRD §11): 1-click Scan now /
@@ -53,6 +58,24 @@ class AgentFleetController extends Controller
     private const PAGE_SIZES = [10, 25, 50, 100];
 
     private const DEFAULT_PAGE_SIZE = 10;
+
+    /**
+     * The power actions the fleet page can ask a device to perform.
+     *
+     * A closed list, not a free-text field: the value ends up in a command
+     * line on the device, and the agent only understands these three.
+     */
+    private const POWER_ACTIONS = ['restart', 'shutdown', 'logoff'];
+
+    /**
+     * The magic-packet sender.
+     *
+     * Injected rather than built inline so the wake action can be exercised
+     * without touching the network - the test asserts on the packet bytes, and
+     * a real UDP broadcast from a test run is not something a test suite
+     * should be doing to the network it runs on.
+     */
+    public function __construct(protected WakeOnLanService $wakeOnLan) {}
 
     /**
      * Return only the fields that change while the fleet page is open.
@@ -205,6 +228,11 @@ class AgentFleetController extends Controller
             ->select([
                 'id', 'name', 'is_active', 'expires_at', 'last_used_at',
                 'device_id', 'agent_version',
+                // The Wake button is gated on canBeWoken(), which reads this
+                // column. A column left out of the select is simply null on the
+                // hydrated model, so omitting it made the button vanish for
+                // every device that had a perfectly good address recorded.
+                'mac_address',
             ])
             ->with([
                 'telemetry' => fn ($query) => $query->select(array_map(
@@ -455,6 +483,21 @@ class AgentFleetController extends Controller
         $rowsByDevice = $paginatedDevices->getCollection()
             ->mapWithKeys(fn (AgentApiToken $device) => [$device->id => $this->detailRows($device)]);
 
+        // Printers, loaded only for the devices on the current page.
+        //
+        // The printer list is per-device and per-page, not per-fleet, so it is
+        // fetched after the paginator is built rather than joined in the
+        // eager-load above. Keyed by fingerprint id so the view can look it up
+        // without knowing the fingerprint's primary key.
+        $printersByFingerprint = AgentPrinter::query()
+            ->whereIn('agent_fingerprint_id', $paginatedDevices->getCollection()
+                ->pluck('fingerprint')
+                ->filter()
+                ->pluck('id')
+                ->all())
+            ->get()
+            ->groupBy('agent_fingerprint_id');
+
         return view('agent.fleet', [
             'devices' => $devices,
             'activeDevices' => $activeDevices,
@@ -463,6 +506,7 @@ class AgentFleetController extends Controller
             // badge have to be able to look up a device on any page.
             'paginatedDevices' => $paginatedDevices,
             'rowsByDevice' => $rowsByDevice,
+            'printersByFingerprint' => $printersByFingerprint,
             'pageSizes' => self::PAGE_SIZES,
             'perPage' => $perPage,
             'revokedDevices' => $revokedDevices,
@@ -750,7 +794,7 @@ class AgentFleetController extends Controller
      */
     public function fingerprint(Request $request, AgentApiToken $token)
     {
-        $token->load('fingerprint.software', 'telemetry.asset');
+        $token->load('fingerprint.software', 'fingerprint.printers', 'telemetry.asset');
 
         $fingerprint = $token->fingerprint;
 
@@ -1108,6 +1152,179 @@ class AgentFleetController extends Controller
             'A machine that is currently offline will do this the next time it comes back online.',
             $token->name
         ), commandId: $command->id);
+    }
+
+    /**
+     * Wake a sleeping machine over the network (Wake on LAN).
+     *
+     * This is the one fleet action that does NOT go through the agent, and it
+     * cannot: a machine that is asleep has no agent running, so the agent is
+     * precisely the thing that is not there to do the waking. The server sends
+     * the magic packet itself, straight onto the LAN.
+     *
+     * The device's MAC is the target. It has to be known before a wake can be
+     * attempted, and the agent is the only party that can report it - so a
+     * device that has never checked in cannot be woken, and says so plainly
+     * rather than pretending to have tried.
+     */
+    public function wake(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
+    {
+        if (! $token->isUsable()) {
+            return $this->actionResponse($request, sprintf(
+                "'%s' is revoked or its token has expired. A magic packet does not need a token, "
+                .'but a revoked device is one that should be left alone.',
+                $token->name
+            ), false);
+        }
+
+        $mac = $token->wakeMacAddress();
+
+        if ($mac === null) {
+            return $this->actionResponse($request, sprintf(
+                "'%s' has never reported its MAC address, so there is nothing to aim a wake packet at. "
+                .'Wake on LAN needs the network address of the adapter, and only the agent can report it. '
+                .'Let the machine check in once, then try again.',
+                $token->name
+            ), false);
+        }
+
+        // A subnet broadcast reaches the machine without needing the global
+        // broadcast to be allowed through the network, which most enterprise
+        // switches filter. It can only be derived when the device's own IP is
+        // known; otherwise the global broadcast is the only option.
+        $ip = $token->telemetry?->ip_address;
+        $broadcast = WakeOnLanService::subnetBroadcast($ip) ?? '255.255.255.255';
+
+        $sent = $this->wakeOnLan->send($mac, $broadcast);
+
+        ActivityLog::create([
+            'actor_id' => $request->user()?->id,
+            'action' => 'WAKE',
+            'entity_type' => 'agent_tokens',
+            'entity_id' => $token->id,
+            'entity_identifier' => $token->name,
+            'source' => 'Web UI',
+            'old_value' => null,
+            'new_value' => $mac,
+            'metadata' => ['broadcast' => $broadcast, 'sent' => $sent],
+        ]);
+
+        if (! $sent) {
+            return $this->actionResponse($request, sprintf(
+                "The wake packet for '%s' could not be sent from this server. "
+                .'Check that the app container is allowed to broadcast on the network.',
+                $token->name
+            ), false);
+        }
+
+        return $this->actionResponse($request, sprintf(
+            "Wake packet sent to '%s' (%s). The machine powers on if Wake on LAN is enabled in its BIOS and NIC settings.",
+            $token->name,
+            $mac
+        ));
+    }
+
+    /**
+     * Restart, shut down or log the current user out of a device.
+     *
+     * The agent has to do this: the server has no way to reach into a running
+     * Windows session, and a power action is not something a browser can do on
+     * its own. So the command is queued and the resident daemon carries it out.
+     *
+     * A delay is offered because "restart this laptop" is almost always a
+     * request to restart it *soon*, and a machine that is mid-save needs a
+     * moment. The agent acks the command before the machine goes down, so the
+     * fleet page records the action as accepted rather than as a device that
+     * stopped answering.
+     */
+    public function power(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
+    {
+        if (! $token->isUsable()) {
+            return $this->actionResponse($request, sprintf(
+                "'%s' is revoked or its token has expired, so the agent can no longer be reached and a power action cannot be delivered.",
+                $token->name
+            ), false);
+        }
+
+        $validated = $request->validate([
+            'action' => ['required', 'string', Rule::in(self::POWER_ACTIONS)],
+            'delay_seconds' => ['nullable', 'integer', 'min:0', 'max:3600'],
+        ]);
+
+        $action = $validated['action'];
+        $delay = (int) ($validated['delay_seconds'] ?? 0);
+
+        $command = $this->enqueue($token->id, 'power', [
+            'action' => $action,
+            'delay_seconds' => $delay,
+            'requested_by' => $request->user()?->name,
+        ]);
+
+        ActivityLog::create([
+            'actor_id' => $request->user()?->id,
+            'action' => 'POWER',
+            'entity_type' => 'agent_tokens',
+            'entity_id' => $token->id,
+            'entity_identifier' => $token->name,
+            'source' => 'Web UI',
+            'old_value' => null,
+            'new_value' => $action,
+            'metadata' => ['delay_seconds' => $delay],
+        ]);
+
+        $verb = match ($action) {
+            'restart' => 'restart',
+            'shutdown' => 'shut down',
+            'logoff' => 'log out',
+        };
+
+        return $this->actionResponse($request, sprintf(
+            "%s queued for '%s'%s. The agent picks it up within a few seconds.",
+            ucfirst($verb),
+            $token->name,
+            $delay > 0 ? sprintf(' in %d second(s)', $delay) : ' immediately'
+        ), commandId: $command->id);
+    }
+
+    /**
+     * A ready-to-use Remote Desktop connection file for a device.
+     *
+     * The browser cannot open an RDP session on its own, but it can hand the
+     * operator a file that Windows Remote Desktop opens with one click, with
+     * the address already filled in. That is the difference between an
+     * operator copying an IP out of a table by hand and actually reaching the
+     * machine.
+     */
+    public function remoteDesktop(AgentApiToken $token): Response
+    {
+        $ip = $token->telemetry?->ip_address;
+
+        if (blank($ip)) {
+            return response('This device has never reported an IP address, so there is nothing to connect to.', 404);
+        }
+
+        // The .rdp format is a plain INI file. Only the fields an operator
+        // would want to see in the connection bar are written; anything else is
+        // left to the client's own defaults.
+        $rdp = implode("\r\n", [
+            'screen mode id:i:2',
+            'desktopwidth:i:1280',
+            'desktopheight:i:800',
+            'session bpp:i:32',
+            'prompt for credentials:i:0',
+            'administrative session:i:0',
+            'gatewayhostname:',
+            'full address:s:'.$ip,
+            'audiomode:i:0',
+            'username:s:',
+        ]);
+
+        $filename = preg_replace('/[^A-Za-z0-9._-]/', '-', $token->name ?: $ip).'.rdp';
+
+        return response($rdp, 200, [
+            'Content-Type' => 'application/x-rdp',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
     }
 
     /**

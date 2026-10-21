@@ -155,6 +155,19 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
 
+        // Fleet actions on a single device.
+        //
+        // Wake is the odd one out: it is answered by the server itself, not by
+        // the agent, because a sleeping machine has no agent to ask. It is
+        // still a POST - it changes the state of a device, and a link that can
+        // be prefetched or crawled should not be able to power a laptop on.
+        Route::post('/agent/{token}/wake', [AgentFleetController::class, 'wake'])->name('agent.wake');
+        Route::post('/agent/{token}/power', [AgentFleetController::class, 'power'])->name('agent.power');
+
+        // A .rdp file the browser hands to the operator. It only reads, so it
+        // is a GET - the browser downloads it and Windows opens it.
+        Route::get('/agent/{token}/rdp', [AgentFleetController::class, 'remoteDesktop'])->name('agent.rdp');
+
         // Polled by the progress modal while an action runs. Declared before the
         // token-scoped routes for the same reason as the others: "commands" must
         // never be read as a token id.

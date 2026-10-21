@@ -59,10 +59,46 @@ class AuditApiController extends Controller
         $telemetry->fill($this->telemetryDelta($request, $payload, $telemetry));
         $telemetry->save();
 
+        // The device's MAC, kept on the token rather than only in the telemetry
+        // row.
+        //
+        // Wake on LAN addresses the NIC, and a NIC is asleep exactly when the
+        // telemetry row is stale - so the reading that makes a machine
+        // wakeable has to outlive the heartbeat that carried it. The agent
+        // already sends its MAC on every heartbeat (the collector reads it for
+        // the audit), but the field had no validation rule, so Laravel dropped
+        // it from the payload and it never reached the database at all.
+        $this->rememberMacAddress($request, $payload);
+
         return response()->json([
             'ok' => true,
             'reported_at' => $telemetry->reported_at?->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Store the MAC the agent reported against the device's token.
+     *
+     * Only written when it is absent or different, so the common case - the
+     * same laptop reporting the same address every minute - does not turn into
+     * a database write on every single heartbeat.
+     */
+    private function rememberMacAddress(Request $request, array $payload): void
+    {
+        $reported = $payload['mac_address'] ?? null;
+
+        if (! is_string($reported) || trim($reported) === '') {
+            return;
+        }
+
+        $token = AgentApiToken::find($request->attributes->get('agent_token_id'));
+
+        if (! $token || $token->mac_address === $reported) {
+            return;
+        }
+
+        $token->mac_address = $reported;
+        $token->save();
     }
 
     /**
@@ -143,6 +179,10 @@ class AuditApiController extends Controller
             // only ever sent rule-listed fields — stayed green.
             'os' => 'nullable|string|max:255',
             'ip_address' => 'nullable|string|max:255',
+            // The device's own MAC. Read by the collector on every heartbeat,
+            // and the only thing that makes a sleeping laptop wakeable over
+            // the network - see rememberMacAddress().
+            'mac_address' => 'nullable|string|max:255',
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
             'agent_mode' => 'nullable|string|in:tray,service,unknown',

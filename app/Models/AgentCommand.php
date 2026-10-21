@@ -143,6 +143,7 @@ class AgentCommand extends Model
             'scan' => ['Queued', 'Collecting inventory', 'Reporting results', 'Done'],
             'elevate' => ['Queued', 'Requesting administrator', 'Approve the Windows prompt', 'Done'],
             'script' => ['Queued', 'Preparing', 'Running', 'Done'],
+            'power' => ['Queued', 'Acknowledged by the agent', 'Done'],
             'uninstall' => ['Queued', 'Removing the agent', 'Done'],
             default => ['Queued', 'Working', 'Done'],
         };
