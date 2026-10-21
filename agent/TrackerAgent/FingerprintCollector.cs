@@ -1665,13 +1665,23 @@ Write-Output ('PENDING_SECURITY=' + $security)
     private const int MaxSoftwareEntries = 1500;
 
     /// <summary>
-    /// camelCase to match the API contract. Must stay in step with the options
+    /// snake_case to match the API contract. Must stay in step with the options
     /// Api.Fingerprint deserialises and re-serialises with, or the entries come
     /// back with null names and the server rejects the report.
+    ///
+    /// The server validates these lists under their snake_case keys
+    /// (software.*.installed_at, printers.*.driver_name) and, because
+    /// $request->validate() returns only the keys named in the rules, a
+    /// camelCase spelling here would be dropped rather than rejected - the
+    /// report succeeds and the fields simply arrive blank.
+    ///
+    /// Internal rather than private so the offline harness can assert the exact
+    /// key names: this object is the wire contract, and a naming policy that
+    /// drifts is silent - the report still succeeds, just with blank fields.
     /// </summary>
-    private static readonly JsonSerializerOptions SoftwareJson = new()
+    internal static readonly JsonSerializerOptions InventoryJson = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
     /// <summary>
@@ -1690,9 +1700,9 @@ Write-Output ('PENDING_SECURITY=' + $security)
         if (programs.Count == 0) return;
 
         data["software_count"] = programs.Count.ToString(CultureInfo.InvariantCulture);
-        // camelCase to match the API contract: the server validates
-        // software.*.name, and System.Text.Json would otherwise emit "Name".
-        data["software"] = JsonSerializer.Serialize(programs, SoftwareJson);
+        // Explicitly named, because System.Text.Json would otherwise emit
+        // "Name" and the server validates software.*.name.
+        data["software"] = JsonSerializer.Serialize(programs, InventoryJson);
     }
 
     /// <summary>One printer installed on the machine, as the spooler reports it.</summary>
@@ -1727,7 +1737,7 @@ Write-Output ('PENDING_SECURITY=' + $security)
         if (printers.Count == 0) return;
 
         data["printer_count"] = printers.Count.ToString(CultureInfo.InvariantCulture);
-        data["printers"] = JsonSerializer.Serialize(printers, SoftwareJson);
+        data["printers"] = JsonSerializer.Serialize(printers, InventoryJson);
     }
 
     /// <summary>

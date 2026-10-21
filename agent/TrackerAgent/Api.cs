@@ -28,6 +28,31 @@ public static class Api
         PropertyNameCaseInsensitive = true,
     };
 
+    /// <summary>
+    /// snake_case, for the two nested lists inside the fingerprint payload.
+    /// </summary>
+    /// <remarks>
+    /// Every other key the fingerprint sends is snake_case - the collector sets
+    /// them by hand (device_id, serial_number, antivirus_product) - and the
+    /// server validates them that way. Only these two lists are serialised from
+    /// records, so without this they went out camelCase and the multi-word keys
+    /// silently disappeared: $request->validate() returns only the keys named in
+    /// the rules, so "driverName" never matched the "driver_name" rule and was
+    /// dropped, while single-word keys like "name" and "status" survived because
+    /// they are spelled the same either way. Every printer arrived with its
+    /// driver, port and offline flag blank, and the software list lost
+    /// installed_at - a field-shaped hole that no error surfaced.
+    ///
+    /// The lists are re-serialised to JsonElement rather than left as records so
+    /// that the surrounding camelCase body write leaves them alone: a JsonElement
+    /// is emitted verbatim.
+    /// </summary>
+    private static readonly JsonSerializerOptions SnakeJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
     public static JsonElement? Post(string url, string token, Dictionary<string, string> payload)
     {
         var json = JsonSerializer.Serialize(payload);
@@ -131,8 +156,10 @@ public static class Api
 
             if (payload.TryGetValue("software", out var rawSoftware) && !string.IsNullOrWhiteSpace(rawSoftware))
             {
-                body["software"] = JsonSerializer.Deserialize<List<SoftwareEntry>>(rawSoftware, JsonOptions)
+                var software = JsonSerializer.Deserialize<List<SoftwareEntry>>(rawSoftware, JsonOptions)
                     ?? new List<SoftwareEntry>();
+
+                body["software"] = JsonSerializer.SerializeToElement(software, SnakeJson);
             }
             else
             {
@@ -146,8 +173,10 @@ public static class Api
             // the machine would lose its whole inventory over one field.
             if (payload.TryGetValue("printers", out var rawPrinters) && !string.IsNullOrWhiteSpace(rawPrinters))
             {
-                body["printers"] = JsonSerializer.Deserialize<List<PrinterEntry>>(rawPrinters, JsonOptions)
+                var printers = JsonSerializer.Deserialize<List<PrinterEntry>>(rawPrinters, JsonOptions)
                     ?? new List<PrinterEntry>();
+
+                body["printers"] = JsonSerializer.SerializeToElement(printers, SnakeJson);
             }
             else
             {

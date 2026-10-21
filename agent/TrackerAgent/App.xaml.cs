@@ -226,8 +226,12 @@ public partial class App : System.Windows.Application
         RegisterTrayAutostart();
 
         // Tray-only app: closing the Status window (or never opening one) must not
-        // end the process. Shutdown happens from the Exit menu and from the
-        // uninstall command, both of which call Shutdown() on purpose.
+        // end the process. There is deliberately no Exit entry - an operator who
+        // stops the agent from the tray leaves a device that is still on the
+        // register but reports nothing, and that is a silent hole in the fleet.
+        // Shutdown() is therefore only reached on purpose: the two guards above,
+        // and StopTray(), which the uninstall path and the "a SYSTEM daemon
+        // appeared" stand-down both call.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         // The MITO mark, not SystemIcons.Information: a deployed agent should be
@@ -245,17 +249,12 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = BuildContextMenu(config)
         };
 
-        _trayIcon.ContextMenuStrip.Items.Add("Status", null, (_, _) =>
-            Dispatcher.Invoke(() =>
-            {
-                var window = new StatusWindow(
-                    config.ServerUrl, config.InstalledAt);
-                window.Show();
-                window.Activate();
-            }));
-        _trayIcon.ContextMenuStrip.Items.Add("Scan Now", null, (_, _) => RunScan(config));
-        _trayIcon.ContextMenuStrip.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
-
+        // The menu is built once, by BuildContextMenu, and assigned above. It
+        // used to be built there and then filled again here, so every entry
+        // appeared twice - Status, Scan Now and Check for Updates below a
+        // separator, then the same three once more with no separator between
+        // them. Appending to ContextMenuStrip.Items adds to that menu; it does
+        // not replace it.
         _ = Task.Run(() => CommandLoop(config));
     }
 

@@ -13,8 +13,12 @@
              5-minute bound, a one-at-a-time guard and a single-close tray stop.
              1.7.0: Wake on LAN (MAC reported to the server), remote power
              actions (restart / shutdown / logoff via shutdown.exe) and printer
-             inventory in the fingerprint report. -->
-        <Version>1.7.0</Version>
+             inventory in the fingerprint report.
+             1.7.1: the two nested inventory lists now go out snake_case, so the
+             printer driver/port/network/offline fields reach the server instead
+             of being dropped by its validation; and the tray menu is built once,
+             not twice. -->
+        <Version>1.7.1</Version>
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

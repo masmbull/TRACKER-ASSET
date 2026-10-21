@@ -25,6 +25,7 @@ internal static class Program
         TrayAutostartCases();
         ScanResultCases();
         MemoryLayoutCases();
+        InventoryPayloadCases();
         FullScanCases();
         ServiceTaskCases();
 
@@ -182,6 +183,66 @@ internal static class Program
             "different module capacities stay distinguishable",
             HardwareCollector.FormatMemoryLayout([singleModule, eightGbModule]) == "16GB + 8GB @ 3200 MHz");
     }
+
+    /// <summary>
+    /// The key names of the two nested lists in the fingerprint payload.
+    /// </summary>
+    /// <remarks>
+    /// The server validates these under snake_case keys and returns only the
+    /// fields named in its rules, so a camelCase spelling is not an error - it
+    /// is a silent blank. Every printer arrived with driver, port and offline
+    /// flag empty this way, while "name" and "status" looked fine precisely
+    /// because they are single-word and spelled the same in both conventions.
+    ///
+    /// Asserted against the JSON rather than the options object, because the
+    /// failure mode is exactly one that no exception ever surfaces.
+    /// </remarks>
+    private static void InventoryPayloadCases()
+    {
+        Console.WriteLine("[*] inventory payload key names");
+
+        var printers = new List<FingerprintCollector.PrinterReport>
+        {
+            new("HP LaserJet P1102", "HP Universal Printing PCL 6", "10.20.30.50",
+                "Finance", IsNetwork: true, IsDefault: true, IsOffline: false, StatusCode: 3, Status: "Idle"),
+        };
+
+        using (var doc = JsonDocument.Parse(
+            JsonSerializer.Serialize(printers, FingerprintCollector.InventoryJson)))
+        {
+            var first = doc.RootElement[0];
+
+            Check("printer driver is sent as driver_name", first.TryGetProperty("driver_name", out _));
+            Check("printer port is sent as port_name", first.TryGetProperty("port_name", out _));
+            Check("printer network flag is sent as is_network", first.TryGetProperty("is_network", out _));
+            Check("printer default flag is sent as is_default", first.TryGetProperty("is_default", out _));
+            Check("printer offline flag is sent as is_offline", first.TryGetProperty("is_offline", out _));
+            Check("printer status code is sent as status_code", first.TryGetProperty("status_code", out _));
+            Check("printer name survives the round trip",
+                first.GetProperty("name").GetString() == "HP LaserJet P1102");
+            Check("a true flag is a real JSON boolean, not the word true",
+                first.GetProperty("is_network").ValueKind == JsonValueKind.True);
+        }
+
+        var programs = new List<SoftwareEntryForTest>
+        {
+            new("ACCURATE 4 Standard", "4.0.1", "CPNSi", "2024-01-15"),
+        };
+
+        using (var doc = JsonDocument.Parse(
+            JsonSerializer.Serialize(programs, FingerprintCollector.InventoryJson)))
+        {
+            var first = doc.RootElement[0];
+
+            Check("software install date is sent as installed_at",
+                first.TryGetProperty("installed_at", out _));
+            Check("software publisher is sent as publisher",
+                first.TryGetProperty("publisher", out _));
+        }
+    }
+
+    /// <summary>Mirrors Api.SoftwareEntry, which is private to that class.</summary>
+    private sealed record SoftwareEntryForTest(string? Name, string? Version, string? Publisher, string? InstalledAt);
 
     private static void FullScanCases()
     {
