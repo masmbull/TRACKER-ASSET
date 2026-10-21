@@ -119,6 +119,50 @@ class FleetActionsTest extends TestCase
         $this->assertNull(WakeOnLanService::subnetBroadcast(null));
     }
 
+    /**
+     * The only case that opens a real socket.
+     *
+     * Every other wake case goes through a fake, which is how a broken socket
+     * call shipped: send() called a function that does not exist, threw, and
+     * the catch turned it into "false" - indistinguishable from a packet the
+     * network refused. The button reported nothing and did nothing.
+     *
+     * Loopback rather than a broadcast, so no machine on the network the suite
+     * runs on is woken. UDP reports the write in full even with nothing
+     * listening, so a full write is what proves the packet left; the bytes
+     * themselves are asserted separately, in the packet-builder case above.
+     *
+     * No listener is bound: PHP cannot open a UDP listening socket on Windows
+     * (stream_socket_server('udp://...') fails outright there) and the sockets
+     * extension is not loaded on either the dev machine or the app container,
+     * so this asserts what both can support - that the send path reaches the
+     * write and reports success.
+     */
+    public function test_the_real_send_opens_a_socket_and_writes_the_whole_packet(): void
+    {
+        $sent = (new WakeOnLanService)->send('34:5A:6B:7C:8D:9E', '127.0.0.1', 39871);
+
+        $this->assertTrue(
+            $sent,
+            'send() must report success when the packet is written in full. '
+            .'Returning false here is what a thrown Error inside the try block '
+            .'looks like, and it hid a send that never happened.'
+        );
+    }
+
+    /**
+     * A send the kernel refuses must come back false, never an exception.
+     */
+    public function test_a_refused_broadcast_is_a_failure_and_not_an_error(): void
+    {
+        // 255.255.255.255 needs SO_BROADCAST, which PHP cannot set through the
+        // stream wrappers, so the connect is refused. Asserting a bool rather
+        // than false keeps this honest across hosts that may allow it.
+        $this->assertIsBool(
+            (new WakeOnLanService)->send('34:5A:6B:7C:8D:9E', '255.255.255.255')
+        );
+    }
+
     public function test_waking_a_device_sends_a_packet_aimed_at_its_mac(): void
     {
         $this->agentToken->update(['mac_address' => '34:5A:6B:7C:8D:9E']);

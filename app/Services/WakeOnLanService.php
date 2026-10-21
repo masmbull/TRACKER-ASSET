@@ -64,11 +64,21 @@ class WakeOnLanService
         }
 
         try {
-            // The broadcast address is not reachable as a host, so the socket
-            // has to be told to allow it. Without this the send fails on
-            // Windows and on any host with more than one interface.
-            @stream_set_option($socket, STREAM_OPTION_SOCKET, SO_BROADCAST, 1);
-
+            // SO_BROADCAST is deliberately absent here, and the subnet
+            // broadcast is preferred for exactly that reason.
+            //
+            // PHP offers no way to set SO_BROADCAST on a stream: the function
+            // this used to call, stream_set_option(), does not exist, and the
+            // one that does - stream_socket_set_option() - takes no SOL_SOCKET
+            // options. Calling it threw an Error that the catch below turned
+            // into "false", so send() returned false every time and no packet
+            // was ever written: the Wake button was a silent no-op.
+            //
+            // Without SO_BROADCAST the kernel refuses a global broadcast at
+            // connect time with EACCES (errno 13), but it accepts a directed
+            // broadcast to a device's own /24 - which is why the controller
+            // derives one from the device IP. Falling back to 255.255.255.255
+            // therefore still fails, and says so, rather than pretending.
             $written = @fwrite($socket, $packet);
 
             return $written === strlen($packet);
