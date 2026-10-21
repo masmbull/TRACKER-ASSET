@@ -36,7 +36,7 @@ class AgentCommandApiController extends Controller
      */
     public const IN_PROGRESS_GRACE_MINUTES = AgentCommand::STALL_GRACE_MINUTES;
 
-    private const MAX_INBOX_WAIT_SECONDS = 5;
+    private const MAX_INBOX_WAIT_SECONDS = 55;
 
     public function inbox(Request $request)
     {
@@ -52,6 +52,11 @@ class AgentCommandApiController extends Controller
         // not been counted yet would otherwise park a worker per laptop on a pool
         // that used to hold five, and the site would go down instead of quiet.
         // Without ?wait= this returns exactly as before.
+        //
+        // 55 s matches what the agent asks for (AgentRunner.LongPollSeconds). The
+        // cap used to sit at 5 s while the client requested 55, so every parked
+        // request returned after five seconds and the long-poll degraded into a
+        // five-second poll: twelve requests a minute per laptop instead of one.
         $wait = min((int) $request->integer('wait', 0), self::MAX_INBOX_WAIT_SECONDS);
 
         if ($commands->isEmpty() && $wait > 0) {

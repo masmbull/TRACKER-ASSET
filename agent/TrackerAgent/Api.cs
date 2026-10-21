@@ -8,9 +8,9 @@ namespace TrackerAgent;
 
 public static class Api
 {
-    // Has to outlive the server's long-poll cap (60s), or every parked request is
+    // Has to outlive the server's long-poll cap (55s), or every parked request is
     // cancelled client-side and the long-poll degenerates into a slow poll.
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(90) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(65) };
 
     /// <summary>
     /// camelCase everywhere.
@@ -249,7 +249,7 @@ private sealed record SoftwareEntry(string? Name, string? Version, string? Publi
             using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
             Authenticate(req, token);
 
-            // Must outlast the server-side wait (clamped to 60s there) or every
+            // Must outlast the server-side wait (clamped to 55s there) or every
             // parked long-poll is cancelled here instead of answered, turning
             // the long-poll into a slow plain poll.
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(65));

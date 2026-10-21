@@ -45,10 +45,10 @@ public static class AgentRunner
     /// arrives immediately, because the server returns the moment a command is
     /// queued rather than at the end of an interval.
     ///
-    /// 55 rather than 60: the server clamps its own wait to 60 s, so a client
-    /// asking for exactly that would race its own timeout, and the failure mode
-    /// of losing that race is an exception every minute on every laptop. Staying
-    /// under the cap means the server always returns first, cleanly.
+/// 55 rather than 60: the server clamps its own wait to 55 s, so a client
+        /// asking for exactly that would race its own timeout, and the failure mode
+        /// of losing that race is an exception every minute on every laptop. Staying
+        /// under the cap means the server always returns first, cleanly.
     ///
     /// The cost is one php-fpm worker per parked agent, which is why pm.max_children
     /// was raised from its default of 5 in the Dockerfile. At the default, six

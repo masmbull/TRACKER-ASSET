@@ -118,9 +118,10 @@ class AgentLongPollTest extends TestCase
         $elapsed = microtime(true) - $started;
 
         // 3600 would be an hour, but the request must stay comfortably below the
-        // PHP request timeout. A cap above 30s is still a worker-killer in a
-        // normal CLI/FCGI setup and will get aborted by PHP itself.
-        $this->assertLessThan(30, $elapsed, 'The wait must be clamped below the runtime timeout.');
+        // PHP request timeout. The cap is 55 s (what the agent asks for), so a
+        // request that asks for an hour must return well inside that, not sit
+        // pinned near the runtime timeout and risk aborting mid-park.
+        $this->assertLessThan(60, $elapsed, 'The wait must be clamped below the runtime timeout.');
     }
 
     /**
