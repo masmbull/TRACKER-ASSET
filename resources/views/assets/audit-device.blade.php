@@ -4,26 +4,26 @@
 
 @section('content')
 <h1 class="text-2xl font-bold mb-2">Device Scan — {{ $asset->asset_id }}</h1>
-<p class="text-sm text-gray-500 mb-6">
+<p class="text-sm text-gray-500 mb-6 dark:text-gray-400">
     Replacement for the legacy EXE <code>Scan</code> button. <strong>Open this page on the device
     being audited</strong>, click Scan once, then submit. The browser reports only what it can
     truthfully read — serial / hostname / MAC can be typed from the device label below.
 </p>
 
-<div class="bg-white p-6 rounded-xl shadow mb-6">
+<div class="bg-white p-6 rounded-xl shadow mb-6 dark:bg-[#1d2939]">
     <div class="grid grid-cols-2 gap-2 text-sm mb-4">
-        <div><span class="text-gray-500">Registered:</span> {{ $asset->brand }} {{ $asset->model }} · {{ $asset->serial_number }} · {{ $asset->hostname }}</div>
-        <div><span class="text-gray-500">Registered OS / RAM / IP:</span> {{ $asset->os_version }} · {{ $asset->ram }} · {{ $asset->static_ip }}</div>
+        <div><span class="text-gray-500 dark:text-gray-400">Registered:</span> {{ $asset->brand }} {{ $asset->model }} · {{ $asset->serial_number }} · {{ $asset->hostname }}</div>
+        <div><span class="text-gray-500 dark:text-gray-400">Registered OS / RAM / IP:</span> {{ $asset->os_version }} · {{ $asset->ram }} · {{ $asset->static_ip }}</div>
     </div>
 
     <button type="button" onclick="scanDevice()" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-8 py-3 text-lg font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">
         Scan Device (1 klik)
     </button>
-    <span id="scan-status" class="ml-3 text-sm text-green-600 font-semibold"></span>
+    <span id="scan-status" class="ml-3 text-sm text-green-600 font-semibold dark:text-green-400"></span>
 
     <table class="min-w-full text-sm mt-4" id="scan-preview" style="display:none">
         <thead>
-            <tr class="border-b bg-gray-50">
+            <tr class="border-b bg-gray-50 dark:bg-gray-900">
                 <th class="text-left py-2 px-2">Field</th>
                 <th class="text-left py-2 px-2">Collected</th>
                 <th class="text-left py-2 px-2">Registered</th>
@@ -33,7 +33,7 @@
     </table>
 </div>
 
-<form method="POST" action="{{ route('assets.audit.device.submit', $asset) }}" class="bg-white p-6 rounded-xl shadow space-y-4">
+<form method="POST" action="{{ route('assets.audit.device.submit', $asset) }}" class="bg-white p-6 rounded-xl shadow space-y-4 dark:bg-[#1d2939]">
     @csrf
     <input type="hidden" name="browser_os" id="browser_os">
     <input type="hidden" name="browser_ram" id="browser_ram">
@@ -41,7 +41,7 @@
     <input type="hidden" name="browser_storage" id="browser_storage">
     <input type="hidden" name="browser_gpu" id="browser_gpu">
 
-    <div class="bg-gray-50 border border-gray-200 rounded p-3 text-sm">
+    <div class="bg-gray-50 border border-gray-200 rounded p-3 text-sm dark:bg-gray-900 dark:border-gray-700">
         Browser sandbox <strong>cannot</strong> read serial / hostname / MAC. Type them from the
         device label if you verify them physically — leave empty to skip (they will not be compared).
     </div>
@@ -55,30 +55,30 @@
              pasted from a label can legitimately be rejected. --}}
         <div>
             <label class="block text-sm font-medium">Serial Number (from label)</label>
-            <input type="text" name="manual_serial" value="{{ old('manual_serial') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_serial') border-red-400 @enderror" placeholder="{{ $asset->serial_number }}">
-            @error('manual_serial') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            <input type="text" name="manual_serial" value="{{ old('manual_serial') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_serial') border-red-400 @enderror dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-400" placeholder="{{ $asset->serial_number }}">
+            @error('manual_serial') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">Hostname</label>
-            <input type="text" name="manual_hostname" value="{{ old('manual_hostname') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_hostname') border-red-400 @enderror" placeholder="{{ $asset->hostname }}">
-            @error('manual_hostname') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            <input type="text" name="manual_hostname" value="{{ old('manual_hostname') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_hostname') border-red-400 @enderror dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-400" placeholder="{{ $asset->hostname }}">
+            @error('manual_hostname') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium">MAC Address</label>
-            <input type="text" name="manual_mac" value="{{ old('manual_mac') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_mac') border-red-400 @enderror" placeholder="{{ $asset->mac_address }}">
-            @error('manual_mac') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            <input type="text" name="manual_mac" value="{{ old('manual_mac') }}" class="w-full border rounded-lg px-3 py-2 @error('manual_mac') border-red-400 @enderror dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-400" placeholder="{{ $asset->mac_address }}">
+            @error('manual_mac') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
         </div>
     </div>
 
     <div>
         <label class="block text-sm font-medium">Notes</label>
-        <textarea name="notes" rows="2" class="w-full border rounded-lg px-3 py-2">{{ old('notes') }}</textarea>
+        <textarea name="notes" rows="2" class="w-full border rounded-lg px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-white">{{ old('notes') }}</textarea>
     </div>
 
     <div class="flex gap-2 pt-2">
         <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-success-500 px-6 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-success-600">Submit Audit</button>
-        <a href="{{ route('assets.audit', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Manual Form</a>
-        <a href="{{ route('assets.show', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50">Cancel</a>
+        <a href="{{ route('assets.audit', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50 dark:border-gray-600 dark:bg-[#1d2939] dark:text-gray-100 dark:hover:bg-gray-800">Manual Form</a>
+        <a href="{{ route('assets.show', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 text-theme-sm font-medium text-gray-700 transition-all duration-200 active:scale-[0.97] hover:bg-gray-50 dark:border-gray-600 dark:bg-[#1d2939] dark:text-gray-100 dark:hover:bg-gray-800">Cancel</a>
     </div>
 </form>
 
@@ -130,10 +130,10 @@
                 const token = (reg || '').split(/[ ,]/)[0];
                 const hit = token && actual.toLowerCase().indexOf(token.toLowerCase()) >= 0;
                 badge = hit
-                    ? '<span class="text-green-600 font-semibold">match</span>'
-                    : '<span class="text-gray-700 font-semibold">differs</span>';
+                    ? '<span class="text-green-600 font-semibold dark:text-green-400">match</span>'
+                    : '<span class="text-gray-700 font-semibold dark:text-gray-100">differs</span>';
             } else if (actual) {
-                badge = '<span class="text-gray-600">collected</span>';
+                badge = '<span class="text-gray-600 dark:text-gray-400">collected</span>';
             }
             return '<tr class="border-b">'
                 + '<td class="py-1 px-2">' + name + '</td>'
