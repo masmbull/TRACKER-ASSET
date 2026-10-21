@@ -503,7 +503,11 @@ class ServiceHealthChecker
         }
 
         return $this->probe(function () {
-            $url = rtrim((string) config('app.url'), '/').'/api/health';
+            // Default to APP_URL, but allow Docker deployments to point at the
+            // nginx container by name (SERVICES_PROBE_HEALTH_ENDPOINT_URL=http://nginx)
+            // because php-fpm does not listen on HTTP ports inside its container.
+            $base = config('services.probe_health_endpoint_url', config('app.url'));
+            $url = rtrim((string) $base, '/').'/api/health';
 
             $context = stream_context_create([
                 'http' => ['timeout' => self::PROBE_TIMEOUT_SECONDS, 'ignore_errors' => true],

@@ -40,6 +40,7 @@ services:
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
+      - SERVICES_PROBE_HEALTH_ENDPOINT_URL=http://nginx
       # The entrypoint migrates and seeds on boot, both idempotent. This is also
       # how a deploy applies migrations: the new app container runs them once as
       # it starts, before php-fpm answers anything. Only this service sets it -

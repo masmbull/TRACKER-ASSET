@@ -64,8 +64,16 @@ return [
     | the developer happens to have a dev server running. Disabled there so the
     | suite measures this code rather than the workstation.
     |
+    | In a Docker deployment where the app runs as php-fpm without its own HTTP
+    | front-end, APP_URL resolves to a port nothing is listening on inside the
+    | container. Override SERVICES_PROBE_HEALTH_ENDPOINT_URL to point at the
+    | nginx container (or skip the check outright with
+    | SERVICES_PROBE_HEALTH_ENDPOINT=false) rather than silently reporting a
+    | healthy public site as down.
+    |
     */
     'probe_health_endpoint' => env('SERVICES_PROBE_HEALTH_ENDPOINT', true),
+    'probe_health_endpoint_url' => env('SERVICES_PROBE_HEALTH_ENDPOINT_URL'),
 
     'internal' => [
         'script_token' => env('INTERNAL_SCRIPT_TOKEN'),

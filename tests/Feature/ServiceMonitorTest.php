@@ -125,6 +125,18 @@ class ServiceMonitorTest extends TestCase
     }
 
     /**
+     * The health-endpoint probe falls back to APP_URL unless
+     * SERVICES_PROBE_HEALTH_ENDPOINT_URL is set. This lets Docker deployments
+     * where php-fpm cannot reach itself on HTTP point at nginx instead.
+     */
+    public function test_probe_health_endpoint_url_can_be_overridden(): void
+    {
+        config(['services.probe_health_endpoint_url' => 'http://nginx']);
+
+        $this->assertSame('http://nginx', config('services.probe_health_endpoint_url'));
+    }
+
+    /**
      * The hint must not send Windows developers after a fix that cannot work.
      *
      * PHP's built-in server forks workers through a POSIX-only call; on Windows it

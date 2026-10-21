@@ -29,6 +29,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SERVICES_PROBE_HEALTH_ENDPOINT_URL=http://nginx
       # The entrypoint waits for postgres, migrates, and seeds (idempotent), so
       # a fresh `docker compose up -d --build` comes up with the admin account
       # already present instead of an empty database nobody can log into.
@@ -63,6 +64,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SERVICES_PROBE_HEALTH_ENDPOINT_URL=http://nginx
     command: php artisan schedule:work
 
   postgres:
