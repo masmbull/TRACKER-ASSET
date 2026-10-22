@@ -102,7 +102,7 @@
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
                     @endphp
-                    <tr class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
+                    <tr class="border-b border-gray-100 bg-white/60 hover:bg-gray-50 dark:border-gray-800 dark:bg-[#1d2939]/50 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
                         <td class="py-3 px-3">
                             <button type="button"
                                     class="text-left"
@@ -256,7 +256,7 @@
                             @endif
                         </td>
                         <td class="py-3 px-3">
-                            <div class="flex flex-wrap items-center justify-end gap-1.5">
+                            <div class="flex flex-wrap items-center justify-end gap-2">
                                 <x-row-action variant="brand" @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</x-row-action>
 
                                 @if($device->isUsable())
