@@ -187,7 +187,11 @@ document.addEventListener('DOMContentLoaded', () => observeReveals());
 // --- Buttons: busy state, no double submit -----------------------------------
 document.addEventListener('submit', (event) => {
     const form = event.target;
-    if (!(form instanceof HTMLFormElement) || form.dataset.noBusy !== undefined) {
+    if (
+        !(form instanceof HTMLFormElement) ||
+        form.dataset.noBusy !== undefined ||
+        form.matches('[data-modal-action]')
+    ) {
         return;
     }
     const submit = form.querySelector('button[type="submit"]');

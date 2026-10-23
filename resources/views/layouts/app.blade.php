@@ -717,6 +717,8 @@
                             // and finish, and a dialog frozen on a failure it no
                             // longer owes is its own lie.
                             setBusy(false);
+                            window.clearInterval(busyTimer);
+                            busyTimer = null;
                             modal.dataset.busy = 'false';
                             modal.removeAttribute('aria-busy');
                             closeButton.classList.remove('hidden');
@@ -788,27 +790,29 @@
                         const percent = Math.round((accounted / total) * 100);
                         const failedNote = failed > 0 ? ' (' + failed + ' failed)' : '';
                         const stalledNote = stalled > 0 ? ' (' + stalled + ' not responding)' : '';
+                        const completedCount = accounted;
 
                         if (accounted === total) {
                             window.clearInterval(pollTimer);
                             pollTimer = null;
                             setBusy(false);
-                            setProgressBar(100, total + ' of ' + total + ' devices settled' + failedNote + stalledNote, false, failed > 0 || stalled > 0);
+                            setProgressBar(100, completedCount + ' of ' + total + ' devices accounted for' + failedNote + stalledNote, false, failed > 0 || stalled > 0);
                             modal.dataset.busy = 'false';
                             modal.removeAttribute('aria-busy');
                             spinner.classList.remove('hidden');
                             closeButton.classList.remove('hidden');
                             setBar(false);
-                            title.textContent = (failed + stalled) > 0 ? 'Update finished with issues' : 'Done';
-                            message.textContent = (settled.length - failed) + ' of ' + total + ' devices updated successfully' + failedNote + stalledNote + '.';
-                            window.showToast?.('Fleet update: ' + (settled.length - failed) + '/' + total + ' updated' + failedNote + stalledNote + '.', (failed + stalled) > 0 ? 'error' : 'success');
+                            title.textContent = (failed + stalled) > 0 ? 'Fleet action finished with issues' : 'Done';
+                            const successful = settled.length - failed;
+                            message.textContent = successful + ' of ' + total + ' devices updated successfully' + failedNote + stalledNote + '. Stalled devices are not confirmed as updated.';
+                            window.showToast?.('Fleet action: ' + successful + '/' + total + ' completed' + failedNote + stalledNote + '.', (failed + stalled) > 0 ? 'error' : 'success');
                             window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: '' } }));
                             return;
                         }
 
                         const furthest = states.find((s) => s && s.status === 'in_progress') || states.find((s) => s && !s.done && !s.failed && !s.stalled);
                         const detail = furthest?.label || (stalled > 0 ? stalled + ' not responding' : 'Waiting for devices…');
-                        setProgressBar(percent, settled.length + ' of ' + total + ' devices · ' + detail, false, false);
+                        setProgressBar(percent, accounted + ' of ' + total + ' devices accounted for · ' + detail, false, stalled > 0);
                         setBusy(true);
                         startElapsedTicker(settled.length + ' of ' + total + ' devices · ' + detail);
                     } catch {

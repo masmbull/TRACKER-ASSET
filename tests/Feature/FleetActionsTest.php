@@ -219,7 +219,7 @@ class FleetActionsTest extends TestCase
 
     public function test_a_power_action_queues_a_command_carrying_its_action_and_delay(): void
     {
-        $this->actingAs($this->admin())
+        $response = $this->actingAs($this->admin())
             ->postJson(route('agent.power', $this->agentToken), [
                 'action' => 'shutdown',
                 'delay_seconds' => 300,
@@ -234,6 +234,15 @@ class FleetActionsTest extends TestCase
         $this->assertSame('pending', $command->status);
         $this->assertSame('shutdown', $command->payload['action']);
         $this->assertSame(300, $command->payload['delay_seconds']);
+        $response->assertJsonPath('command_id', $command->id);
+
+        $this->actingAs($this->admin())
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('done', false)
+            ->assertJsonPath('failed', false)
+            ->assertJsonPath('steps.0.state', 'active');
     }
 
     public function test_logoff_is_offered_the_same_way_as_a_full_power_action(): void
@@ -242,10 +251,15 @@ class FleetActionsTest extends TestCase
             ->postJson(route('agent.power', $this->agentToken), ['action' => 'logoff'])
             ->assertOk();
 
-        $this->assertSame(
-            'logoff',
-            AgentCommand::where('command', 'power')->firstOrFail()->payload['action']
-        );
+        $command = AgentCommand::where('command', 'power')->firstOrFail();
+        $this->assertSame('logoff', $command->payload['action']);
+
+        $inbox = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
+            ->getJson('/api/agent/inbox')
+            ->assertOk();
+
+        $this->assertSame($command->id, $inbox->json('commands.0.id'));
+        $this->assertSame('logoff', $inbox->json('commands.0.payload.action'));
     }
 
     public function test_an_action_the_agent_does_not_understand_is_rejected(): void
@@ -457,6 +471,28 @@ class FleetActionsTest extends TestCase
             '@click="$dispatch(\'open-modal\', \'uninstall-agent-'.$id.'\')"',
             $page,
             'Uninstall no longer opens its confirmation dialog.'
+        );
+    }
+
+    public function test_power_confirmation_modal_cannot_close_while_a_command_is_being_queued(): void
+    {
+        $page = $this->actingAs($this->admin())
+            ->get(route('agent.fleet'))
+            ->getContent();
+
+        $this->assertStringContainsString(
+            'data-close-modal="power-agent-'.$this->agentToken->id.'"',
+            $page,
+            'The power form should only close after the async handler accepts the request.'
+        );
+        $this->assertStringContainsString(
+            'form.dataset.noBusy !== undefined ||',
+            file_get_contents(resource_path('js/app.js')) ?: ''
+        );
+        $this->assertStringContainsString(
+            "form.matches('[data-modal-action]')",
+            file_get_contents(resource_path('js/app.js')) ?: '',
+            'Generic submit handling must not disable async fleet buttons before their handler runs.'
         );
     }
 

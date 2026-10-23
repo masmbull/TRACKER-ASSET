@@ -267,7 +267,7 @@
                                         </form>
                                     @endif
                                     @if($telemetry?->ip_address)
-                                        <x-row-action variant="info" href="rdp://{{ $telemetry->ip_address }}" title="Open Remote Desktop">RDP</x-row-action>
+                                        <x-row-action variant="info" href="{{ route('agent.rdp', $device) }}" title="Download and open Remote Desktop connection file">RDP</x-row-action>
                                         <x-row-action href="{{ route('agent.rdp', $device) }}" title="Download .rdp file">.RDP</x-row-action>
                                     @endif
                                     <x-row-action @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
