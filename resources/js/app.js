@@ -50,6 +50,48 @@ if (installButton) {
     installButton.addEventListener('click', handleInstallPrompt);
 }
 
+// --- Global processing modal -----------------------------------------------
+// Every POST action shows a modal from the moment it is submitted until the
+// server responds (navigation replaces the page, which hides it again). This
+// guarantees the user always sees "something is happening" instead of a dead
+// click, even for forms that were not explicitly wired with data-modal-action.
+const ensureProcessModal = () => {
+    let modal = document.getElementById('global-process-modal');
+    if (modal) {
+        return modal;
+    }
+    modal = document.createElement('div');
+    modal.id = 'global-process-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-live', 'assertive');
+    modal.className = 'fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 backdrop-blur-sm';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl dark:bg-gray-900">
+            <div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400"></div>
+            <p class="text-base font-semibold text-gray-800 dark:text-white">Memproses…</p>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Mohon tunggu, jangan tutup halaman ini.</p>
+        </div>`;
+    document.body.appendChild(modal);
+    return modal;
+};
+
+const showProcessModal = () => {
+    const modal = ensureProcessModal();
+    modal.style.display = 'flex';
+    document.body.classList.add('overflow-hidden');
+};
+
+const hideProcessModal = () => {
+    const modal = document.getElementById('global-process-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    document.body.classList.remove('overflow-hidden');
+};
+
+
 // --- Top progress bar -------------------------------------------------------
 // One slim bar for every kind of waiting: full navigations, async posts and
 // soft polls. Replaces the old full-screen preloader, which blocked the whole
@@ -187,15 +229,7 @@ document.addEventListener('DOMContentLoaded', () => observeReveals());
 // --- Buttons: busy state, no double submit -----------------------------------
 document.addEventListener('submit', (event) => {
     const form = event.target;
-    if (
-        !(form instanceof HTMLFormElement) ||
-        form.dataset.noBusy !== undefined ||
-        form.matches('[data-modal-action]')
-    ) {
-        return;
-    }
-    const submit = form.querySelector('button[type="submit"]');
-    if (!submit || submit.disabled) {
+    if (!(form instanceof HTMLFormElement)) {
         return;
     }
     // GET filter forms stay instant; the bar alone is the feedback.
@@ -203,7 +237,13 @@ document.addEventListener('submit', (event) => {
         markBusy();
         return;
     }
-    markBusy();
+    // Any POST action gets a processing modal from submit until the server
+    // responds (the next page load hides it again).
+    showProcessModal();
+    const submit = form.querySelector('button[type="submit"]');
+    if (!submit || submit.disabled || form.dataset.noBusy !== undefined || form.matches('[data-modal-action]')) {
+        return;
+    }
     submit.disabled = true;
     submit.setAttribute('aria-busy', 'true');
     if (!submit.querySelector('.btn-spinner')) {
@@ -233,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-window.addEventListener('pageshow', () => markIdle());
+window.addEventListener('pageshow', () => { markIdle(); hideProcessModal(); });
 
 // --- Soft live regions: update in place, never full-reload -------------------
 // Commands and services used `setTimeout(location.reload)`, which flashed the

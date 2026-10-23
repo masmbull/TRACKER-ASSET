@@ -188,26 +188,13 @@ public partial class App : System.Windows.Application
 
     private void StartTray(AgentConfig config)
     {
-        // If the SYSTEM daemon owns this machine, stand down.
-        //
-        // The daemon runs as SYSTEM from a scheduled task; this tray runs in a
-        // user session. A per-session mutex cannot see across sessions, and a
-        // Global mutex cannot be created by a standard user (no
-        // SeCreateGlobalPrivilege), so neither can enforce "one agent". The daemon
-        // instead touches a marker file under ProgramData that any user can read;
-        // finding it fresh means the daemon is alive and this tray must not also
-        // poll the one token.
-        if (AgentRunner.IsSystemDaemonAlive())
-        {
-            AgentLog.Write("SYSTEM daemon is active; tray standing down to avoid two agents on one token.");
-            Shutdown();
-            return;
-        }
+        // Tray always shows, even when a SYSTEM daemon is running. The daemon
+        // and the tray may both poll the same token; that is an accepted trade-off
+        // so the operator always has a tray icon available.
 
         try
         {
-            // Same-session guard: prevents two trays in one session. Cross-session
-            // is handled by the marker above.
+            // Same-session guard: prevents two trays in one session.
             _trayMutex = new Mutex(true, @"Local\MITO.TRACKER-ASSET.Tray", out _ownsTrayMutex);
 
             if (!_ownsTrayMutex)
@@ -320,21 +307,6 @@ public partial class App : System.Windows.Application
         // whole application was restarted.
         while (true)
         {
-            // StartTray checks this once, at launch; check it on every poll as
-            // well. A SYSTEM daemon can appear while this tray is running - an
-            // elevation fired off earlier just completed, or the boot task
-            // started on its own - and from that moment two agents poll one
-            // token: the inbox is fetched twice per poll and is_elevated flips
-            // between the tray and the service. Skipped while our own elevation
-            // is still in flight, because that task owns the ack and the
-            // close-down for its command.
-            if (Volatile.Read(ref _elevationInFlight) == 0 && AgentRunner.IsSystemDaemonAlive())
-            {
-                AgentLog.Write("SYSTEM daemon came up while the tray was running; standing down to avoid two agents on one token.");
-                StopTray();
-                return;
-            }
-
             try
             {
                 var commands = Api.GetInbox(config.ServerUrl, config.Token, AgentRunner.LongPollSeconds, out var unauthorized);
