@@ -34,6 +34,7 @@
                      x-transition:leave="transition ease-in duration-150"
                      x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 translate-y-2"
                      @class([
+                         'relative z-[99999] w-full bg-white rounded-2xl shadow-theme-lg dark:bg-gray-900',
                          'relative w-full bg-white rounded-2xl shadow-theme-lg dark:bg-gray-900',
                          'max-w-sm' => $maxWidth === 'sm',
                          'max-w-md' => $maxWidth === 'md',

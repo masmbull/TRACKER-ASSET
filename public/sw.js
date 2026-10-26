@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tracker-asset-v4';
+const CACHE_NAME = 'tracker-asset-v5';
 const APP_SHELL = [
     '/',
     '/login',

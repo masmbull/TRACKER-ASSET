@@ -187,8 +187,56 @@ public partial class InstallerWindow : Window
         });
     }
 
+    private string _employeeName = "";
+
+    private string PromptEmployeeName()
+    {
+        var dialog = new Window
+        {
+            Title = "TRACKER-ASSET Setup",
+            Width = 420,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode = ResizeMode.NoResize,
+        };
+
+        var panel = new StackPanel { Margin = new Thickness(20) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Nama karyawan pemakai laptop ini:",
+            Margin = new Thickness(0, 0, 0, 8),
+            FontWeight = FontWeights.SemiBold,
+        });
+
+        var textBox = new System.Windows.Controls.TextBox { Height = 32, FontSize = 14 };
+        panel.Children.Add(textBox);
+
+        var button = new System.Windows.Controls.Button
+        {
+            Content = "OK",
+            Width = 100,
+            Height = 36,
+            Margin = new Thickness(0, 12, 0, 0),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+        };
+        button.Click += (_, _) => dialog.Close();
+        panel.Children.Add(button);
+
+        dialog.Content = panel;
+        dialog.ShowDialog();
+        return textBox.Text?.Trim() ?? string.Empty;
+    }
+
+
     private async Task AutoInstallAsync()
     {
+        _employeeName = PromptEmployeeName();
+        if (string.IsNullOrWhiteSpace(_employeeName))
+        {
+            _employeeName = Environment.MachineName;
+        }
+
+
         Report(2, "Looking for server...");
 
         var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
@@ -477,7 +525,7 @@ public partial class InstallerWindow : Window
             var payload = JsonSerializer.Serialize(new
             {
                 device_id = _deviceId,
-                name = Environment.MachineName,
+                name = string.IsNullOrWhiteSpace(_employeeName) ? Environment.MachineName : _employeeName,
                 platform = Environment.OSVersion.VersionString,
             });
 

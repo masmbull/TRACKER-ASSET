@@ -237,8 +237,12 @@ document.addEventListener('submit', (event) => {
         markBusy();
         return;
     }
-    // Any POST action gets a processing modal from submit until the server
-    // responds (the next page load hides it again).
+    // Modal-driven forms (data-modal-action) already manage their own dialog,
+    // so don't stack the global processing overlay on top of them.
+    if (form.matches('[data-modal-action]')) {
+        return;
+    }
+
     showProcessModal();
     const submit = form.querySelector('button[type="submit"]');
     if (!submit || submit.disabled || form.dataset.noBusy !== undefined || form.matches('[data-modal-action]')) {
