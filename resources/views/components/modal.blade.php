@@ -20,7 +20,7 @@
      x-on:keydown.escape.window="open = false"
      x-effect="document.body.style.overflow = open ? 'hidden' : ''">
     <template x-teleport="body">
-        <div x-show="open" x-cloak class="fixed inset-0 z-[99999] overflow-y-auto">
+        <div x-show="open" x-cloak class="fixed inset-0 z-[100010] overflow-y-auto" style="z-index:100010 !important;">
             <div x-show="open" x-transition:enter="transition ease-out duration-150"
                  x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
                  x-transition:leave="transition ease-in duration-150"
@@ -28,13 +28,13 @@
                  class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm" x-on:click="open = false"></div>
 
             <div class="flex min-h-full items-center justify-center p-4">
-                <div x-show="open" x-cloak
+                <div x-show="open" x-cloak style="z-index:100010 !important;"
                      x-transition:enter="transition ease-out duration-200"
                      x-transition:enter-start="opacity-0 scale-95 translate-y-2" x-transition:enter-end="opacity-100 scale-100 translate-y-0"
                      x-transition:leave="transition ease-in duration-150"
                      x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 translate-y-2"
                      @class([
-                         'relative z-[99999] w-full bg-white rounded-2xl shadow-theme-lg dark:bg-gray-900',
+                         'relative z-[100010] w-full bg-white rounded-2xl shadow-theme-lg dark:bg-gray-900',
                          'relative w-full bg-white rounded-2xl shadow-theme-lg dark:bg-gray-900',
                          'max-w-sm' => $maxWidth === 'sm',
                          'max-w-md' => $maxWidth === 'md',

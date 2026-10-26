@@ -420,7 +420,7 @@
         </div>
     </div>
 
-    <div id="ajax-action-modal" class="fixed inset-0 z-[100010] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-sm" role="presentation" aria-live="polite">
+    <div id="ajax-action-modal" class="fixed inset-0 z-[99999] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-sm" role="presentation" aria-live="polite" style="z-index:99999 !important;">
         <section class="animate-scale-in w-full max-w-lg rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
             <div class="flex items-start gap-4">
                 <div id="ajax-action-spinner" class="mt-0.5 shrink-0" aria-hidden="true">
