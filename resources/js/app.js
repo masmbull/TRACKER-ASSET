@@ -407,6 +407,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (disk && state.disk_free_percent !== null && state.disk_free_percent !== undefined) {
                         disk.innerHTML = `<span class="font-medium ${state.disk_free_percent <= 10 ? 'text-error-500' : 'text-gray-700 dark:text-gray-300'}">${state.disk_free_percent}%</span><span class="block text-theme-xs text-gray-500 dark:text-gray-400">${state.disk_free_gb ?? '—'} GB free</span>`;
                     }
+                    const rdp = row.querySelector('[data-fleet-rdp]');
+                    if (rdp && state.rdp_enabled !== undefined) {
+                        rdp.innerHTML = state.rdp_enabled
+                            ? '<span class="font-medium text-success-600 dark:text-success-400">🟢 RDP On</span>'
+                            : '<span class="font-medium text-error-600 dark:text-error-400">🔴 RDP Off</span>';
+                    }
+                    const admin = row.querySelector('[data-fleet-admin-elevated]');
+                    if (admin && state.is_elevated !== undefined) {
+                        admin.innerHTML = state.is_elevated
+                            ? '<span class="font-medium text-success-600 dark:text-success-400">🛡️ Admin Elevated</span>'
+                            : '<span class="font-medium text-gray-500 dark:text-gray-400">👤 Standard User</span>';
+                    }
                 });
             } catch {
                 // Same rule as above: silence, retry next tick.

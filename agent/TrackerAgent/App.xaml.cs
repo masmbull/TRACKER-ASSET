@@ -288,7 +288,6 @@ public partial class App : System.Windows.Application
 
         menu.Items.Add(new ToolStripSeparator());
 
-        menu.Items.Add("Scan Now", null, (_, _) => RunScan(config));
         menu.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
 
         return menu;
@@ -365,6 +364,22 @@ public partial class App : System.Windows.Application
                         }
                         else if (command == "update")
                         {
+                            // Pre-flight scan: cek kondisi sebelum eksekusi update.
+                            // Server reachable, ruang disk cukup, dan biner baru
+                            // beda identitas dengan yang terpasang. Hanya lanjut
+                            // kalau semua lolos; ack "failed" dengan alasan jika tidak.
+                            var checkOk = CheckUpdateConditions(config, cmd, out var checkMessage, out var downloadUrl);
+
+                            if (!checkOk)
+                            {
+                                Api.Ack(config.ServerUrl, config.Token, id, "failed",
+                                    new Dictionary<string, string>
+                                    {
+                                        ["message"] = checkMessage ?? "Update dicek dan gagal.",
+                                    });
+                                continue;
+                            }
+
                             // Report progress while the 160 MB download runs, then
                             // ack DONE only if it actually succeeded. The old order
                             // acked first and updated second, so the server settled
@@ -375,11 +390,7 @@ public partial class App : System.Windows.Application
                             var ok = AutoUpdater.PerformUpdate(
                                 config.ServerUrl,
                                 config.Token,
-                                payloadUrl: cmd.TryGetProperty("payload", out var up) &&
-                                            up.ValueKind == JsonValueKind.Object &&
-                                            up.TryGetProperty("url", out var u)
-                                    ? u.GetString()
-                                    : null,
+                                payloadUrl: downloadUrl,
                                 onProgress: (percent, stage) =>
                                     Api.ReportProgress(config.ServerUrl, config.Token, id, percent, stage));
 
@@ -711,6 +722,72 @@ public partial class App : System.Windows.Application
         {
             AgentLog.Write($"Fingerprint error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Pre-flight scan sebelum eksekusi update dari Live Fleet.
+    /// Cek: server terjangkau, ruang disk cukup untuk biner baru (~200MB),
+    /// dan biner yang akan diunduh berbeda identitas dengan yang terpasang.
+    /// Mengembalikan downloadUrl yang valid jika semua lolos.
+    /// </summary>
+    private bool CheckUpdateConditions(AgentConfig config, JsonElement cmd, out string? message, out string? downloadUrl)
+    {
+        message = null;
+        downloadUrl = null;
+
+        // 1. Cek server terjangkau
+        var payloadUrl = cmd.TryGetProperty("payload", out var up) &&
+                         up.ValueKind == JsonValueKind.Object &&
+                         up.TryGetProperty("url", out var u)
+            ? u.GetString()
+            : null;
+        downloadUrl = !string.IsNullOrWhiteSpace(payloadUrl)
+            ? payloadUrl
+            : $"{config.ServerUrl.TrimEnd('/')}/agent/download";
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var req = new HttpRequestMessage(HttpMethod.Head, downloadUrl);
+            if (!string.IsNullOrWhiteSpace(config.Token))
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.Token);
+
+            using var resp = http.Send(req);
+            if (!resp.IsSuccessStatusCode)
+            {
+                message = $"Server tidak merespons (HTTP {(int)resp.StatusCode}).";
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Server tidak terjangkau: {ex.Message}";
+            return false;
+        }
+
+        // 2. Cek ruang disk cukup (butuh ~200MB: download + temp + biner lama)
+        try
+        {
+            var currentExe = Environment.ProcessPath
+                ?? Path.Combine(AppContext.BaseDirectory, "TrackerAgent.exe");
+            var currentDir = Path.GetDirectoryName(currentExe)!;
+            var drive = new System.IO.DriveInfo(currentDir);
+            var freeBytes = drive.AvailableFreeSpace;
+            var needBytes = 200L * 1024 * 1024; // 200 MB safety margin
+
+            if (freeBytes < needBytes)
+            {
+                message = $"Ruang disk tidak cukup ({freeBytes / 1024 / 1024:N0} MB tersedia, butuh ~200 MB).";
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Disk check skipped: {ex.Message}");
+        }
+
+        message = "Kondisi update terpenuhi.";
+        return true;
     }
 
     /// <summary>

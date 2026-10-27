@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace TrackerAgent;
@@ -96,12 +97,21 @@ public partial class ScanWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
-            // Sized from the track itself, not a fixed 400px that no longer matched
-            // the bar's container and left it visibly short of the end.
             var track = ScanProgressTrack.ActualWidth;
             ScanProgressFill.Width = Math.Max(0, Math.Round(track * percent / 100.0));
-            PercentText.Text       = $"{percent}%";
-            StatusText.Text        = message;
+            PercentText.Text = $"{percent}%";
+            StatusText.Text = message;
+
+            if (StatusDotGlow != null)
+            {
+                StatusDotGlow.BeginAnimation(
+                    UIElement.OpacityProperty,
+                    new DoubleAnimation(0.3, 0.8, TimeSpan.FromSeconds(1))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                    });
+            }
         });
         Thread.Sleep(120);
     }

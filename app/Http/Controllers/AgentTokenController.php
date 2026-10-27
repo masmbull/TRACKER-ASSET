@@ -116,7 +116,10 @@ class AgentTokenController extends Controller
     {
         $urls = array_values(array_unique(array_filter(array_map(
             fn (?string $url) => rtrim((string) $url, '/'),
-            [$request->getSchemeAndHttpHost(), config('app.url')]
+            array_merge(
+                [$request->getSchemeAndHttpHost(), config('app.url')],
+                self::serverLanIps()
+            )
         ))));
 
         $payload = base64_encode((string) json_encode([
@@ -125,6 +128,45 @@ class AgentTokenController extends Controller
         ], JSON_UNESCAPED_SLASHES));
 
         return "\n<<<TRACKER-AGENT-CONFIG:{$payload}:END>>>\n";
+    }
+
+    /// <summary>
+    /// The server's own LAN IP addresses (e.g. 192.168.x.x, 10.x.x.x), so an
+    /// agent downloaded from http://127.0.0.1:8000 on the server machine can
+    /// still reach it from a different laptop on the same network.
+    /// </summary>
+    private static function serverLanIps(): array
+    {
+        $ips = [];
+
+        // Linux / macOS
+        foreach (explode("\n", @shell_exec('hostname -I 2>/dev/null')) as $ip) {
+            $ip = trim($ip);
+            if ($ip !== '' && str_starts_with($ip, '127.')) {
+                continue;
+            }
+            if ($ip !== '') {
+                $ips[] = "http://{$ip}:8000";
+            }
+        }
+
+        // Windows
+        if (empty($ips)) {
+            $output = @shell_exec('ipconfig 2>/dev/null');
+            if ($output !== false) {
+                foreach (explode("\n", $output) as $line) {
+                    if (stripos($line, 'IPv4') !== false && preg_match('/(\d+\.\d+\.\d+\.\d+)/', $line, $m)) {
+                        $ip = $m[1];
+                        if (str_starts_with($ip, '127.')) {
+                            continue;
+                        }
+                        $ips[] = "http://{$ip}:8000";
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
     }
 
     public function revoke(AgentApiToken $token)
