@@ -83,7 +83,7 @@ class AgentFleetController extends Controller
     public function refresh(): JsonResponse
     {
         $devices = AgentApiToken::query()
-            ->with('telemetry')
+            ->with('telemetry', 'fingerprint')
             ->where('is_active', true)
             ->get();
 
@@ -144,6 +144,7 @@ class AgentFleetController extends Controller
                 'disk_free_gb' => $telemetry?->disk_free_gb === null
                     ? null
                     : number_format((float) $telemetry->disk_free_gb, 0),
+                'rdp_enabled' => $fp?->rdp_enabled,
             ];
         }
 
@@ -225,6 +226,7 @@ class AgentFleetController extends Controller
     public function index(Request $request)
     {
         $devices = AgentApiToken::query()
+            ->where('is_active', true)
             ->select([
                 'id', 'name', 'is_active', 'expires_at', 'last_used_at',
                 'device_id', 'agent_version',
@@ -270,6 +272,9 @@ class AgentFleetController extends Controller
                         'last_security_update_at', 'security_updates_installed',
                         'local_admin_count', 'software_count', 'startup_count', 'ram_modules',
                         'ram_slots', 'collected_at',
+                        // Accessories
+                        'monitor_sn', 'keyboard_model', 'mouse_model',
+                        'headset_model', 'webcam_model', 'other_accessories',
                     ],
                 )),
             ])
@@ -403,17 +408,19 @@ class AgentFleetController extends Controller
             ),
         ]);
 
-        $stats['online'] = $deviceStates
-            ->filter(fn (array $state) => $state['status'] === 'online')
-            ->count();
-
-        // Revoked devices are split off: their agent can never authenticate
-        // again, so every action column entry for them is dead weight and they
-        // only dilute the count of machines an operator actually manages. This
-        // also settles the stuck "Uninstall queued" badge at the source — a
-        // revoked device is not in the active table at all.
+        // Revoked devices are split off first: their agent can never authenticate
+        // again, so they must never inflate the "online" KPI on the fleet page.
         $activeDevices = $devices->filter(fn (AgentApiToken $t) => $t->isUsable())->values();
         $revokedDevices = $devices->reject(fn (AgentApiToken $t) => $t->isUsable())->values();
+
+        // Online count only from active (usable) devices. A revoked device may
+        // still have fresh telemetry in the table, but it is not "online" for
+        // fleet management purposes.
+        $activeDeviceIds = $activeDevices->pluck('id')->all();
+        $stats['online'] = $deviceStates
+            ->filter(fn (array $state) => $state['status'] === 'online')
+            ->filter(fn (array $state, int $key) => in_array($key, $activeDeviceIds))
+            ->count();
 
         // Security findings, aggregated once here rather than per row in the
         // view: a device can carry several, and the KPI card needs the total
@@ -563,6 +570,14 @@ class AgentFleetController extends Controller
                 'BIOS date' => $fp?->bios_date?->format('Y-m-d'),
                 'Disk type' => $fp?->disk_type,
                 'SMART' => $fp?->smart_health,
+            ],
+            'Accessories' => [
+                'Monitor S/N' => $fp?->monitor_sn,
+                'Keyboard' => $fp?->keyboard_model,
+                'Mouse' => $fp?->mouse_model,
+                'Headset' => $fp?->headset_model,
+                'Webcam' => $fp?->webcam_model,
+                'Other' => $fp?->other_accessories,
             ],
             'Storage & battery' => [
                 'Disk free' => $t?->disk_free_gb !== null ? number_format((float) $t->disk_free_gb, 1).' GB' : null,

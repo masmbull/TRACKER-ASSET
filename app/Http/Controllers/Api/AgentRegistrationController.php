@@ -46,9 +46,18 @@ class AgentRegistrationController extends Controller
             'name' => 'nullable|string|max:255',
             'platform' => 'nullable|string|max:255',
             'agent_version' => 'nullable|string|max:64',
+            'force_new' => 'sometimes|boolean',
+            'check_only' => 'sometimes|boolean',
         ]);
 
         $deviceId = $request->string('device_id')->toString();
+        $checkOnly = $request->boolean('check_only');
+
+        // force_new: every install run mints a fresh token, even when a device
+        // row already exists for this hardware. Revoked devices are re-enabled
+        // with a new token — reinstalling must never be blocked by a previous
+        // revocation, and every .exe run gets its own credential.
+        $forceNew = $request->boolean('force_new');
 
         // What the agent generated for itself, kept separately so this row stays
         // findable once the server has replaced device_id with a number a human
@@ -58,18 +67,65 @@ class AgentRegistrationController extends Controller
             ? $request->string('hardware_id')->toString()
             : $deviceId;
 
-        // Check if device already registered
+        // check_only: dipanggil sebelum menampilkan 10 field audit. Jika device
+        // sudah dikenal di master data (hardware_id cocok), skip 10 field karena
+        // data sudah ada. Jika belum, tampilkan 10 field untuk diisi user.
+        if ($checkOnly) {
+            $existing = AgentApiToken::where('hardware_id', $hardwareId)->first()
+                ?? AgentApiToken::where('device_id', $deviceId)->first();
+
+            return response()->json([
+                'known' => $existing !== null,
+                'skip_fields' => $existing !== null,
+                'device_id' => $existing?->device_id ?? $deviceId,
+                'token' => $existing?->token_plain ?? null,
+                'is_active' => $existing?->is_active ?? false,
+                'message' => $existing !== null
+                    ? 'Device sudah dikenal di master data. Lewati 10 field audit.'
+                    : 'Device baru. Tampilkan 10 field audit.',
+            ]);
+        }
+
+        // Fresh token helper: rotate an existing row (or keep it) and return
+        // the plaintext so the agent can store it in config.json.
+        $mintFresh = function (AgentApiToken $row) use ($request): array {
+            $token = bin2hex(random_bytes(32));
+            $row->update([
+                'token_hash' => hash('sha256', $token),
+                'token_plain' => $token,
+                'agent_version' => $request->string('agent_version')->toString() ?: $row->agent_version,
+                'last_seen_at' => now(),
+                'is_active' => true,
+                'expires_at' => null,
+            ]);
+            AgentCommand::create([
+                'agent_token_id' => $row->id,
+                'command' => 'scan',
+                'payload' => null,
+                'status' => 'pending',
+            ]);
+            return [
+                'token' => $token,
+                'device_id' => $row->device_id,
+                'rotated' => true,
+                'message' => 'Token rotated for reinstall',
+            ];
+        };
+
+// Check if device already registered
         $existing = AgentApiToken::where('hardware_id', $hardwareId)->first()
             ?? AgentApiToken::where('device_id', $deviceId)->first();
         if ($existing) {
-            // A revoked/expired device stays revoked. Re-registering must not be
-            // a way around the Revoke button on the Tokens page, otherwise
-            // "revoke" is meaningless: the machine would mint itself a new
-            // active token on its very next poll.
-            if (! $existing->isUsable()) {
-                return response()->json([
-                    'message' => 'This device was revoked. Re-enable it on the Tokens page first.',
-                ], 403);
+            // Revoked device: allow reinstall by rotating token and reactivating.
+            // This lets a machine that was revoked come back online after a fresh
+            // agent install without manual intervention on the Tokens page.
+            if (! $existing->is_active) {
+                return response()->json($mintFresh($existing));
+            }
+
+            // Active device: force_new rotates the token for reinstall.
+            if ($forceNew) {
+                return response()->json($mintFresh($existing));
             }
 
             // token_plain is an encrypted cast, so a populated column can be
@@ -92,20 +148,7 @@ class AgentRegistrationController extends Controller
             // device needs *a* token to keep reporting. Rotate instead of
             // returning '', which used to leave the agent polling with an empty
             // bearer and silently never reaching the server again.
-            $rotated = bin2hex(random_bytes(32));
-            $existing->update([
-                'token_hash' => hash('sha256', $rotated),
-                'token_plain' => $rotated,
-                'agent_version' => $request->string('agent_version')->toString() ?: $existing->agent_version,
-                'last_seen_at' => now(),
-            ]);
-
-            return response()->json([
-                'token' => $rotated,
-                'device_id' => $existing->device_id,
-                'rotated' => true,
-                'message' => 'Device re-registered (previous token could not be recovered)',
-            ]);
+            return response()->json($mintFresh($existing));
         }
 
         // Create new token for this device

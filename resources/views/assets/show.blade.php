@@ -171,8 +171,9 @@
                             <td class="py-3 px-4 text-theme-sm text-gray-700">{{ $doc->title }}</td>
                             <td class="py-3 px-4 text-theme-sm text-gray-500">{{ $doc->generated_date?->format('Y-m-d') }}</td>
                             <td class="py-3 px-4"><x-badge :variant="$doc->status === 'final' ? 'success' : 'gray'">{{ $doc->status }}</x-badge></td>
-                            <td class="py-3 px-4">
-                                <button type="button" @click="$dispatch('open-modal', 'delete-document-{{ $doc->id }}')" class="text-theme-sm text-error-500 hover:text-error-600">Delete</button>
+                            <td class="py-3 px-4 text-right">
+                                <button type="button" @click="$dispatch('open-modal', 'preview-doc-{{ $doc->id }}')" class="text-theme-sm text-brand-500 hover:text-brand-600">Preview</button>
+                                <button type="button" @click="$dispatch('open-modal', 'delete-document-{{ $doc->id }}')" class="ml-2 text-theme-sm text-error-500 hover:text-error-600">Delete</button>
                             </td>
                         </tr>
                     @endforeach
@@ -180,6 +181,18 @@
             @else
                 <p class="py-8 text-center text-theme-sm text-gray-400">No documents.</p>
             @endif
+
+            @foreach($asset->documents as $doc)
+                <x-modal id="preview-doc-{{ $doc->id }}" title="{{ $doc->document_number }}" maxWidth="full">
+                    <div class="bg-white p-4 rounded-xl shadow dark:bg-[#1d2939]">
+                        <iframe id="pdf-frame-{{ $doc->id }}" src="{{ route('documents.download', $doc) }}?inline=1" class="w-full" style="height: 70vh; border: none;"></iframe>
+                    </div>
+                    <div class="flex justify-end gap-3 pt-2 px-6 py-4">
+                        <button type="button" @click="$dispatch('close-modal', 'preview-doc-{{ $doc->id }}')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Close</button>
+                        <a href="{{ route('documents.download', $doc) }}" class="inline-flex items-center justify-center rounded-lg bg-success-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-success-600">Download PDF</a>
+                    </div>
+                </x-modal>
+            @endforeach
         </x-card>
     </div>
 

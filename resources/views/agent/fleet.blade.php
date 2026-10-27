@@ -81,6 +81,7 @@
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Battery</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disk</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">RDP</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Register</th>
                     <th class="py-2.5 px-3 text-right text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
@@ -220,6 +221,24 @@
                                 <span class="text-gray-400">—</span>
                             @endif
                         </td>
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-rdp>
+                            @if($fp?->rdp_enabled === true)
+                                <span class="font-medium text-success-600 dark:text-success-400">🟢 RDP On</span>
+                            @elseif($fp?->rdp_enabled === false)
+                                <span class="font-medium text-error-600 dark:text-error-400">🔴 RDP Off</span>
+                            @else
+                                <span class="text-gray-400">—</span>
+                            @endif
+                        </td>
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
+                            @if($fp?->is_elevated === true)
+                                <span class="font-medium text-success-600 dark:text-success-400">🛡️ Admin Elevated</span>
+                            @elseif($fp?->is_elevated === false)
+                                <span class="font-medium text-gray-500 dark:text-gray-400">👤 Standard User</span>
+                            @else
+                                <span class="text-gray-400">—</span>
+                            @endif
+                        </td>
                         <td class="py-3 px-3">
                             @if($deviceFindings)
                                 <x-badge :variant="collect($deviceFindings)->contains('severity', 'danger') ? 'error' : 'warning'">
@@ -238,18 +257,25 @@
                                  device here had one and this column would be
                                  decoration; now it is the answer to "which
                                  laptops am I actually tracking?". --}}
-                            @if($telemetry?->asset)
+                            {{-- Issue #1: use asset_id column directly instead of
+                                 loading the asset relationship, to avoid an extra
+                                 query per device on every page paint. --}}
+                            @if($telemetry?->asset_id !== null)
                                 <a href="{{ route('assets.show', $telemetry->asset) }}"
                                    class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
                                     {{ $telemetry->asset->asset_id }}
                                 </a>
                             @elseif($device->isUsable())
+                                {{-- Issue #3: explicitly gate on usability AND no
+                                     asset so a device that cannot be promoted
+                                     (revoked, expired) gets "—" rather than
+                                     "Add to register". --}}
                                 <a href="{{ route('agent.promote', $device) }}"
                                    class="whitespace-nowrap text-theme-sm font-medium text-warning-600 hover:text-warning-700">
                                     Add to register
                                 </a>
                                 <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-                                    {{ $unmatchedScans[$device->id] ?? 'No' }} scan{{ ($unmatchedScans[$device->id] ?? 0) === 1 ? '' : 's' }} waiting
+                                    {{ $unmatchedScans[$device->id] ?? 0 }} scan{{ ($unmatchedScans[$device->id] ?? 0) === 1 ? '' : 's' }} waiting
                                 </span>
                             @else
                                 <span class="text-theme-sm text-gray-400">—</span>
@@ -409,19 +435,19 @@
         <x-modal id="device-{{ $device->id }}" title="{{ $device->name }}" maxWidth="full">
             <div class="pr-1">
                 <div class="mb-3 flex flex-wrap items-center gap-2">
-                    @if($t?->asset)
-                        <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
-                            {{ $t->asset->asset_id }}
-                        </a>
-                    @elseif($device->isUsable())
-                        {{-- Also offered in the detail modal: an operator who opened a
-                             device to look at its readings is exactly the person who
-                             then decides whether it belongs on the register. --}}
-                        <a href="{{ route('agent.promote', $device) }}"
-                           class="text-theme-sm font-medium text-warning-600 hover:text-warning-700">
-                            Add to register →
-                        </a>
-                    @endif
+                @if($t?->asset_id !== null)
+                    <a href="{{ route('assets.show', $t->asset) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                        {{ $t->asset->asset_id }}
+                    </a>
+                @elseif($device->isUsable())
+                    {{-- Also offered in the detail modal: an operator who opened a
+                         device to look at its readings is exactly the person who
+                         then decides whether it belongs on the register. --}}
+                    <a href="{{ route('agent.promote', $device) }}"
+                       class="text-theme-sm font-medium text-warning-600 hover:text-warning-700">
+                        Add to register →
+                    </a>
+                @endif
                     @if($t?->hostname)
                         <span class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $t->hostname }}</span>
                     @endif
@@ -612,7 +638,7 @@
         <p class="py-8 text-center text-theme-sm text-gray-400">No revoked devices.</p>
     @else
         <x-table
-            :headers="['Device', 'Hostname', 'Asset', 'Last Seen', 'Revoked']"
+            :headers="['Device', 'Hostname', 'Asset', 'Last Seen', 'Status']"
             empty-text="No revoked devices."
             min-width="720px"
         >

@@ -35,6 +35,11 @@
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Date</label>
                     <input type="date" name="document_date" value="{{ old('document_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
+
+                <div>
+                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Nomor Surat (optional)</label>
+                    <input type="text" name="nomor_surat" value="{{ old('nomor_surat') }}" placeholder="Contoh: Lamp/001/IT/2026" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                </div>
             </div>
 
             <div>
@@ -282,6 +287,14 @@
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">IT / Nama Karyawan</label>
                         <input type="text" name="signatory_it" value="{{ old('signatory_it') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+                    <div>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanda Tangan Basah (Upload PNG/JPG, max 2MB)</label>
+                        <input type="file" name="signatory_image" accept="image/png,image/jpeg" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <p class="mt-1 text-theme-xs text-gray-500">Gambar tanda tangan yang di-scan/foto untuk dicetak di dokumen</p>
                     </div>
                 </div>
             </div>

@@ -67,8 +67,11 @@ public static class HardwareCollector
             // and the largest is chosen in code, which also lets a multi-disk
             // laptop report the drive people actually care about.
             double largest = 0;
+            string driveType = "";
+            string driveModel = "";
 
-            using var disk = new ManagementObjectSearcher("SELECT Size FROM Win32_DiskDrive");
+            using var disk = new ManagementObjectSearcher(
+                "SELECT Size, MediaType, Model FROM Win32_DiskDrive");
 
             foreach (var obj in disk.Get())
             {
@@ -77,12 +80,16 @@ public static class HardwareCollector
                 if (sizeBytes > largest)
                 {
                     largest = sizeBytes;
+                    driveModel = obj["Model"]?.ToString() ?? "";
+                    driveType = ClassifyDriveType(obj["MediaType"]?.ToString(), driveModel);
                 }
             }
 
             if (largest > 0)
             {
                 data["storage"] = FormatBytes(largest);
+                data["storage_type"] = driveType;
+                data["storage_capacity"] = $"{Number(largest / Gigabyte, 1)} GB";
             }
         }
         catch { }
@@ -114,7 +121,14 @@ public static class HardwareCollector
         // run_as:system script at it and reads the failure. "1"/"0" because the
         // payload is a string map and Laravel's boolean rule reads those, not
         // the words "true"/"false".
-        try { data["is_elevated"] = AgentRunner.IsProcessElevated() ? "1" : "0"; } catch { }
+        //
+        // The tray process itself is never elevated - it runs in the user session.
+        // When a SYSTEM daemon is running (created by a successful elevate command),
+        // that daemon CAN run machine-level scripts. The tray must report that
+        // capability so the fleet page stops showing "no admin" and the "Make admin"
+        // button stops appearing for a device that is already elevated via the daemon.
+        bool elevated = AgentRunner.IsProcessElevated() || AgentRunner.IsSystemDaemonAlive();
+        try { data["is_elevated"] = elevated ? "1" : "0"; } catch { }
 
         CollectBattery(data);
         CollectDisk(data);
@@ -123,6 +137,7 @@ public static class HardwareCollector
         CollectWifi(data);
         CollectNetwork(data);
         CollectUptime(data);
+        CollectAccessories(data);
 
         return data.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
                    .ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -637,6 +652,58 @@ public static class HardwareCollector
         catch { }
     }
 
+    /// <summary>Monitor, keyboard, mouse, headset, webcam collection.</summary>
+    static void CollectAccessories(Dictionary<string, string> data)
+    {
+        try
+        {
+            using var monitor = new ManagementObjectSearcher(
+                "SELECT SerialNumber FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e96e-e325-11ce-bfc1-08002be10318}'");
+            foreach (var obj in monitor.Get())
+            {
+                var sn = obj["SerialNumber"]?.ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(sn) && sn != "To Be Filled By O.E.M.")
+                {
+                    data["monitor_sn"] = sn;
+                    break;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var keyboard = new ManagementObjectSearcher(
+                "SELECT Name FROM Win32_Keyboard");
+            foreach (var obj in keyboard.Get())
+            {
+                var name = obj["Name"]?.ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    data["keyboard_model"] = name;
+                    break;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var mouse = new ManagementObjectSearcher(
+                "SELECT Name FROM Win32_PointingDevice");
+            foreach (var obj in mouse.Get())
+            {
+                var name = obj["Name"]?.ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    data["mouse_model"] = name;
+                    break;
+                }
+            }
+        }
+        catch { }
+    }
+
     static string FormatBytes(double bytes)
     {
         const double GB = 1024.0 * 1024.0 * 1024.0;
@@ -644,5 +711,19 @@ public static class HardwareCollector
         if (bytes >= GB) return $"{Math.Round(bytes / GB)}GB";
         if (bytes >= MB) return $"{Math.Round(bytes / MB)}MB";
         return $"{Math.Round(bytes / 1024.0)}KB";
+    }
+
+    static string ClassifyDriveType(string? mediaType, string model)
+    {
+        var combined = $"{mediaType ?? ""} {model ?? ""}".ToLowerInvariant();
+
+        if (combined.Contains("nvme") || combined.Contains("nvme"))
+            return "NVME";
+        if (combined.Contains("ssd") || combined.Contains("solid state"))
+            return "SSD";
+        if (combined.Contains("hdd") || combined.Contains("hard disk"))
+            return "HDD";
+
+        return "Unknown";
     }
 }

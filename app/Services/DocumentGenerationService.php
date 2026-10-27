@@ -43,26 +43,34 @@ class DocumentGenerationService
 
         $payload = $this->buildPayload($asset, $type, $input, $transfer);
 
-        return DB::transaction(function () use ($asset, $type, $payload, $transfer, $actor) {
+        return DB::transaction(function () use ($asset, $type, $payload, $transfer, $actor, $input) {
             $number = $this->numbers->next($type);
             $fileName = Str::slug($number).'.pdf';
             $relativePath = trim((string) config('documents.storage_path', 'documents'), '/').'/'.$fileName;
 
-            Storage::put($relativePath, $this->renderPdf($type, $payload, $number));
+            Storage::put($relativePath, $this->renderPdf($type, $payload, $number, $input));
+
+            $signaturePath = null;
+            if (! empty($input['signatory_image']) && $input['signatory_image'] instanceof UploadedFile) {
+                $sigName = 'signatures/'.Str::slug($number).'-'.Str::random(8).'.'.$input['signatory_image']->extension();
+                $signaturePath = Storage::put($sigName, $input['signatory_image']);
+            }
 
             $document = Document::create([
                 'asset_id' => $asset->id,
                 'transfer_id' => $transfer?->id,
                 'document_type' => $type,
                 'document_number' => $number,
+                'nomor_surat' => $input['nomor_surat'] ?? null,
                 'title' => $payload['title'],
                 'template_id' => $payload['template_id'],
-                'payload' => $payload,
+                'payload' => $payload + ['signature_image' => $signaturePath, 'nomor_surat' => $input['nomor_surat'] ?? null],
                 'file_path' => $relativePath,
                 'file_type' => 'pdf',
                 'generated_date' => now()->toDateString(),
                 'generated_by' => $actor?->id ?? Auth::id(),
                 'status' => 'final',
+                'signature_image' => $signaturePath,
             ]);
 
             ActivityLog::create([
@@ -107,6 +115,8 @@ class DocumentGenerationService
                 'processor' => $asset->processor,
                 'ram' => $asset->ram,
                 'storage' => $asset->storage,
+                'storage_type' => $asset->storage_type,
+                'storage_capacity' => $asset->storage_capacity,
                 'os_version' => $asset->os_version,
                 'status' => $asset->status?->name,
                 'type' => $input['asset_type'] ?? $asset->category?->name,
@@ -116,6 +126,8 @@ class DocumentGenerationService
                 'processor_detail' => $input['asset_processor'] ?? $asset->processor,
                 'ram_detail' => $input['asset_ram'] ?? $asset->ram,
                 'storage_detail' => $input['asset_storage'] ?? $asset->storage,
+                'storage_type_detail' => $input['asset_storage_type'] ?? $asset->storage_type,
+                'storage_capacity_detail' => $input['asset_storage_capacity'] ?? $asset->storage_capacity,
                 'accessories' => $input['asset_accessories'] ?? null,
             ],
             'company' => $asset->company?->name,
@@ -156,6 +168,7 @@ class DocumentGenerationService
             'kelengkapan' => $this->kelengkapanFor($type, $input),
             'notes' => $input['notes'] ?? null,
             'statement' => $input['statement'] ?? $this->statementFor($type),
+            'signature_image' => $input['signatory_image'] ?? null,
         ];
     }
 
@@ -301,7 +314,7 @@ class DocumentGenerationService
         ];
     }
 
-    private function renderPdf(string $type, array $payload, string $number): string
+    private function renderPdf(string $type, array $payload, string $number, array $input): string
     {
         return Pdf::loadView($this->viewFor($type), [
             'document' => $payload + ['number' => $number],

@@ -18,6 +18,7 @@ class Asset extends Model
         'asset_status_id', 'warranty_until', 'deploy_date', 'software_license',
         'mac_address', 'static_ip', 'current_user_id', 'admin_it_pic',
         'repair_notes', 'retire_date', 'qr_code', 'qr_token', 'qr_generated_at', 'barcode', 'is_active',
+        'storage_type', 'storage_capacity',
     ];
 
     protected function casts(): array

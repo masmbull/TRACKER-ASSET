@@ -13,7 +13,7 @@ class Document extends Model
     protected $fillable = [
         'asset_id', 'transfer_id', 'document_type', 'document_number', 'title',
         'template_id', 'payload', 'file_path', 'file_type', 'generated_date',
-        'generated_by', 'status',
+        'generated_by', 'status', 'signature_image', 'nomor_surat',
     ];
 
     protected function casts(): array

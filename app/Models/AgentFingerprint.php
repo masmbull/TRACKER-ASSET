@@ -34,6 +34,9 @@ class AgentFingerprint extends Model
         'chassis_type', 'device_model', 'screen_resolution',
         'software_count', 'startup_count',
         'payload', 'collected_at',
+        // Accessories
+        'monitor_sn', 'keyboard_model', 'mouse_model',
+        'headset_model', 'webcam_model', 'other_accessories',
     ];
 
     protected function casts(): array

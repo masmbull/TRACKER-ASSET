@@ -73,6 +73,12 @@
     <tr><td class="label">Processor</td><td>{{ $blank($asset['processor_detail'] ?? null) }}</td></tr>
     <tr><td class="label">RAM</td><td>{{ $blank($asset['ram_detail'] ?? null) }}</td></tr>
     <tr><td class="label">Storage</td><td>{{ $blank($asset['storage_detail'] ?? null) }}</td></tr>
+    @if(filled($asset['storage_type_detail'] ?? null))
+        <tr><td class="label">Storage Type</td><td>{{ $asset['storage_type_detail'] }}</td></tr>
+    @endif
+    @if(filled($asset['storage_capacity_detail'] ?? null))
+        <tr><td class="label">Storage Capacity</td><td>{{ $asset['storage_capacity_detail'] }}</td></tr>
+    @endif
     @if(filled($asset['os_version'] ?? null))
         <tr><td class="label">Sistem Operasi</td><td>{{ $asset['os_version'] }}</td></tr>
     @endif
@@ -148,7 +154,13 @@
             <table class="sign-box">
                 <tr><th colspan="2">{{ $isBast ? 'PENERIMA ASET' : 'PENERIMA' }}</th></tr>
                 <tr><td class="label">Nama</td><td>{{ $blank($sign['menerima'] ?? ($receiver['name'] ?? null)) }}</td></tr>
-                <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
+                @if($sign['signature_image'] ?? null && str_starts_with($sign['signature_image'], 'http'))
+                    <tr><td class="label">Tanda Tangan</td><td><img src="{{ $sign['signature_image'] }}" style="max-width: 120px; max-height: 40px;"></td></tr>
+                @elseif($sign['signature_image'] ?? null)
+                    <tr><td class="label">Tanda Tangan</td><td><img src="data:image/{{ pathinfo($sign['signature_image'], PATHINFO_EXTENSION), JSON_UNESCAPED_URL }};base64,{{ base64_encode(file_get_contents(storage_path($sign['signature_image'])))" style="max-width: 120px; max-height: 40px;"></td></tr>
+                @else
+                    <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
+                @endif
                 <tr><td class="label">Tanggal</td><td>{{ $blank($document['signature_date'] ?? null) }}</td></tr>
             </table>
         </td>
@@ -156,7 +168,13 @@
             <table class="sign-box">
                 <tr><th colspan="2">{{ $isBast ? 'PENYERAH ASET (IT)' : 'PENYERAH' }}</th></tr>
                 <tr><td class="label">Nama</td><td>{{ $blank($sign['menyerahkan'] ?? ($sender['name'] ?? null)) }}</td></tr>
-                <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
+                @if($sign['signature_image'] ?? null && str_starts_with($sign['signature_image'], 'http'))
+                    <tr><td class="label">Tanda Tangan</td><td><img src="{{ $sign['signature_image'] }}" style="max-width: 120px; max-height: 40px;"></td></tr>
+                @elseif($sign['signature_image'] ?? null)
+                    <tr><td class="label">Tanda Tangan</td><td><img src="data:image/{{ pathinfo($sign['signature_image'], PATHINFO_EXTENSION), JSON_UNESCAPED_URL }};base64,{{ base64_encode(file_get_contents(storage_path($sign['signature_image'])))" style="max-width: 120px; max-height: 40px;"></td></tr>
+                @else
+                    <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
+                @endif
                 <tr><td class="label">Tanggal</td><td>{{ $blank($document['signature_date'] ?? null) }}</td></tr>
             </table>
         </td>

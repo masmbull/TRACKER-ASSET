@@ -16,7 +16,7 @@
     which four were real. Signatures belong to the form, not the shell.
 --}}
 <style>
-    @page { margin: 1cm 1.3cm; }
+    @page { margin: 1cm 1.3cm; size: auto; }
     body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111827; line-height: 1.28; }
     .letterhead { border-bottom: 2px solid #1e40af; padding-bottom: 5px; margin-bottom: 6px; }
     .letterhead table { border: none; width: 100%; margin: 0; }
@@ -44,6 +44,10 @@
     .sign-box th { background: #e2e8f0; }
     .sign-row { height: 26px; }
     .footer { margin-top: 6px; font-size: 7px; color: #64748b; text-align: center; }
+    
+    /* Single-page enforcement: prevent tables from splitting across pages */
+    .section-head, table { page-break-inside: avoid; }
+    .sign-box, .sign-row { page-break-inside: avoid; }
 </style>
 </head>
 <body>
@@ -63,6 +67,9 @@
                 <h1>@yield('title')</h1>
                 <div class="sub">No. {{ $document['number'] }}</div>
                 <div class="sub">Tanggal: {{ $document['date_long'] ?? $document['date'] }}</div>
+                @if(filled($document['nomor_surat'] ?? null))
+                    <div class="sub">Nomor Surat: {{ $document['nomor_surat'] }}</div>
+                @endif
             </td>
         </tr>
     </table>
