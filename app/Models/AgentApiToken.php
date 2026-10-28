@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\WakeOnLanService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class AgentApiToken extends Model
@@ -68,6 +69,14 @@ class AgentApiToken extends Model
     public function fingerprint(): HasOne
     {
         return $this->hasOne(AgentFingerprint::class, 'agent_token_id')->latestOfMany('collected_at');
+    }
+
+    /**
+     * Commands queued for this device.
+     */
+    public function commands(): HasMany
+    {
+        return $this->hasMany(AgentCommand::class, 'agent_token_id');
     }
 
     /**
