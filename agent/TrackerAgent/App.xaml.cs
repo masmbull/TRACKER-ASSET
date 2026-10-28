@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace TrackerAgent;
@@ -18,6 +19,34 @@ public partial class App : System.Windows.Application
     private bool _ownsTrayMutex;
     private string _installDir = "";
     private string _configPath = "";
+
+    public App()
+    {
+        // Global exception handler: any unhandled WPF exception (e.g. XAML parse
+        // failure in InstallerWindow) shows a visible error instead of silently
+        // exiting, which used to leave the process running in Task Manager with
+        // no window and no clue what happened.
+        Dispatcher.UnhandledException += (_, e) =>
+        {
+            AgentLog.Write($"Unhandled WPF exception: {e.Exception}");
+            try
+            {
+                System.Windows.MessageBox.Show(
+                    $"TrackerAgent gagal memulai: {e.Exception.Message}",
+                    "TrackerAgent Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+            catch { }
+            e.Handled = true;
+        };
+
+        // Also catch exceptions on thread pool / task threads.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            AgentLog.Write($"Unhandled domain exception: {e.ExceptionObject}");
+        };
+    }
 
     /// <summary>
     /// Guards the heartbeat-triggered full scan.

@@ -246,37 +246,38 @@ public partial class InstallerWindow : Window
 
     private async Task AutoInstallAsync()
     {
-        Report(2, "Mencari server TRACKER-ASSET...");
-
-        var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
-        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30)); // 30 second overall timeout
-
-        var completedTask = await Task.WhenAny(serverDiscoveryTask, timeoutTask);
-
-        if (completedTask == timeoutTask)
-        {
-            ShowFailure("Server discovery timed out. Check network connection or provide server URL manually.");
-            return;
-        }
-
-        var serverUrl = await serverDiscoveryTask;
-
-        if (serverUrl is null)
-        {
-            ShowFailure("No TRACKER-ASSET server found. Ensure server is running or download from it.");
-            return;
-        }
-
-        _serverUrl = serverUrl;
-        Report(12, "Server terhubung.");
-
-        _deviceId = ReadRegistryString("DeviceId") ?? Convert.ToBase64String(GenerateDeviceId());
-        Report(14, "Membaca identitas dan spesifikasi perangkat...");
-        _hardwareDetails = await Task.Run(() => HardwareCollector.Collect("install"));
-        _hardwareDetails.TryGetValue("serial_number", out var serialNumber);
-
         try
         {
+            Report(2, "Mencari server TRACKER-ASSET...");
+
+            var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30)); // 30 second overall timeout
+
+            var completedTask = await Task.WhenAny(serverDiscoveryTask, timeoutTask);
+
+            if (completedTask == timeoutTask)
+            {
+                ShowFailure("Server discovery timed out. Check network connection or provide server URL manually.");
+                return;
+            }
+
+            var serverUrl = await serverDiscoveryTask;
+
+            if (serverUrl is null)
+            {
+                ShowFailure("No TRACKER-ASSET server found. Ensure server is running or download from it.");
+                return;
+            }
+
+            _serverUrl = serverUrl;
+            Report(12, "Server terhubung.");
+
+            _deviceId = ReadRegistryString("DeviceId") ?? Convert.ToBase64String(GenerateDeviceId());
+            Report(14, "Membaca identitas dan spesifikasi perangkat...");
+            _hardwareDetails = await Task.Run(() => HardwareCollector.Collect("install"));
+            _hardwareDetails.TryGetValue("serial_number", out var serialNumber);
+
+            Report(16, "Memeriksa apakah perangkat sudah terdaftar di master aset...");
             Report(16, "Memeriksa apakah perangkat sudah terdaftar di master aset...");
             var registrationCheck = await Task.Run(() => CheckRegistrationFields(serverUrl, _deviceId, serialNumber));
             _registeredAssetCode = registrationCheck.AssetCode;
@@ -301,22 +302,22 @@ public partial class InstallerWindow : Window
             {
                 Report(17, "Perangkat sudah terdaftar. Form data aset dilewati.");
             }
+
+            var installed = await Task.Run(() => RunInstall(serverUrl));
+
+            if (installed)
+            {
+                ShowSuccess();
+            }
+            else
+            {
+                ShowFailure(_lastError.Length > 0 ? _lastError : "Installation failed.");
+            }
         }
         catch (Exception ex)
         {
             ShowFailure(ex.Message);
             return;
-        }
-
-        var installed = await Task.Run(() => RunInstall(serverUrl));
-
-        if (installed)
-        {
-            ShowSuccess();
-        }
-        else
-        {
-            ShowFailure(_lastError.Length > 0 ? _lastError : "Installation failed.");
         }
     }
 
