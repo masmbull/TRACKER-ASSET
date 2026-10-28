@@ -378,6 +378,7 @@
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
+                                    <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                                 @endif
                             </div>
                         </td>
@@ -625,6 +626,17 @@
                 </form>
             </div>
         </x-modal>
+
+        <x-modal id="delete-agent-{{ $device->id }}" title="Delete device" maxWidth="md">
+            <div class="space-y-4">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">Permanently remove <strong>{{ $device->name }}</strong> from the fleet? This cannot be undone.</p>
+                <form method="POST" action="{{ route('agent.destroy', $device) }}" class="flex justify-end gap-3 pt-2" data-modal-action data-close-modal="delete-agent-{{ $device->id }}">
+                    @csrf
+                    <button type="button" @click="$dispatch('close-modal', 'delete-agent-{{ $device->id }}')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                    <x-button type="submit" variant="danger">Delete</x-button>
+                </form>
+            </div>
+        </x-modal>
     @endforeach
 </x-card>
 
@@ -636,7 +648,7 @@
         <p class="py-8 text-center text-theme-sm text-gray-400">No revoked devices.</p>
     @else
         <x-table
-            :headers="['Device', 'Hostname', 'Asset', 'Last Seen', 'Status']"
+            :headers="['Device', 'Hostname', 'Asset', 'Last Seen', 'Status', 'Actions']"
             empty-text="No revoked devices."
             min-width="720px"
         >
@@ -666,11 +678,28 @@
                     <td class="py-3 px-4">
                         <x-badge variant="error" :dot="true">revoked</x-badge>
                     </td>
+                    <td class="py-3 px-4">
+                        <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
+                    </td>
                 </tr>
             @endforeach
         </x-table>
     @endif
 </x-card>
+
+@foreach($revokedDevices as $device)
+    <x-modal id="delete-agent-{{ $device->id }}" title="Delete device" maxWidth="md">
+        <div class="space-y-4">
+            <p class="text-theme-sm text-gray-600 dark:text-gray-300">Permanently remove <strong>{{ $device->name }}</strong> from the fleet? This cannot be undone.</p>
+            <form method="POST" action="{{ route('agent.destroy', $device) }}" class="flex justify-end gap-3 pt-2" data-modal-action data-close-modal="delete-agent-{{ $device->id }}">
+                @csrf
+                @method('DELETE')
+                <button type="button" @click="$dispatch('close-modal', 'delete-agent-{{ $device->id }}')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                <x-button type="submit" variant="danger">Delete</x-button>
+            </form>
+        </div>
+    </x-modal>
+@endforeach
 
 <x-modal id="confirm-update-all-agents" title="Update all agents" maxWidth="md">
     <div class="space-y-4">

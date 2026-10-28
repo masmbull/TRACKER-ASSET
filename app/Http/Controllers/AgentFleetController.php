@@ -1170,6 +1170,38 @@ class AgentFleetController extends Controller
     }
 
     /**
+     * Permanently remove a device from the fleet.
+     *
+     * Used for both active and revoked tokens: it deletes the token row (and
+     * nulls the related telemetry/fingerprint/audit/command rows via the
+     * nullOnDelete foreign keys) so the device disappears from the page
+     * entirely. This is a hard delete, not a revoke - use revoke when the
+     * machine should stay known but be blocked.
+     */
+    public function destroy(Request $request, AgentApiToken $token): JsonResponse|RedirectResponse
+    {
+        $name = $token->name;
+        $token->commands()->delete();
+        $token->telemetry()->delete();
+        $token->fingerprint()?->delete();
+        $token->delete();
+
+        ActivityLog::create([
+            'actor_id' => $request->user()?->id,
+            'action' => 'DELETE',
+            'entity_type' => 'agent_tokens',
+            'entity_id' => $token->id,
+            'entity_identifier' => $name,
+            'source' => 'Live Fleet',
+            'old_value' => null,
+            'new_value' => null,
+            'metadata' => ['device' => $name],
+        ]);
+
+        return $this->actionResponse($request, sprintf("Device '%s' deleted from the fleet.", $name), true);
+    }
+
+    /**
      * Wake a sleeping machine over the network (Wake on LAN).
      *
      * This is the one fleet action that does NOT go through the agent, and it

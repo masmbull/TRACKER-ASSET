@@ -153,6 +153,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/{token}/update', [AgentFleetController::class, 'updateOne'])->name('agent.updateOne');
         Route::post('/agent/{token}/elevate', [AgentFleetController::class, 'elevate'])->name('agent.elevate');
         Route::post('/agent/{token}/uninstall', [AgentFleetController::class, 'uninstall'])->name('agent.uninstall');
+Route::post('/agent/{token}/delete', [AgentFleetController::class, 'destroy'])->name('agent.destroy');
         Route::post('/agent/sweep', [AgentFleetController::class, 'sweep'])->name('agent.sweep');
 
         // Fleet actions on a single device.
