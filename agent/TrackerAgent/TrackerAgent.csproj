@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.14</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.15</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -53,7 +53,13 @@
                     borderless card with red glows read as a launcher, and its
                     transparency forced software rendering. The result panel no
                     longer spans the checklist, and a failed step is marked on the
-                    step that actually failed. -->
+                    step that actually failed.
+               1.7.15: the same locked-file fix now covers the UPDATE path. It still
+                    copied over the locked exe and surfaced the raw .NET
+                    "The process cannot access the file ..." text, so every update
+                    on a machine with the SYSTEM task failed at 55% while a fresh
+                    install succeeded. Updates fall back to a versioned binary and
+                    restart from it, and both paths share one message translator. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

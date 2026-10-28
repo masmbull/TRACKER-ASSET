@@ -665,22 +665,7 @@ public partial class InstallerWindow : Window
         }
         catch (Exception ex)
         {
-            // Better error messages for common failure modes
-            string friendlyMessage = ex switch
-            {
-                InstallBlockedException => ex.Message,
-                System.IO.IOException io when IsSharingViolation(io) =>
-                    "File agent sedang dipakai proses lain (biasanya service TrackerAgent).\n\n" +
-                    "Tutup aplikasi ini, lalu jalankan ulang dengan klik kanan > Run as administrator.",
-                System.IO.IOException => "Operasi file gagal. Periksa ruang disk dan izin folder instalasi.",
-                System.Net.Http.HttpRequestException => "Tidak bisa menghubungi server. Periksa koneksi jaringan.",
-                System.Reflection.TargetInvocationException => "Ada kesalahan pada proses instalasi. Hubungi tim IT.",
-                System.UnauthorizedAccessException =>
-                    "Izin ditolak. Jalankan installer dengan klik kanan > Run as administrator.",
-                _ => ex.Message
-            };
-
-            _lastError = friendlyMessage;
+            _lastError = DescribeFailure(ex);
             Debug.WriteLine($"Install error: {ex}");
 
             // Reported with whatever token was obtained, if any. A failed install
@@ -689,7 +674,7 @@ public partial class InstallerWindow : Window
             if (!string.IsNullOrWhiteSpace(_installTokenForReporting))
             {
                 Api.ReportInstallProgress(serverUrl, _installTokenForReporting, "install", "failed", 0,
-                    $"Installation failed: {friendlyMessage}",
+                    $"Instalasi gagal: {_lastError}",
                     new Dictionary<string, string> { ["message"] = ex.GetType().Name, ["detail"] = ex.Message });
             }
 
@@ -1012,7 +997,32 @@ public partial class InstallerWindow : Window
             InstallerService.CleanLeftovers(Path.GetDirectoryName(_installedExe)!);
 
             Report(55, $"Menyalin versi {_newVersion}...");
-            CopyWithRetry(sourceExe, _installedExe);
+
+            // Same trap as the fresh-install path: when the SYSTEM task owns the
+            // installed exe, no amount of retrying releases the handle, and the
+            // raw IOException reached the user verbatim. Fall back to a versioned
+            // binary beside the locked one and point autostart at it.
+            if (!TryCopyInstalledExe(sourceExe, _installedExe))
+            {
+                var versionedExe = Path.Combine(
+                    Path.GetDirectoryName(_installedExe)!,
+                    $"TrackerAgent-{_newVersion?.ToString() ?? "new"}.exe");
+
+                StopInstalledAgent();
+
+                if (!TryCopyInstalledExe(sourceExe, versionedExe))
+                {
+                    throw new InstallBlockedException(
+                        "Agent versi lama sedang berjalan sebagai service Windows dan file-nya tidak bisa diganti.\n\n" +
+                        "Tutup aplikasi ini, lalu jalankan ulang dengan klik kanan > Run as administrator.");
+                }
+
+                Report(75, "Agent lama terkunci oleh service; versi baru dipasang berdampingan...");
+                RestartAgentFrom(versionedExe);
+                Report(100, "Pembaruan selesai.");
+                Thread.Sleep(250);
+                return true;
+            }
 
             Report(85, "Menjalankan ulang agent di system tray...");
             RestartAgent();
@@ -1023,7 +1033,10 @@ public partial class InstallerWindow : Window
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
+            // The update path used to surface ex.Message verbatim, so the user got
+            // a raw .NET string ("The process cannot access the file ...") in an
+            // Indonesian wizard. Route it through the same translation as install.
+            _lastError = DescribeFailure(ex);
             Debug.WriteLine($"Update error: {ex}");
             return false;
         }
@@ -1103,6 +1116,16 @@ public partial class InstallerWindow : Window
     }
 
     /// <summary>
+    /// Restart pointing at a specific binary, used when the canonical path is
+    /// still locked by the SYSTEM task and the new build sits beside it.
+    /// </summary>
+    private static void RestartAgentFrom(string exePath)
+    {
+        RegisterAutostart(exePath);
+        StartDetached(exePath, string.Empty);
+    }
+
+    /// <summary>
     /// File.Copy with retries: the just-killed process may need a moment to
     /// release the installed executable.
     /// </summary>
@@ -1157,6 +1180,31 @@ public partial class InstallerWindow : Window
 
         return false;
     }
+
+    /// <summary>
+    /// Turns an exception into something the person running setup can act on.
+    /// </summary>
+    /// <remarks>
+    /// Shared by the install and update paths so both speak the same language and
+    /// neither leaks a raw .NET message ("The process cannot access the file ...")
+    /// into an otherwise Indonesian wizard.
+    /// </remarks>
+    private static string DescribeFailure(Exception ex) => ex switch
+    {
+        InstallBlockedException => ex.Message,
+        System.IO.IOException io when IsSharingViolation(io) =>
+            "File agent sedang dipakai proses lain (biasanya service TrackerAgent).\n\n" +
+            "Tutup aplikasi ini, lalu jalankan ulang dengan klik kanan > Run as administrator.",
+        System.IO.IOException =>
+            "Operasi file gagal. Periksa ruang disk dan izin folder instalasi.",
+        System.Net.Http.HttpRequestException =>
+            "Tidak bisa menghubungi server. Periksa koneksi jaringan.",
+        System.Reflection.TargetInvocationException =>
+            "Ada kesalahan pada proses instalasi. Hubungi tim IT.",
+        System.UnauthorizedAccessException =>
+            "Izin ditolak. Jalankan installer dengan klik kanan > Run as administrator.",
+        _ => ex.Message
+    };
 
     /// <summary>
     /// A Windows sharing violation (ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION),
