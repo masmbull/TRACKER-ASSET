@@ -32,7 +32,7 @@
         </div>
         <div class="flex items-end gap-2">
             <x-button type="submit" variant="primary" size="sm">Filter</x-button>
-            <a href="{{ route('ike-bast.inspection.index') }}" class="text-theme-sm text-gray-500 hover:text-gray-700">Reset</a>
+            <a href="{{ route('ike-bast.inspection.index') }}" class="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-theme-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"><x-icon name="refresh" class="h-4 w-4" /> Reset</a>
         </div>
     </form>
 </x-card>

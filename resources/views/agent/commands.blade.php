@@ -134,21 +134,46 @@
                       workingDir: 'C:\\Temp\\Scripts',
                       notes: 'Blocks USB mass storage by setting the USBSTOR service to disabled.',
                   },
-                  'enable-usb': {
+                   'enable-usb': {
                       label: 'Enable USB storage',
                       body: @js(\App\Support\ScriptPresets::ENABLE_USB),
                       runAs: 'system',
                       workingDir: 'C:\\Temp\\Scripts',
-                      notes: 'Restores USB mass storage by setting the USBSTOR service back to manual.',
-                  },
-              },
+                       notes: 'Restores USB mass storage by setting the USBSTOR service back to manual.',
+                   },
+                   'printer-restart': {
+                       label: 'Restart Print Spooler',
+                       body: @js(\App\Support\ScriptPresets::RESTART_PRINT_SPOOLER),
+                       runAs: 'system',
+                       workingDir: 'C:\\Temp\\Scripts',
+                       target: 'device',
+                       notes: 'Restarts the Windows Print Spooler on one selected laptop. Runs unattended; no prompts.',
+                   },
+                   'printer-clear-queue': {
+                       label: 'Clear Stuck Print Jobs',
+                       body: @js(\App\Support\ScriptPresets::CLEAR_PRINT_QUEUE),
+                       runAs: 'system',
+                       workingDir: 'C:\\Temp\\Scripts',
+                       target: 'device',
+                       notes: 'DESTRUCTIVE: deletes all pending print jobs on one selected laptop, then restarts the Print Spooler. Confirm with the user first.',
+                   },
+                   'network-check': {
+                       label: 'Network Quick Check',
+                       body: @js(\App\Support\ScriptPresets::NETWORK_QUICK_CHECK),
+                       runAs: 'current-user',
+                       workingDir: 'C:\\Temp\\Scripts',
+                       target: 'device',
+                       notes: 'Read-only ipconfig diagnostic for one selected laptop.',
+                   },
+               },
               applyPreset(key) {
                   const p = this.presets[key];
                   if (!p) { return; }
                   this.body = p.body;
                   this.runAs = p.runAs;
                   this.workingDir = p.workingDir;
-                  this.notes = p.notes;
+                   this.notes = p.notes;
+                   if (p.target) { this.target = p.target; }
               },
               get filteredDevices() {
                   const q = this.deviceSearch.trim().toLowerCase();
@@ -213,7 +238,9 @@
                             class="rounded-lg border border-gray-200 px-2.5 py-1 text-theme-xs font-medium text-gray-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
                             x-text="p.label"></button>
                 </template>
+                <a href="{{ asset('downloads/MITOGROUP_IT_Support_Toolkit.bat') }}" download class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-theme-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"><x-icon name="download" class="h-3.5 w-3.5" /> Download full toolkit</a>
             </div>
+            <p class="mb-2 text-theme-xs text-warning-700 dark:text-warning-300">Full toolkit is interactive (UAC/menu prompts), so download and run it locally. The presets above are unattended-safe and default to one laptop.</p>
 
             <textarea name="script_body" x-model="body" rows="12" required
                       class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
@@ -248,7 +275,7 @@
             <div x-show="target === 'device' || target === 'devices'" x-cloak class="mt-3">
                 <div class="relative">
                     <span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-400">
-                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.04 9.37a6.33 6.33 0 1 1 12.67 0 6.33 6.33 0 0 1-12.67 0ZM9.37 1.54a7.83 7.83 0 1 0 4.98 13.88l2.82 2.82a.75.75 0 1 0 1.06-1.06l-2.82-2.82A7.83 7.83 0 0 0 9.37 1.54Z" fill="currentColor"/></svg>
+                        <x-icon name="search" class="h-4 w-4" />
                     </span>
                     <input type="search" x-model="deviceSearch" placeholder="Search laptop by name or hostname..."
                            class="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
@@ -260,7 +287,7 @@
                                 class="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2.5 text-left last:border-b-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5">
                             <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
                                   :class="(target === 'device' ? selected[0] === d.id : selected.includes(d.id)) ? 'border-brand-500 bg-brand-500' : 'border-gray-300 dark:border-gray-600'">
-                                <svg x-show="(target === 'device' ? selected[0] === d.id : selected.includes(d.id))" class="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.2 5 8.7l4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <x-icon x-show="(target === 'device' ? selected[0] === d.id : selected.includes(d.id))" name="check" class="h-3 w-3 text-white" />
                             </span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-theme-sm font-medium text-gray-700 dark:text-gray-200" x-text="d.name"></span>

@@ -129,6 +129,7 @@ class AgentFleetController extends Controller
             }
 
             $telemetry = $device->telemetry;
+            $fp = $device->fingerprint;
 
             $deviceStates[$device->id] = [
                 ...$state,
@@ -226,7 +227,6 @@ class AgentFleetController extends Controller
     public function index(Request $request)
     {
         $devices = AgentApiToken::query()
-            ->where('is_active', true)
             ->select([
                 'id', 'name', 'is_active', 'expires_at', 'last_used_at',
                 'device_id', 'agent_version',

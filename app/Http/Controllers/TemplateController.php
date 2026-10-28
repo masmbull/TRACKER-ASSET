@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Asset;
 use App\Models\DocumentTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,8 +12,11 @@ class TemplateController extends Controller
     public function index()
     {
         $templates = DocumentTemplate::orderBy('document_type')->get();
+        $assets = Auth::user()->can('viewAny', Asset::class)
+            ? Asset::query()->orderBy('asset_id')->get(['id', 'asset_id', 'brand', 'model'])
+            : collect();
 
-        return view('templates.index', compact('templates'));
+        return view('templates.index', compact('templates', 'assets'));
     }
 
     public function show(DocumentTemplate $template)

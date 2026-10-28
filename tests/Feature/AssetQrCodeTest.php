@@ -395,8 +395,7 @@ class AssetQrCodeTest extends TestCase
         $html = $response->getContent();
 
         $this->assertSame(1, substr_count($html, '<aside'));
-        $this->assertStringContainsString('sidebarExpanded = !sidebarExpanded', $html);
-        $this->assertStringContainsString('sidebarToggle = !sidebarToggle', $html);
+        $this->assertStringNotContainsString('data-sidebar-toggle', $html);
     }
 
     public function test_qr_sheet_can_be_filtered(): void

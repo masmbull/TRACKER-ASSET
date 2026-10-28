@@ -5,7 +5,10 @@
 @section('content')
 <x-page-header title="Documents" subtitle="Every generated FAT, BAST and handover record across all assets.">
     <x-slot:actions>
-        <x-button variant="secondary" size="sm" :href="'/templates'">Templates</x-button>
+        <div class="flex flex-wrap gap-2">
+            <x-button variant="secondary" size="sm" :href="route('templates.index')">Templates</x-button>
+            <span class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 text-theme-xs font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ number_format($totalDocuments) }} created</span>
+        </div>
     </x-slot:actions>
 </x-page-header>
 
@@ -95,7 +98,7 @@
                 {{ ($search !== '' || $type) ? 'No documents match this filter.' : 'No documents yet.' }}
             </p>
             @unless($search !== '' || $type)
-                <p class="mt-1 text-theme-xs text-gray-400">Open an asset and use the Documents tab to generate one.</p>
+                <p class="mt-1 text-theme-xs text-gray-400">Use a template to start a document, or open an asset and choose its Documents tab. Generated records will remain listed here.</p>
             @endunless
         </div>
     @endif

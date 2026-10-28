@@ -10,14 +10,14 @@
             <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">Set exceptions for an individual user without changing their base role.</p>
         </div>
         <a href="{{ route('users.index') }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
-            <svg fill="none" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <x-icon name="plus" class="h-4 w-4" />
             User directory
         </a>
     </div>
 
     @if(session('success'))
         <div class="mb-6 flex items-start gap-2.5 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-theme-sm text-success-700 dark:border-success-500/30 dark:bg-success-500/10 dark:text-success-300">
-            <svg class="mt-0.5 shrink-0" fill="none" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-3.2-8.3 2 2 4.4-4.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <x-icon name="success" class="mt-0.5 h-[18px] w-[18px] shrink-0" />
             <span>{{ session('success') }}</span>
         </div>
     @endif
@@ -30,7 +30,7 @@
                         <input type="hidden" name="user" value="{{ $selectedUser->id }}">
                     @endif
                     <span class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2">
-                        <svg class="fill-gray-400" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.04 9.37a6.33 6.33 0 1 1 11.32 3.95l2.82 2.82a.75.75 0 1 1-1.06 1.06l-2.82-2.82A6.33 6.33 0 0 1 3.04 9.37Zm6.33-4.83a4.83 4.83 0 1 0 0 9.66 4.83 4.83 0 0 0 0-9.66Z"/></svg>
+                        <x-icon name="search" class="h-[18px] w-[18px] shrink-0 text-gray-400" />
                     </span>
                     <input type="search" name="search" value="{{ request('search') }}" placeholder="Search users..."
                            class="w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pr-3 pl-10 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-brand-500/10 focus:ring-3 focus:outline-none dark:border-gray-700 dark:text-white/90 dark:placeholder:text-white/30">
@@ -113,7 +113,7 @@
                         @method('PUT')
                         <div class="space-y-6 p-5">
                             <div class="flex gap-3 rounded-xl border border-blue-light-200 bg-blue-light-50 px-4 py-3 text-theme-sm text-blue-light-800 dark:border-blue-light-500/30 dark:bg-blue-light-500/10 dark:text-blue-light-200">
-                                <svg class="mt-0.5 shrink-0" fill="none" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13.4v-3.9M10 6.6h.01M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <x-icon name="info" class="mt-0.5 h-[18px] w-[18px] shrink-0" />
                                 <p><strong>Inherit</strong> uses the base role. <strong>Allow</strong> grants an exception; <strong>Deny</strong> blocks it, even when the role normally allows it.</p>
                             </div>
 
@@ -149,7 +149,7 @@
                         <div class="flex items-center gap-3 border-t border-gray-200 bg-gray-50/70 px-5 py-4 dark:border-gray-800 dark:bg-gray-800/60">
                             <p class="text-theme-xs font-medium text-warning-600 dark:text-warning-500" x-show="dirty" x-cloak>Unsaved changes</p>
                             <button type="submit" class="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-theme-sm font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 focus:ring-brand-500/40 focus:ring-3 focus:outline-none">
-                                <svg fill="none" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h8l3 3v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm2 0v4h5V4M7 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <x-icon name="save" class="h-4 w-4" />
                                 Save access
                             </button>
                         </div>

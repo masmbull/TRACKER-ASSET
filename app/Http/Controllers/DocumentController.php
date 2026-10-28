@@ -38,6 +38,7 @@ class DocumentController extends Controller
 
         $type = $request->query('type');
         $search = trim((string) $request->query('q', ''));
+        $totalDocuments = Document::query()->count();
 
         $documents = Document::query()
             ->with(['asset', 'generator'])
@@ -60,6 +61,7 @@ class DocumentController extends Controller
             'types' => array_keys((array) config('documents.types', [])),
             'type' => $type,
             'search' => $search,
+            'totalDocuments' => $totalDocuments,
         ]);
     }
 
@@ -78,7 +80,15 @@ class DocumentController extends Controller
         // every type. It used to be ignored and the select always defaulted to
         // FAT, so linking straight to a BAST silently produced a FAT form with
         // the wrong sections and the wrong labels.
-        $selected = (string) $request->query('document_type', 'FAT');
+        $selectedTemplate = null;
+        if ($request->filled('template_id')) {
+            $selectedTemplate = DocumentTemplate::query()
+                ->whereKey($request->integer('template_id'))
+                ->where('is_active', true)
+                ->first();
+        }
+
+        $selected = (string) ($selectedTemplate?->document_type ?? $request->query('document_type', 'FAT'));
         if (! in_array($selected, $types, true)) {
             $selected = 'FAT';
         }
@@ -105,6 +115,7 @@ class DocumentController extends Controller
             'senderEmail' => $parties['sender']?->email,
             'types' => $types,
             'selectedType' => $selected,
+            'selectedTemplateId' => $selectedTemplate?->id,
             // Only this type's checklist. A TRANSFER has none, and rendering the
             // FAT list under a "Checklist FAT" heading on it is a lie about the
             // document being produced.
@@ -184,6 +195,15 @@ class DocumentController extends Controller
             'checklist.*' => 'nullable|in:pass,fail,na',
             'notes' => 'nullable|string',
         ]);
+
+        if (! empty($validated['template_id'])) {
+            $template = DocumentTemplate::query()->findOrFail($validated['template_id']);
+            if (! $template->is_active || $template->document_type !== $validated['document_type']) {
+                return back()->withInput()->withErrors([
+                    'template_id' => 'Choose an active template that matches the selected document type.',
+                ]);
+            }
+        }
 
         $document = $documents->generate($asset, $validated['document_type'], $validated, $request->user());
 

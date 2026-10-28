@@ -6,7 +6,7 @@
 <x-page-header title="Audit Agents" subtitle="Download and deploy the audit agent to devices. The agent runs silently in the background and sends hardware scans automatically.">
     <x-slot:actions>
         <a href="{{ route('agent.download.latest') }}" class="inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <x-icon name="download" class="h-4 w-4" />
             Download Agent
         </a>
     </x-slot:actions>
@@ -102,7 +102,7 @@
                             <td class="py-3 px-4">
                                 <div class="flex items-center gap-3">
                                     <div class="w-8 h-8 rounded-lg bg-brand-500/10 dark:bg-brand-500/20 flex items-center justify-center text-brand-500">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                        <x-icon name="laptop" class="h-4 w-4" />
                                     </div>
                                     <span class="font-medium text-gray-900 dark:text-white">{{ $token->name }}</span>
                                     @if($token->device_id)
@@ -154,7 +154,7 @@
                                 <div class="flex items-center justify-end gap-2">
                                     @if($token->isUsable())
                                         <a href="{{ route('agent.download', $token) }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                            <x-icon name="download" class="h-3.5 w-3.5" />
                                             Download
                                         </a>
                                     @else

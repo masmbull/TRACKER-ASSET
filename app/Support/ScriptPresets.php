@@ -58,4 +58,43 @@ if %errorlevel% equ 0 (
     exit /b 1
 )
 BAT;
+
+    /** Restart the Windows print queue service without prompting for input. */
+    public const RESTART_PRINT_SPOOLER = <<<'BAT'
+@echo off
+net stop spooler
+if errorlevel 1 (
+    echo [ERROR] Could not stop the Print Spooler.
+    exit /b 1
+)
+net start spooler
+if errorlevel 1 (
+    echo [ERROR] Could not start the Print Spooler.
+    exit /b 1
+)
+echo [OK] Print Spooler restarted.
+BAT;
+
+    /** Clear pending print jobs only after the spooler has stopped successfully. */
+    public const CLEAR_PRINT_QUEUE = <<<'BAT'
+@echo off
+net stop spooler
+if errorlevel 1 (
+    echo [ERROR] Could not stop the Print Spooler. No files were removed.
+    exit /b 1
+)
+del /q /f "%SystemRoot%\System32\spool\PRINTERS\*.*"
+net start spooler
+if errorlevel 1 (
+    echo [ERROR] Queue files were cleared, but the Print Spooler did not restart.
+    exit /b 1
+)
+echo [OK] Pending print jobs cleared and Print Spooler restarted.
+BAT;
+
+    /** Read-only network summary based on the toolkit's ipconfig action. */
+    public const NETWORK_QUICK_CHECK = <<<'BAT'
+@echo off
+ipconfig
+BAT;
 }

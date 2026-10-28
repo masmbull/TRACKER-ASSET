@@ -1,78 +1,71 @@
-# Architecture — TRACKER-ASSET
+# Architecture and trust boundaries
 
 ## Overview
 
-TRACKER-ASSET is a web-based IT Asset Management system for MITO Group. It replaces the legacy workflow of Excel spreadsheets, a Windows audit `.exe`, and manual FAT/BAST document creation.
+TRACKER-ASSET is the system of record for IT assets, assignment history, audits, generated
+documents, agent enrollment, and operational activity. Excel is an import/export format,
+not a database. The Windows agent collects readings; Laravel owns validation, comparison,
+authorization, and persistence.
 
-## Technology Stack
+## Runtime components
 
-| Layer | Technology |
+| Component | Responsibility |
 |---|---|
-| Backend | Laravel (PHP) |
-| Database | PostgreSQL |
-| Frontend | Blade + Livewire + Alpine.js + Tailwind CSS |
-| Cache | Redis |
-| Mail | Mailpit (local) |
-| Infrastructure | Docker Compose |
-| Authentication | Microsoft Entra ID (OAuth/OIDC) |
+| Browser | Responsive Blade/Livewire UI, Alpine interactions, forms and modal workflows |
+| Nginx | HTTP entry point, static built assets, FastCGI forwarding |
+| Laravel 13 / PHP 8.4 | Web/API routes, business services, policies, audit rules, PDF generation |
+| PostgreSQL | Persistent application data and document metadata |
+| Redis | Optional cache/session/queue backend; configured per deployment |
+| Scheduler | Periodic stale-command resolution and scheduled audit work |
+| TrackerAgent (.NET 8) | Windows inventory collection, heartbeat, polling and command execution |
+| Local/object storage | PDFs, attachments, agent releases; configured per deployment |
 
-## Architecture Diagram
+Tailwind CSS 4 and Vite build the front end. Dompdf generates PDFs, Laravel Excel handles
+spreadsheet workflows, and Simple QR Code renders labels. Microsoft Entra ID and Microsoft
+Graph are optional integrations, not prerequisites for local login.
 
-```text
-Browser (Chrome/Brave)
-   │ HTTPS
-   ▼
-Nginx (reverse proxy, production) / Laravel dev server (local :8000)
-   │
-   ▼
-Laravel Application
-   ├── HTTP Kernel
-   ├── Routes
-   ├── Controllers / Livewire Components
-   ├── Services (business logic)
-   ├── Models / Eloquent ORM
-   └── Policies / Gates (RBAC)
-   │
-   ├── PostgreSQL (primary data store)
-   ├── Redis (cache, sessions, queue)
-   └── File Storage (attachments; metadata in DB, files in SharePoint eventually)
+## Request and data flow
+
+```mermaid
+flowchart LR
+    Browser -->|session-authenticated| Nginx --> Laravel
+    Agent[Windows agent] -->|token-authenticated JSON| API[Laravel API]
+    Laravel --> Policies[Policies and validation]
+    API --> Policies
+    Policies --> Services[Domain services]
+    Services --> DB[(PostgreSQL)]
+    Services --> Files[(Configured storage)]
+    Scheduler[Laravel scheduler] --> Services
 ```
 
-## Key Principles
+## Core workflows
 
-1. **ONE ASSET = ONE SOURCE OF TRUTH** — PostgreSQL asset record is the single source of truth. All other data references it.
-2. **Excel is import/export only** — never the primary database.
-3. **Business logic stays in Laravel** — not in Excel formulas, not in the audit agent, not in the client.
-4. **History is immutable** — asset changes are recorded, never silently overwritten.
-5. **Local first** — develop and test entirely with Docker Compose before any production deployment.
+1. **Assets:** register/import → validate → persist asset and history → search/filter/export.
+2. **Transfers:** validate current and destination assignment → write assignment/transfer
+   history in a transaction → log the actor.
+3. **Audits:** agent posts readings → Laravel resolves an asset and compares fields → save
+   MATCH/MISMATCH/unknown result → a human chooses whether to update registered data.
+4. **Fleet:** authenticated agent polls and reports → UI displays health → authorized
+   operator queues a command → agent acknowledges/reports progress → UI tracks completion.
+5. **Documents:** choose a template in a modal → choose/confirm the asset and type → form is
+   prefilled → Laravel validates and renders PDF → metadata, payload, and activity are saved
+   → document remains available under `/documents` and on the asset record.
 
-## Module Breakdown
+## Security and reliability principles
 
-| Module | Description |
-|---|---|
-| Dashboard | KPI cards, charts, warnings, recent activity |
-| Asset Management | CRUD, search, filter, import/export |
-| Asset Detail | Overview, Hardware, Assignment History, Audit, Repair History, Documents, Activity Log |
-| Audit | Compare registered vs actual device values, save audit history |
-| Transfer | Transfer workflow with assignment history |
-| Repair | Repair history tracking |
-| FAT / BAST | Document generation from asset data, PDF output |
-| Documents / Attachments | File attachments linked to assets |
-| Master Data | Companies, Locations, Categories, Users, Statuses |
-| Activity Log | Immutable audit trail of all mutations |
+- Authorization is server-side (policies and gates); hiding a UI action is not authorization.
+- Agent tokens are scoped, revocable, and stored as hashes. Treat the one-time issued value
+  as a secret and deliver it only through approved channels.
+- The app does not seed shared/default user passwords. Provision the initial admin with
+  `php artisan tracker:admin:create` from an interactive trusted terminal.
+- Keep `.env`, signing keys, user passwords, and agent tokens out of Git and documentation.
+- One dependency failure must not prevent the service monitor from reporting other probes.
+- Dynamic authenticated HTML/JSON and API polling must not be served cache-first by the PWA.
+- Preserve activity and assignment history; changes to registered asset data are explicit.
 
-## Environment
+## Environments
 
-- **Local:** Docker Compose (Windows + Docker Desktop)
-- **Production:** Docker Compose on the office Ubuntu server behind Nginx/HTTPS
-
-## Performance Targets
-
-| Operation | Target |
-|---|---|
-| Asset list | < 2 sec |
-| Search | < 1 sec |
-| Dashboard | < 3 sec |
-| PDF generation | < 5 sec |
-
-Supported scale: 10,000+ assets, 100+ concurrent users.
+- **Local:** Docker Compose, local authentication, PostgreSQL, Redis, and Mailpit. SQLite is
+  available for quick tests.
+- **Production:** versioned container image, PostgreSQL, Redis, a separate scheduler,
+  storage volumes, and Nginx behind HTTPS. See [`deployment.md`](deployment.md).

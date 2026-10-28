@@ -2,48 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
+/**
+ * Accounts are provisioned interactively, never with a shared/default password.
+ *
+ * Kept as a no-op because DatabaseSeeder includes it and existing installations
+ * may still call it directly. Use `php artisan tracker:admin:create` for the
+ * first administrator, then invite/manage other users in the application.
+ */
 class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        User::firstOrCreate([
-            'email' => 'shohibul.anwar@mito.co.id',
-        ], [
-            'name' => 'Shohibul Anwar',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-            'is_active' => true,
-        ]);
-
-        User::firstOrCreate([
-            'email' => 'it-support@mito.co.id',
-        ], [
-            'name' => 'IT Support',
-            'password' => Hash::make('password'),
-            'role' => 'support',
-            'is_active' => true,
-        ]);
-
-        User::firstOrCreate([
-            'email' => 'it-technician@mito.co.id',
-        ], [
-            'name' => 'IT Technician',
-            'password' => Hash::make('password'),
-            'role' => 'technician',
-            'is_active' => true,
-        ]);
-
-        User::firstOrCreate([
-            'email' => 'viewer@mito.co.id',
-        ], [
-            'name' => 'Viewer',
-            'password' => Hash::make('password'),
-            'role' => 'viewer',
-            'is_active' => true,
-        ]);
+        $this->command?->info('No default users created. Provision an administrator with tracker:admin:create.');
     }
 }

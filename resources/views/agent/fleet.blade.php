@@ -125,12 +125,12 @@
                                      never reported it (pre-1.4.3 build). --}}
                                 @if($telemetry?->is_elevated === true)
                                     <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-300" title="Agent runs with administrator rights — can run system-level scripts">
-                                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1 3 4v6c0 4.4 3 8 7 9 4-1 7-4.6 7-9V4l-7-3Zm3.7 6.7-4.4 4.4a1 1 0 0 1-1.4 0L6.3 10.5a1 1 0 0 1 1.4-1.4l.9.9 3.7-3.7a1 1 0 1 1 1.4 1.4Z" clip-rule="evenodd"/></svg>
+                                        <x-icon name="access" class="h-2.5 w-2.5" />
                                         admin
                                     </span>
                                 @elseif($telemetry?->is_elevated === false)
                                     <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/10 dark:text-warning-300" title="Agent runs as a standard user — system-level scripts will fail until it is elevated">
-                                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.5 2h3l.4 2.2 1.6.9 2-1 1.5 2.6-1.7 1.4v1.8l1.7 1.4-1.5 2.6-2-1-1.6.9L11.5 16h-3l-.4-2.2-1.6-.9-2 1-1.5-2.6 1.7-1.4V8.1L3 6.7l1.5-2.6 2 1 1.6-.9L8.5 2ZM10 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" clip-rule="evenodd"/></svg>
+                                        <x-icon name="settings" class="h-2.5 w-2.5" />
                                         no admin
                                     </span>
                                 @endif
@@ -232,7 +232,7 @@
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
                             @if($fp?->is_elevated === true)
-                                <span class="font-medium text-success-600 dark:text-success-400">🛡️ Admin Elevated</span>
+                                <span class="inline-flex items-center gap-1 font-medium text-success-600 dark:text-success-400"><x-icon name="access" class="h-3.5 w-3.5" /> Admin Elevated</span>
                             @elseif($fp?->is_elevated === false)
                                 <span class="font-medium text-gray-500 dark:text-gray-400">👤 Standard User</span>
                             @else
@@ -283,23 +283,23 @@
                         </td>
                         <td class="py-3 px-3">
                             <div class="flex flex-wrap items-center justify-end gap-2">
-                                <x-row-action variant="brand" @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</x-row-action>
+                                <x-row-action variant="brand" icon="eye" @click="$dispatch('open-modal', 'device-{{ $device->id }}')">Detail</x-row-action>
 
                                 @if($device->isUsable())
                                     @if($device->canBeWoken())
                                         <form method="POST" action="{{ route('agent.wake', $device) }}" data-modal-action class="inline-flex">
                                             @csrf
-                                            <x-row-action type="submit" title="Send Wake on LAN magic packet">Wake</x-row-action>
+                                            <x-row-action type="submit" icon="wake" title="Send Wake on LAN magic packet">Wake</x-row-action>
                                         </form>
                                     @endif
                                     @if($telemetry?->ip_address)
-                                        <x-row-action variant="info" href="{{ route('agent.rdp', $device) }}" title="Download and open Remote Desktop connection file">RDP</x-row-action>
-                                        <x-row-action href="{{ route('agent.rdp', $device) }}" title="Download .rdp file">.RDP</x-row-action>
+                                        <x-row-action variant="info" icon="remote" href="{{ route('agent.rdp', $device) }}" title="Download and open Remote Desktop connection file">RDP</x-row-action>
+                                        <x-row-action icon="download" href="{{ route('agent.rdp', $device) }}" title="Download .rdp file">.RDP</x-row-action>
                                     @endif
-                                    <x-row-action @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
+                                    <x-row-action icon="power" @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
                                     <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
                                         @csrf
-                                        <x-row-action type="submit">Scan</x-row-action>
+                                        <x-row-action type="submit" icon="laptop-pulse">Scan</x-row-action>
                                     </form>
                                     {{-- Per-device update. Until this existed, moving one
                                          laptop onto a new build meant Update All, which
@@ -308,7 +308,7 @@
                                          device is actually behind: offering it on a
                                          current device invites a pointless restart. --}}
                                     @if($device->isOutdated() === true)
-                                        <x-row-action variant="warning" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</x-row-action>
+                                        <x-row-action variant="warning" icon="refresh" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</x-row-action>
                                     @endif
                                     {{-- Promote to admin. Only shown when the agent
                                          has reported it is a standard user: asking an
@@ -316,7 +316,7 @@
                                          UAC prompt. Null (never reported) shows
                                          nothing, since we do not know its state. --}}
                                     @if($telemetry?->is_elevated === false)
-                                        <x-row-action @click="$dispatch('open-modal', 'confirm-elevate-agent-{{ $device->id }}')">Make admin</x-row-action>
+                                        <x-row-action icon="shield-plus" @click="$dispatch('open-modal', 'confirm-elevate-agent-{{ $device->id }}')">Make admin</x-row-action>
                                     @endif
                                 @endif
 
@@ -377,7 +377,7 @@
                                 @elseif($isUninstallQueued)
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
-                                    <x-row-action variant="danger" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
+                                    <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
                                 @endif
                             </div>
                         </td>
@@ -445,7 +445,7 @@
                          then decides whether it belongs on the register. --}}
                     <a href="{{ route('agent.promote', $device) }}"
                        class="text-theme-sm font-medium text-warning-600 hover:text-warning-700">
-                        Add to register →
+                        Add to register <x-icon name="arrow-right" class="h-4 w-4" />
                     </a>
                 @endif
                     @if($t?->hostname)
@@ -559,7 +559,7 @@
                                     <form method="POST" action="{{ route('audit.apply-scan', $audit) }}" class="mt-2">
                                         @csrf
                                         <button type="submit" class="mt-2 inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-theme-xs font-bold text-warning-700 transition-all duration-200 hover:bg-warning-100 active:scale-95 dark:text-warning-300 dark:hover:bg-warning-500/20">
-                                            Update {{ $audit->asset->asset_id }} from this scan →
+                                            Update {{ $audit->asset->asset_id }} from this scan <x-icon name="arrow-right" class="h-4 w-4" />
                                         </button>
                                     </form>
                                 </div>
@@ -601,9 +601,7 @@
             <div class="space-y-4">
                 <div class="flex items-start gap-3">
                     <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-error-50 text-error-500 dark:bg-error-500/15">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                        </svg>
+                        <x-icon name="warning" class="h-5 w-5" />
                     </span>
                     <p class="text-theme-sm text-gray-600 dark:text-gray-300">
                         Remove the agent from <span class="font-semibold text-gray-800 dark:text-white">{{ $device->name }}</span>?

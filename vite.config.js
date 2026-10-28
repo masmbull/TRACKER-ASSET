@@ -9,9 +9,9 @@ export default defineConfig({
             input: ['resources/css/app.css', 'resources/js/app.js'],
             refresh: true,
             fonts: [
-                bunny('Outfit', {
-                    weights: [400, 500, 600, 700],
-                    preload: [{ weight: 400 }, { weight: 600 }],
+                bunny('Plus Jakarta Sans', {
+                    weights: [400, 500, 600, 700, 800],
+                    preload: [{ weight: 400 }, { weight: 700 }],
                     // fontaine not installed; skip metric-matched fallbacks
                     optimizedFallbacks: false,
                 }),
