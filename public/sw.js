@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tracker-asset-v5';
+const CACHE_NAME = 'tracker-asset-v7';
 const APP_SHELL = [
     '/',
     '/login',
@@ -33,6 +33,20 @@ self.addEventListener('fetch', (event) => {
 
     const requestUrl = new URL(event.request.url);
     if (requestUrl.origin !== self.location.origin) {
+        return;
+    }
+
+    // Never serve/cache dynamic HTML or JSON through cache-first. Authenticated
+    // page fragments (services, fleet polling, command state) are user/session
+    // specific and must always reach the server.
+    const accept = event.request.headers.get('Accept') || '';
+    if (event.request.mode !== 'navigate' && (
+        event.request.headers.has('X-Requested-With')
+        || accept.includes('text/html')
+        || accept.includes('application/json')
+        || requestUrl.pathname.startsWith('/api/')
+    )) {
+        event.respondWith(fetch(event.request));
         return;
     }
 

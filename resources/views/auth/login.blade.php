@@ -15,28 +15,27 @@
                 } else {
                     document.documentElement.classList.remove('dark');
                 }
-                if (sessionStorage.getItem('mito-splash-seen') === '1') {
-                    document.documentElement.classList.add('mito-splash-seen');
-                }
             } catch (e) {}
         })();
     </script>
-    <style>.mito-splash-seen #mito-splash{display:none!important}</style>
 </head>
-<body class="h-full bg-white font-outfit dark:bg-gray-950">
-    <div id="top-progress" aria-hidden="true"></div>
-    <div id="mito-splash" class="fixed inset-0 z-[1000000] flex items-center justify-center bg-white dark:bg-black" aria-hidden="true">
-        <div class="animate-scale-in flex flex-col items-center gap-4">
-            <x-mito-loader size="xl" />
-            <p class="text-theme-sm font-semibold tracking-widest text-gray-400 uppercase">Tracker-Asset</p>
-        </div>
+<body class="h-full font-sans" data-mito-logo="{{ asset('images/mito-icon.png') }}">
+
+    {{-- Ambient background, same layers as the app shell (see layouts/app.blade.php). --}}
+    <div class="app-aurora" aria-hidden="true">
+        <div class="app-aurora-blob app-aurora-blob-red"></div>
+        <div class="app-aurora-blob app-aurora-blob-amber"></div>
     </div>
 
-    <div class="grid min-h-full lg:grid-cols-2">
+    <div id="top-progress" role="progressbar" aria-label="Page loading" aria-valuemin="0" aria-valuemax="100">
+        <span class="top-progress-orbit" aria-hidden="true"><img src="{{ asset('images/mito-icon.png') }}" alt="" width="24" height="24"></span>
+        <span class="top-progress-label" aria-hidden="true">Loading</span>
+    </div>
+    <div class="relative grid min-h-full lg:grid-cols-2">
 
         {{-- Brand panel. Hidden below lg so a phone gets the form without a wall
              of marketing first; on desktop it is the left half of the split. --}}
-        <aside class="relative hidden overflow-hidden bg-gray-900 lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <aside class="login-brand-panel relative hidden overflow-hidden bg-gray-900 lg:flex lg:flex-col lg:justify-between lg:p-12">
             {{-- Depth without an image: layered brand glows on a dark base read as
                  a deliberate surface, and cost nothing to ship. --}}
             <div class="pointer-events-none absolute inset-0" aria-hidden="true">
@@ -56,6 +55,7 @@
             </div>
 
             <div class="relative z-10 max-w-md">
+                <span class="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-brand-300 shadow-lg shadow-black/10"><x-icon name="inventory" class="h-6 w-6" /></span>
                 <h1 class="text-3xl font-bold leading-tight text-white">
                     Track every asset,<br>from anywhere.
                 </h1>
@@ -71,7 +71,7 @@
                     ] as $point)
                         <li class="flex items-center gap-3 text-theme-sm text-white/75">
                             <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-brand-300">
-                                <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.1 3.1 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>
+                                <x-icon name="check" class="h-3 w-3" />
                             </span>
                             {{ $point }}
                         </li>
@@ -84,7 +84,9 @@
 
         {{-- Form panel. --}}
         <main class="flex flex-col items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
-            <div class="animate-fade-up w-full max-w-sm">
+            {{-- Glass card: floats over the aurora so the form surface feels
+                 like an app window, not a sheet of paper. --}}
+            <div class="login-card animate-fade-up w-full max-w-sm rounded-2xl border border-gray-200/70 bg-white/85 p-7 shadow-theme-xl backdrop-blur-xl dark:border-gray-700/60 dark:bg-gray-900/85 sm:p-9">
 
                 {{-- Compact brand for mobile, where the panel above is hidden. --}}
                 <div class="mb-8 text-center lg:hidden">
@@ -95,13 +97,14 @@
                 </div>
 
                 <div class="mb-8 hidden lg:block">
+                    <span class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><x-icon name="access" class="h-5 w-5" /></span>
                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Sign in</h2>
                     <p class="mt-1.5 text-theme-sm text-gray-500 dark:text-gray-400">Welcome back. Enter your details to continue.</p>
                 </div>
 
                 @if ($errors->any())
                     <div class="mb-5 flex items-center gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-theme-sm font-medium text-error-700 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-300">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M10 2C5.58 2 2 5.58 2 10s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm-.75 4.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z" fill="currentColor"/></svg>
+                        <x-icon name="info" class="h-5 w-5 shrink-0" />
                         {{ $errors->first() }}
                     </div>
                 @endif
@@ -110,32 +113,31 @@
                     @csrf
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Email address</label>
-                        <input type="email" name="email" value="{{ old('email') }}" required autofocus
-                               class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-none dark:border-gray-700 dark:text-white dark:placeholder:text-gray-500"
+                        <div class="relative">
+                            <x-icon name="mail" class="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+                            <input type="email" name="email" value="{{ old('email') }}" required autofocus
+                               class="w-full rounded-xl border border-gray-200 bg-white/70 py-3 pl-10 pr-4 text-theme-sm text-gray-800 placeholder:text-gray-400 shadow-sm transition focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:border-gray-700 dark:bg-gray-800/60 dark:text-white dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
                                placeholder="you@company.com">
+                        </div>
                     </div>
                     <div x-data="{ show: false }">
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
                         <div class="relative">
+                            <x-icon name="lock" class="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
                             <input :type="show ? 'text' : 'password'" name="password" required
-                                   class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 pr-11 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-none dark:border-gray-700 dark:text-white dark:placeholder:text-gray-500"
+                                   class="w-full rounded-xl border border-gray-200 bg-white/70 py-3 pl-10 pr-11 text-theme-sm text-gray-800 placeholder:text-gray-400 shadow-sm transition focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-500/10 focus:outline-none dark:border-gray-700 dark:bg-gray-800/60 dark:text-white dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
                                    placeholder="Enter your password">
                             <button type="button" @click="show = !show"
-                                    class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-200"
+                                    class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition-colors hover:text-brand-600 dark:hover:text-brand-300"
                                     :aria-label="show ? 'Hide password' : 'Show password'">
-                                <svg x-show="!show" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                </svg>
-                                <svg x-show="show" x-cloak xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                                </svg>
+                                <x-icon x-show="!show" name="eye" class="h-5 w-5" />
+                                <x-icon x-show="show" x-cloak name="eye-off" class="h-5 w-5" />
                             </button>
                         </div>
                     </div>
                     <button type="submit"
-                            class="w-full rounded-lg bg-brand-500 py-2.5 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 hover:bg-brand-600 active:scale-[0.99] disabled:opacity-80">
-                        Sign in
+                            class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 py-3 text-theme-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:from-brand-700 hover:to-brand-600 hover:shadow-brand-500/30 active:translate-y-0 disabled:opacity-80">
+                        <span>Sign in</span><x-icon name="arrow-right" class="h-4 w-4" />
                     </button>
                 </form>
 

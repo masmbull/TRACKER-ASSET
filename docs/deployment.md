@@ -1,4 +1,8 @@
-# Deployment — TRACKER-ASSET
+# Production deployment — TRACKER-ASSET
+
+This runbook is for a **new server** as well as regular releases. Keep credentials in the
+server's private environment file or a secrets manager and in GitHub's protected Actions
+settings—never in this document, an issue, terminal transcript, or commit.
 
 ## Production Target
 
@@ -33,26 +37,26 @@ nothing to run by hand for a normal release.
 
 On the server:
 
-1. Install Docker Engine and the Compose v2 plugin:
+1. Install Docker Engine and the Compose v2 plugin using Docker's official installation
+   guide for the server operating system.
+2. Create a private deployment directory and environment file:
    ```bash
-   curl -fsSL https://get.docker.com | sh
+   sudo install -d -m 750 /opt/tracker-asset
+   sudo install -m 600 /dev/null /opt/tracker-asset/.env
+   sudoedit /opt/tracker-asset/.env
    ```
-2. Create the deploy directory and the environment file it reads:
+   Configure at least `APP_KEY`, `APP_URL`, `ASSET_QR_BASE_URL`, `DB_DATABASE`,
+   `DB_USERNAME`, `DB_PASSWORD`, and the required `MAIL_*` values. Generate unique values
+   with an approved secrets manager; do not copy development or example credentials.
+   The deployment workflow uploads Compose/Nginx configuration, **not** this environment
+   file.
+3. Put the dedicated deploy user in the `docker` group so it can run Compose:
    ```bash
-   sudo mkdir -p /opt/tracker-asset
-   sudo nano /opt/tracker-asset/.env
+   sudo usermod -aG docker DEPLOY_USER_NAME
    ```
-   Fill in at least `APP_KEY` (`php artisan key:generate --show`), `APP_URL`,
-   `ASSET_QR_BASE_URL`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` and your
-   `MAIL_*` settings. This file is never committed and never uploaded by the
-   workflow — it is the one thing only you can write.
-3. Put the deploy user in the `docker` group so it can run Compose without sudo:
-   ```bash
-   sudo usermod -aG docker "$USER"   # log out and back in afterwards
-   ```
-4. Point the reverse proxy / Cloudflare tunnel for
-   `tracker.growthuptogether.web.id` at the host's port 80 (or whatever
-   `HTTP_PORT` you set in `.env`).
+   Re-login for the group change to take effect. Membership in the Docker group grants
+   root-equivalent access; use a dedicated trusted account.
+4. Point the HTTPS reverse proxy or tunnel at the server's configured `HTTP_PORT`.
 
 In GitHub, under **Settings → Secrets and variables → Actions**, add:
 
@@ -67,7 +71,28 @@ In GitHub, under **Settings → Secrets and variables → Actions**, add:
 Nothing else is needed: the GHCR pull authenticates with the run's own
 `GITHUB_TOKEN`, so there is no registry password to store.
 
-### Then
+### First deployment and administrator provisioning
+
+1. Push the reviewed release to `main` and wait for CI and Deploy to finish.
+2. Confirm the app, PostgreSQL, Redis, Nginx, and scheduler containers are healthy.
+   The app entrypoint applies migrations and reference-data seeders. It does **not** create
+   a shared/default user account.
+3. Create the initial administrator interactively on the server. The prompt masks
+   passwords and only the password hash is stored:
+
+   ```bash
+   cd /opt/tracker-asset
+   docker compose -f docker-compose.prod.yml exec app php artisan tracker:admin:create
+   ```
+
+4. Sign in, add other users through **Access Control**, verify `/services`, and confirm
+   HTTPS, monitoring, and backups before operational handover.
+
+If the command reports an administrator already exists, use the authorized account
+management/recovery procedure; do not create a second bootstrap credential by editing
+the database directly.
+
+### Regular releases
 
 Push to `main` and watch the **Deploy** workflow. It uploads
 `docker-compose.prod.yml` and `docker/nginx.conf`, pulls the commit's image,

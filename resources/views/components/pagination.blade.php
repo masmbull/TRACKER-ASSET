@@ -7,11 +7,11 @@
     <div class="flex items-center gap-1">
         @if($paginator->onFirstPage())
             <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-300 cursor-not-allowed dark:border-gray-700 dark:text-gray-600">
-                <svg class="fill-current" width="16" height="16" viewBox="0 0 16 16"><path d="M10.4 12.4L6.8 8.8L10.4 5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <x-icon name="chevron-left" class="h-4 w-4" />
             </span>
         @else
             <a href="{{ $paginator->previousPageUrl() }}" class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-800 transition-all duration-200 active:scale-95 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
-                <svg class="fill-current" width="16" height="16" viewBox="0 0 16 16"><path d="M10.4 12.4L6.8 8.8L10.4 5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <x-icon name="chevron-left" class="h-4 w-4" />
             </a>
         @endif
 
@@ -32,11 +32,11 @@
 
         @if($paginator->hasMorePages())
             <a href="{{ $paginator->nextPageUrl() }}" class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all duration-200 active:scale-95 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
-                <svg class="fill-current" width="16" height="16" viewBox="0 0 16 16"><path d="M5.6 12.4L9.2 8.8L5.6 5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <x-icon name="chevron-right" class="h-4 w-4" />
             </a>
         @else
             <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-300 cursor-not-allowed dark:border-gray-700 dark:text-gray-600">
-                <svg class="fill-current" width="16" height="16" viewBox="0 0 16 16"><path d="M5.6 12.4L9.2 8.8L5.6 5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <x-icon name="chevron-right" class="h-4 w-4" />
             </span>
         @endif
     </div>

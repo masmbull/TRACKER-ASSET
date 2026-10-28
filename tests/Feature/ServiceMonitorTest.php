@@ -22,6 +22,17 @@ class ServiceMonitorTest extends TestCase
             ->assertSee('Services')
             ->assertSee('Database')
             ->assertSee('Cache')
+            ->assertSee('Session store')
+            ->assertSee('PHP runtime')
+            ->assertSee('Laravel framework')
+            ->assertSee('Livewire UI engine')
+            ->assertSee('Excel import engine')
+            ->assertSee('PDF generation engine')
+            ->assertSee('QR code engine')
+            ->assertSee('PWA service worker')
+            ->assertSee('Microsoft Entra ID')
+            ->assertSee('Microsoft Graph')
+            ->assertSee('Amazon S3 storage')
             ->assertSee('Scheduler')
             ->assertSee('Health endpoint');
     }
@@ -101,7 +112,12 @@ class ServiceMonitorTest extends TestCase
 
         $this->assertNotNull($health, 'the health endpoint row should still be listed');
         $this->assertSame('skipped', $health['status'], 'phpunit disables the loopback probe, so it cannot run');
-        $this->assertSame(1, $report['skipped']);
+        $this->assertGreaterThanOrEqual(1, $report['skipped']);
+        $this->assertSame(
+            collect($report['services'])->where('status', 'skipped')->count(),
+            $report['skipped'],
+            'every integration that is disabled or not probeable remains visible and counted as skipped'
+        );
         $this->assertSame(
             $report['total'] - $report['healthy'] - $report['skipped'],
             $report['down'],
@@ -298,10 +314,10 @@ class ServiceMonitorTest extends TestCase
 
     /**
      * Redis is not a dependency unless something is configured to use it. A
-     * local install on file cache and sync queue must not show a red row for a
-     * service it never asked for.
+     * local install on file cache and sync queue must show Redis as not checked,
+     * rather than misleadingly calling an unused backend healthy or down.
      */
-    public function test_redis_is_not_reported_down_when_nothing_uses_it(): void
+    public function test_redis_is_skipped_when_nothing_uses_it(): void
     {
         config([
             'cache.default' => 'file',
@@ -312,7 +328,7 @@ class ServiceMonitorTest extends TestCase
         $report = app(ServiceHealthChecker::class)->check();
         $redis = collect($report['services'])->firstWhere('name', 'Redis');
 
-        $this->assertSame('ok', $redis['status']);
+        $this->assertSame('skipped', $redis['status']);
         $this->assertStringContainsString('not in use', $redis['detail']);
     }
 }

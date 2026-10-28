@@ -15,7 +15,7 @@
                 {{ $slot }}
             @else
             <tr>
-                <td colspan="{{ count($headers) }}" class="py-12 text-center text-theme-sm text-gray-400">{{ $emptyText }}</td>
+                <td colspan="{{ count($headers) }}" class="py-12 text-center text-theme-sm text-gray-400"><span class="flex flex-col items-center gap-2"><x-icon name="inventory" class="h-7 w-7 opacity-60" /><span>{{ $emptyText }}</span></span></td>
             </tr>
             @endif
         </tbody>

@@ -35,6 +35,9 @@
                             </button>
                         </td>
                         <td class="py-3 px-4">
+                            @if($template->is_active)
+                                <button type="button" @click="$dispatch('open-modal', 'use-template-{{ $template->id }}')" class="text-theme-sm font-medium text-brand-600 hover:text-brand-700">Use template</button>
+                            @endif
                             <button type="button" @click="$dispatch('open-modal', 'delete-template-{{ $template->id }}')" class="text-theme-sm font-medium text-error-500 hover:text-error-600">Delete</button>
                         </td>
                     </tr>
@@ -47,6 +50,35 @@
 </x-card>
 
 @foreach($templates as $template)
+    @if($template->is_active)
+        <x-modal id="use-template-{{ $template->id }}" title="Create document from template" maxWidth="md">
+            <div class="space-y-4">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">Template <strong class="text-gray-900 dark:text-white">{{ $template->name }}</strong> · {{ $template->document_type }}. Choose an asset to continue to the document form.</p>
+                @if($assets->isNotEmpty())
+                    <form method="GET" data-template-launch action="/assets/0/documents/generate" class="space-y-4">
+                        <input type="hidden" name="template_id" value="{{ $template->id }}">
+                        <input type="hidden" name="document_type" value="{{ $template->document_type }}">
+                        <div>
+                            <label for="template-asset-{{ $template->id }}" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Asset</label>
+                            <select id="template-asset-{{ $template->id }}" data-asset-select required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                                <option value="">Select an asset</option>
+                                @foreach($assets as $asset)
+                                    <option value="{{ $asset->id }}">{{ $asset->asset_id }} · {{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" @click="$dispatch('close-modal', 'use-template-{{ $template->id }}')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                            <x-button type="submit" variant="primary">Continue</x-button>
+                        </div>
+                    </form>
+                @else
+                    <p class="text-theme-sm text-gray-500">No assets are available.</p>
+                @endif
+            </div>
+        </x-modal>
+    @endif
+
     <x-modal id="toggle-template-{{ $template->id }}" title="Toggle template status" maxWidth="md">
         <div class="space-y-4">
             <p class="text-theme-sm text-gray-600 dark:text-gray-300">
@@ -83,4 +115,13 @@
         </div>
     </x-modal>
 @endforeach
+<script>
+    document.querySelectorAll('form[data-template-launch]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            const assetId = form.querySelector('[data-asset-select]')?.value;
+            if (!assetId) { event.preventDefault(); return; }
+            form.action = `/assets/${encodeURIComponent(assetId)}/documents/generate`;
+        });
+    });
+</script>
 @endsection

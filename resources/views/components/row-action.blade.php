@@ -1,4 +1,4 @@
-@props(['variant' => 'neutral', 'href' => null, 'type' => 'button'])
+@props(['variant' => 'neutral', 'href' => null, 'type' => 'button', 'icon' => null])
 
 {{-- One action in a table row.
 
@@ -29,7 +29,7 @@ $base = 'inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text
 @endphp
 
 @if($href)
-<a href="{{ $href }}" {{ $attributes->class([$base, $variants[$variant] ?? $variants['neutral']]) }}>{{ $slot }}</a>
+<a href="{{ $href }}" {{ $attributes->class([$base, $variants[$variant] ?? $variants['neutral']]) }}>@if($icon)<x-icon :name="$icon" class="h-3.5 w-3.5 shrink-0" />@endif{{ $slot }}</a>
 @else
-<button type="{{ $type }}" {{ $attributes->class([$base, $variants[$variant] ?? $variants['neutral']]) }}>{{ $slot }}</button>
+<button type="{{ $type }}" {{ $attributes->class([$base, $variants[$variant] ?? $variants['neutral']]) }}>@if($icon)<x-icon :name="$icon" class="h-3.5 w-3.5 shrink-0" />@endif{{ $slot }}</button>
 @endif

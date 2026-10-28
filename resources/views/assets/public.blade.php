@@ -96,7 +96,7 @@
 
         <div class="actions">
             <a class="btn btn-primary" href="{{ route('assets.public.pdf', $asset->qr_token) }}">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0 4-4m-4 4-4-4M5 20h14"/></svg>
+                <x-icon name="download" class="h-[18px] w-[18px]" />
                 Download PDF
             </a>
         </div>

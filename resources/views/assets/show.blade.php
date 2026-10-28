@@ -157,7 +157,7 @@
         <x-card>
             <div class="flex flex-wrap items-center gap-2 mb-4">
                 @can('generateDocument', $asset)
-                    <x-button variant="primary" size="sm" :href="route('documents.generate', $asset)">Generate FAT/BAST</x-button>
+                    <x-button variant="primary" size="sm" type="button" @click="$dispatch('open-modal', 'generate-document-modal')">Generate FAT/BAST</x-button>
                     <x-button variant="secondary" size="sm" :href="route('documents.create', $asset)">+ Add</x-button>
                 @endcan
             </div>
@@ -310,6 +310,16 @@
                 </select>
             </div>
 
+            <div>
+                <label for="doc-template" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Template (optional)</label>
+                <select id="doc-template" name="template_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="">Use standard layout</option>
+                    @foreach($activeDocumentTemplates ?? collect() as $template)
+                        <option value="{{ $template->id }}" data-document-type="{{ $template->document_type }}">{{ $template->name }} · {{ $template->document_type }}</option>
+                    @endforeach
+                </select>
+            </div>
+
             <div class="flex justify-end gap-3 pt-2">
                 <button type="button" @click="$dispatch('close-modal', 'generate-document-modal')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
                 <x-button type="submit" variant="primary">Continue</x-button>
@@ -317,6 +327,24 @@
         </form>
     </div>
 </x-modal>
+
+<script>
+    (() => {
+        const type = document.getElementById('doc_type');
+        const template = document.getElementById('doc-template');
+        const syncTemplates = () => {
+            if (!type || !template) return;
+            [...template.options].forEach((option) => {
+                if (!option.value) return;
+                option.hidden = option.dataset.documentType !== type.value;
+                option.disabled = option.hidden;
+            });
+            if (template.selectedOptions[0]?.disabled) template.value = '';
+        };
+        type?.addEventListener('change', syncTemplates);
+        syncTemplates();
+    })();
+</script>
 
 <x-modal id="scan-again-modal" title="Scan this device" maxWidth="md">
     <div class="space-y-4">

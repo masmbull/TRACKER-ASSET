@@ -52,9 +52,10 @@ php artisan audit:token lab-agent-01
 php artisan audit:token lab-agent-01 --expires=2027-01-01
 ```
 
-The plaintext token (`tat_...`) is shown **once**; only its SHA-256 hash is
-stored. Tokens carry `audit:submit` + `assets:lookup` abilities, support expiry
-and revocation (`is_active = false`).
+The issued token is shown **once**; only its SHA-256 hash is stored. Treat the one-time
+value as a credential: deliver it through an approved secret channel and never copy it
+into documentation, tickets, shell history, or source control. Tokens carry
+`audit:submit` + `assets:lookup` abilities, support expiry, and can be revoked.
 
 ## Tests
 

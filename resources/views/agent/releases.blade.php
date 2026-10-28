@@ -6,7 +6,7 @@
 <x-page-header title="Agent Releases" subtitle="Ship a TrackerAgent build, make it the version every download and update serves, and roll the fleet onto it.">
     <x-slot:actions>
         <x-button type="button" variant="primary" @click="$dispatch('open-modal', 'upload-release-modal')">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <x-icon name="plus" class="h-4 w-4" />
             Upload Build
         </x-button>
     </x-slot:actions>

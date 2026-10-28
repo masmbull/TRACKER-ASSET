@@ -82,7 +82,10 @@ class DocumentTemplateTest extends TestCase
             ->get(route('templates.index'))
             ->assertOk()
             ->assertSee('FAT Pakem')
-            ->assertSee('BAST Pakem');
+            ->assertSee('BAST Pakem')
+            ->assertSee('Use template')
+            ->assertSee('Create document from template')
+            ->assertSee($this->asset->asset_id);
     }
 
     public function test_generate_form_offers_template_picker_and_document_keeps_selection(): void
@@ -94,9 +97,11 @@ class DocumentTemplateTest extends TestCase
         $template = DocumentTemplate::where('document_type', 'BAST')->firstOrFail();
 
         $this->actingAs($support)
-            ->get(route('documents.generate', $this->asset))
+            ->get(route('documents.generate', [$this->asset, 'template_id' => $template->id]))
             ->assertOk()
-            ->assertSee('name="template_id"', false);
+            ->assertSee('name="template_id"', false)
+            ->assertSee('value="'.$template->id.'" selected', false)
+            ->assertSee('BAST');
 
         $response = $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
             'document_type' => 'BAST',
@@ -108,6 +113,12 @@ class DocumentTemplateTest extends TestCase
 
         $response->assertRedirect(route('documents.preview', $document));
         $this->assertSame($template->id, $document->template_id);
+
+        $this->actingAs($support)
+            ->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee($document->document_number)
+            ->assertSee('1 created');
     }
 
     /**

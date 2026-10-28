@@ -3,10 +3,15 @@
 namespace App\Services;
 
 use App\Support\ScheduleHeartbeat;
+use Aws\S3\S3Client;
 use Carbon\Carbon;
+use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
 
@@ -27,9 +32,9 @@ class ProbeFailure extends RuntimeException {}
  * and report every other service as unreachable too. A monitoring page that
  * fails while showing you that the monitor is broken is worse than no page.
  *
- * Probes are deliberately cheap and side-effect free: no writes, no queue
- * dispatch. A page that an operator refreshes every thirty seconds must not
- * become a source of load or of side effects in its own right.
+ * Probes are deliberately cheap: they never dispatch queue work or create
+ * uploaded objects. Cache and Redis probes use a short-lived read-back marker,
+ * while storage and HTTP probes only read. The page refreshes every 30 seconds.
  */
 class ServiceHealthChecker
 {
@@ -42,14 +47,25 @@ class ServiceHealthChecker
     public function check(): array
     {
         $services = [
+            $this->probePhpRuntime(),
+            $this->probeLaravelRuntime(),
+            $this->probeEngine('livewire/livewire', 'Livewire\\Livewire', 'Livewire UI engine', 'Reactive pages and interactions'),
+            $this->probeEngine('maatwebsite/excel', 'Maatwebsite\\Excel\\ExcelServiceProvider', 'Excel import engine', 'Spreadsheet import and export'),
+            $this->probeEngine('barryvdh/laravel-dompdf', 'Barryvdh\\DomPDF\\ServiceProvider', 'PDF generation engine', 'Generated asset documents and reports'),
+            $this->probeEngine('simplesoftwareio/simple-qrcode', 'SimpleSoftwareIO\\QrCode\\QrCodeServiceProvider', 'QR code engine', 'Asset labels and QR sheets'),
+            $this->probePwaServiceWorker(),
             $this->probeDatabase(),
             $this->probeRedis(),
             $this->probeCache(),
+            $this->probeSession(),
             $this->probeQueue(),
             $this->probeMail(),
             $this->probeFilesystem(),
+            $this->probeS3Storage(),
             $this->probeScheduler(),
             $this->probeHealthEndpoint(),
+            $this->probeEntra(),
+            $this->probeMicrosoftGraph(),
         ];
 
         $healthy = collect($services)->where('status', 'ok')->count();
@@ -143,11 +159,12 @@ class ServiceHealthChecker
      * silently dropping a check would look like success - while keeping it out of
      * the failure count.
      */
-    private function probeSkipped(string $detail, string $name, string $purpose): array
+    private function probeSkipped(string $detail, string $name, string $purpose, string $category = 'Service'): array
     {
         return [
             'name' => $name,
             'purpose' => $purpose,
+            'category' => $category,
             'status' => 'skipped',
             'detail' => $detail,
             'ms' => 0,
@@ -155,7 +172,7 @@ class ServiceHealthChecker
         ];
     }
 
-    private function probe(callable $probe, string $name, string $purpose): array
+    private function probe(callable $probe, string $name, string $purpose, string $category = 'Service'): array
     {
         $started = microtime(true);
 
@@ -163,7 +180,7 @@ class ServiceHealthChecker
             $detail = $probe();
             $ms = (int) round((microtime(true) - $started) * 1000);
 
-            return compact('name', 'purpose', 'ms') + [
+            return compact('name', 'purpose', 'ms', 'category') + [
                 'status' => 'ok',
                 'detail' => $detail,
                 'checked_at' => now()->toDateTimeString(),
@@ -185,12 +202,132 @@ class ServiceHealthChecker
                 report($e);
             }
 
-            return compact('name', 'purpose', 'ms') + [
+            return compact('name', 'purpose', 'ms', 'category') + [
                 'status' => 'down',
                 'detail' => $detail,
                 'checked_at' => now()->toDateTimeString(),
             ];
         }
+    }
+
+    private function probePhpRuntime(): array
+    {
+        return $this->probe(
+            fn () => sprintf('PHP %s · %s SAPI', PHP_VERSION, PHP_SAPI),
+            'PHP runtime',
+            'Server-side execution engine',
+            'Engine'
+        );
+    }
+
+    private function probeLaravelRuntime(): array
+    {
+        return $this->probe(
+            fn () => 'Laravel '.app()->version().' · application booted',
+            'Laravel framework',
+            'Application runtime and web framework',
+            'Engine'
+        );
+    }
+
+    private function probeEngine(string $package, string $class, string $name, string $purpose): array
+    {
+        return $this->probe(function () use ($package, $class) {
+            if (! class_exists($class)) {
+                throw new ProbeFailure($package.' is required but its runtime class is unavailable');
+            }
+
+            $version = class_exists(InstalledVersions::class)
+                ? InstalledVersions::getPrettyVersion($package)
+                : null;
+
+            return $package.' · '.($version ?: 'loaded');
+        }, $name, $purpose, 'Engine');
+    }
+
+    private function probePwaServiceWorker(): array
+    {
+        return $this->probe(function () {
+            $script = public_path('sw.js');
+            if (! is_file($script) || ! is_readable($script)) {
+                throw new ProbeFailure('public/sw.js is missing or unreadable');
+            }
+
+            return 'public/sw.js packaged · browser registration is client-side';
+        }, 'PWA service worker', 'Offline app shell and static asset cache', 'Engine');
+    }
+
+    private function probeSession(): array
+    {
+        return $this->probe(function () {
+            $driver = (string) config('session.driver');
+
+            if ($driver === 'file') {
+                $path = (string) config('session.files');
+                if (! is_dir($path) || ! is_writable($path)) {
+                    throw new ProbeFailure('session directory is missing or not writable');
+                }
+
+                return 'file driver · session directory writable';
+            }
+
+            if ($driver === 'database') {
+                $table = (string) config('session.table', 'sessions');
+                if (! Schema::hasTable($table)) {
+                    throw new ProbeFailure($table.' table is missing');
+                }
+
+                return 'database driver · '.$table.' table reachable';
+            }
+
+            if ($driver === 'redis') {
+                $connection = (string) (config('session.store') ?: 'default');
+                Redis::connection($connection)->ping();
+
+                return 'redis driver · session connection reachable';
+            }
+
+            if (in_array($driver, ['cookie', 'array'], true)) {
+                return $driver.' driver · available in this process';
+            }
+
+            return $driver.' driver · configured';
+        }, 'Session store', 'Login state and user sessions');
+    }
+
+    private function probeEntra(): array
+    {
+        if (! config('services.entra.enabled')) {
+            return $this->probeSkipped('disabled · local sign-in is active', 'Microsoft Entra ID', 'Single sign-on provider', 'Integration');
+        }
+
+        $tenant = (string) (config('services.entra.tenant_id') ?: 'common');
+
+        return $this->probe(function () use ($tenant) {
+            $url = "https://login.microsoftonline.com/{$tenant}/v2.0/.well-known/openid-configuration";
+            $response = Http::timeout(self::PROBE_TIMEOUT_SECONDS)->get($url);
+            if (! $response->successful()) {
+                throw new ProbeFailure('OpenID discovery returned HTTP '.$response->status());
+            }
+
+            return 'OpenID discovery reachable · tenant '.(string) (config('services.entra.tenant_id') ?: 'common');
+        }, 'Microsoft Entra ID', 'Single sign-on provider', 'Integration');
+    }
+
+    private function probeMicrosoftGraph(): array
+    {
+        if (! config('services.entra.enabled') || ! config('services.entra.directory')) {
+            return $this->probeSkipped('directory integration disabled', 'Microsoft Graph', 'Employee directory lookup', 'Integration');
+        }
+
+        return $this->probe(function () {
+            $response = Http::timeout(self::PROBE_TIMEOUT_SECONDS)->get('https://graph.microsoft.com/v1.0/$metadata');
+            if (! $response->successful()) {
+                throw new ProbeFailure('Graph metadata endpoint returned HTTP '.$response->status());
+            }
+
+            return 'Graph endpoint reachable · tenant permissions are checked on directory lookup';
+        }, 'Microsoft Graph', 'Employee directory lookup', 'Integration');
     }
 
     /**
@@ -261,15 +398,15 @@ class ServiceHealthChecker
             config('session.driver') === 'redis' ? 'session' : null,
         ]));
 
-        return $this->probe(function () use ($usedBy) {
-            if ($usedBy === []) {
-                return sprintf('not in use (cache=%s, queue=%s, session=%s)',
-                    config('cache.default'),
-                    config('queue.default'),
-                    config('session.driver')
-                );
-            }
+        if ($usedBy === []) {
+            return $this->probeSkipped(
+                sprintf('not in use · cache=%s, queue=%s, session=%s', config('cache.default'), config('queue.default'), config('session.driver')),
+                'Redis',
+                'Optional cache, queue and session engine'
+            );
+        }
 
+        return $this->probe(function () use ($usedBy) {
             // `database.redis.client`, not `database.redis.default.client`: the
             // client key sits beside `default`, not inside it, so the old path
             // read null and this check silently never fired.
@@ -426,8 +563,37 @@ class ServiceHealthChecker
                 $report[] = $label;
             }
 
-            return implode(', ', $report).' · writable';
-        }, 'Storage', 'Uploaded files, exports, generated documents');
+            return implode(', ', $report).' · writable · default disk '.config('filesystems.default');
+        }, 'Local file storage', 'Uploads, exports, generated documents and agent releases');
+    }
+
+    private function probeS3Storage(): array
+    {
+        if (config('filesystems.default') !== 's3') {
+            return $this->probeSkipped(
+                'optional S3 disk is defined but inactive · current default is '.config('filesystems.default'),
+                'Amazon S3 storage',
+                'Optional cloud object storage',
+                'Integration'
+            );
+        }
+
+        return $this->probe(function () {
+            if (! class_exists(S3Client::class)) {
+                throw new ProbeFailure('AWS S3 SDK is missing');
+            }
+
+            $bucket = (string) config('filesystems.disks.s3.bucket');
+            if ($bucket === '') {
+                throw new ProbeFailure('bucket name is not configured');
+            }
+
+            // HEAD is a read-only availability/credential check. Avoid listing
+            // objects or uploading a marker into a customer's bucket.
+            Storage::disk('s3')->getClient()->headBucket(['Bucket' => $bucket]);
+
+            return 'S3 bucket reachable · read access confirmed';
+        }, 'Amazon S3 storage', 'Active cloud object storage', 'Integration');
     }
 
     private function probeScheduler(): array

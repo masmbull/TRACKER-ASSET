@@ -65,13 +65,19 @@ const ensureProcessModal = () => {
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-live', 'assertive');
-    modal.className = 'fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 backdrop-blur-sm';
+    modal.className = 'fixed inset-0 z-[1000000] flex items-center justify-center bg-gray-950/60 backdrop-blur-md';
     modal.style.display = 'none';
     modal.innerHTML = `
-        <div class="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl dark:bg-gray-900">
-            <div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400"></div>
-            <p class="text-base font-semibold text-gray-800 dark:text-white">Memproses…</p>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Mohon tunggu, jangan tutup halaman ini.</p>
+        <div class="global-process-card modal-panel mx-4 w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-theme-xl dark:bg-gray-900" role="document">
+            <div class="process-logo-stage mx-auto mb-5" aria-hidden="true">
+                <span class="process-logo-halo"></span>
+                <span class="process-logo-orbit process-logo-orbit-one"></span>
+                <span class="process-logo-orbit process-logo-orbit-two"></span>
+                <img class="process-logo-mark" src="${document.body.dataset.mitoLogo}" alt="" width="58" height="58">
+            </div>
+            <p class="text-base font-bold tracking-tight text-gray-800 dark:text-white">Memproses…</p>
+            <p class="mt-1.5 text-sm text-gray-500 dark:text-gray-400">Mohon tunggu, jangan tutup halaman ini.</p>
+            <div class="process-loader-track mx-auto mt-5 h-1 w-28 overflow-hidden rounded-full" aria-hidden="true"><span></span></div>
         </div>`;
     document.body.appendChild(modal);
     return modal;
@@ -102,43 +108,19 @@ const progressBar = () => document.getElementById('top-progress');
 
 export const markBusy = () => {
     busyCount += 1;
-    progressBar()?.classList.add('is-busy');
+    const bar = progressBar();
+    bar?.classList.add('is-busy');
+    bar?.setAttribute('aria-valuetext', 'Loading page');
 };
 
 export const markIdle = () => {
     busyCount = Math.max(0, busyCount - 1);
     if (busyCount === 0) {
-        progressBar()?.classList.remove('is-busy');
+        const bar = progressBar();
+        bar?.classList.remove('is-busy');
+        bar?.removeAttribute('aria-valuetext');
     }
 };
-
-// --- Session splash -----------------------------------------------------------
-// Branded MITO loader, shown once per browser session on first paint and
-// skipped synchronously in <head> on repeat visits. Fades fast: one short
-// brand beat, then out of the way.
-document.addEventListener('DOMContentLoaded', () => {
-    const splash = document.getElementById('mito-splash');
-    if (!splash) {
-        return;
-    }
-    if (document.documentElement.classList.contains('mito-splash-seen')) {
-        splash.remove();
-        return;
-    }
-    window.setTimeout(() => {
-        if (!splash.isConnected) {
-            return;
-        }
-        splash.style.transition = 'opacity 0.25s ease';
-        splash.style.opacity = '0';
-        window.setTimeout(() => splash.remove(), 260);
-        try {
-            sessionStorage.setItem('mito-splash-seen', '1');
-        } catch {
-            // Private mode: splash simply shows again next visit.
-        }
-    }, 550);
-});
 
 // --- Toasts -----------------------------------------------------------------
 // Non-blocking notices. Success toasts dismiss themselves; error toasts stay
@@ -158,7 +140,12 @@ export const showToast = (message, type = 'success') => {
     };
 
     const el = document.createElement('div');
-    el.className = `toast flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-theme-md ${colors[type] ?? colors.info}`;
+    // data-toast-type lets app.css paint the semantic tint: the enterprise
+    // components layer flattens bg-success-50/bg-error-50 into gray everywhere
+    // else, and utility-layer [data-toast-type] rules win over that without
+    // touching badges outside the toast stack.
+    el.dataset.toastType = type;
+    el.className = `toast flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-theme-lg ${colors[type] ?? colors.info}`;
     el.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
     const text = document.createElement('span');

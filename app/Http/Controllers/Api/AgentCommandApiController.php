@@ -59,20 +59,32 @@ class AgentCommandApiController extends Controller
         // five-second poll: twelve requests a minute per laptop instead of one.
         $wait = min((int) $request->integer('wait', 0), self::MAX_INBOX_WAIT_SECONDS);
 
-        // The long-poll can wait up to 55 s, which exceeds the default 30 s
-        // php-fpm limit. Extend it so the parked request does not time out.
-        if ($wait > 0) {
+        // The long-poll can wait up to 55 s, which may exceed a web worker's
+        // request limit. Extend only when needed, then restore it: tests and
+        // persistent workers handle more requests in the same PHP process.
+        $previousExecutionLimit = (int) ini_get('max_execution_time');
+        $extendedExecutionLimit = $wait > 0
+            && $previousExecutionLimit > 0
+            && $previousExecutionLimit < $wait + 10;
+
+        if ($extendedExecutionLimit) {
             set_time_limit($wait + 10);
         }
 
-        if ($commands->isEmpty() && $wait > 0) {
-            $deadline = microtime(true) + $wait;
+        try {
+            if ($commands->isEmpty() && $wait > 0) {
+                $deadline = microtime(true) + $wait;
 
-            do {
-                sleep(1);
+                do {
+                    sleep(1);
 
-                $commands = $this->pendingCommands($tokenId);
-            } while ($commands->isEmpty() && microtime(true) < $deadline);
+                    $commands = $this->pendingCommands($tokenId);
+                } while ($commands->isEmpty() && microtime(true) < $deadline);
+            }
+        } finally {
+            if ($extendedExecutionLimit) {
+                set_time_limit($previousExecutionLimit);
+            }
         }
 
         return response()->json(['commands' => $commands]);

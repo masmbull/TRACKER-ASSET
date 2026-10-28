@@ -14,6 +14,7 @@ use App\Models\AssetRepair;
 use App\Models\AssetStatus;
 use App\Models\AssetTransfer;
 use App\Models\Company;
+use App\Models\DocumentTemplate;
 use App\Models\Location;
 use App\Models\User;
 use App\Services\AuditComparisonService;
@@ -182,7 +183,12 @@ class AssetController extends Controller
 
         $asset->load(['category', 'status', 'location', 'currentUser', 'company', 'assignments', 'audits', 'repairs', 'transfers', 'documents', 'attachments.uploader', 'activityLogs', 'inspectionSessions.lines']);
 
-        return view('assets.show', compact('asset'));
+        $activeDocumentTemplates = DocumentTemplate::query()
+            ->where('is_active', true)
+            ->orderBy('document_type')
+            ->get();
+
+        return view('assets.show', compact('asset', 'activeDocumentTemplates'));
     }
 
     public function edit(Asset $asset)

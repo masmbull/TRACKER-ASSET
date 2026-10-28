@@ -71,7 +71,7 @@
                     <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">Scan it or download the SVG.</p>
                 </div>
                 <button id="custom-qr-close" type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10" aria-label="Close QR preview" title="Close">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <x-icon name="close" class="h-5 w-5" />
                 </button>
             </div>
             <div class="mt-5 flex justify-center rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700">
@@ -168,7 +168,7 @@
     @php($qrBase = rtrim((string) config('assets.qr.base_url'), '/'))
     @if($qrBase === '' || str_contains($qrBase, 'localhost') || str_contains($qrBase, '127.0.0.1'))
         <div class="mt-4 flex items-start gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-theme-sm text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-300">
-            <svg class="mt-0.5 shrink-0" fill="none" width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+            <x-icon name="warning" class="mt-0.5 h-[18px] w-[18px] shrink-0" />
             <span>These labels would encode <code class="rounded bg-error-100 px-1 dark:bg-error-500/20">{{ $qrBase ?: 'a relative URL' }}</code> — a phone that scans them cannot open that. Set <code class="rounded bg-error-100 px-1 dark:bg-error-500/20">ASSET_QR_BASE_URL</code> to the address your fleet can reach before printing.</span>
         </div>
     @endif

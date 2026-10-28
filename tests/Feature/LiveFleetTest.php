@@ -416,8 +416,12 @@ class LiveFleetTest extends TestCase
         foreach ([
             'disable-usb' => ScriptPresets::DISABLE_USB,
             'enable-usb' => ScriptPresets::ENABLE_USB,
+            'printer-restart' => ScriptPresets::RESTART_PRINT_SPOOLER,
+            'printer-clear-queue' => ScriptPresets::CLEAR_PRINT_QUEUE,
+            'network-check' => ScriptPresets::NETWORK_QUICK_CHECK,
         ] as $key => $body) {
             $this->assertSame('cmd', ScriptPayload::detectType($body), "preset {$key} must read as cmd");
+            $this->assertDoesNotMatchRegularExpression('/^\s*(?:pause|set\s+\/p|choice\s)/mi', $body, "preset {$key} must not wait for interactive input");
 
             $this->actingAs($admin)->post(route('agent.commands.script'), [
                 'target' => 'all',
