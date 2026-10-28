@@ -378,8 +378,8 @@
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
-                                    <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                                 @endif
+                                <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                             </div>
                         </td>
                     </tr>
@@ -679,7 +679,7 @@
                         <x-badge variant="error" :dot="true">revoked</x-badge>
                     </td>
                     <td class="py-3 px-4">
-                        <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
+                        <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                     </td>
                 </tr>
             @endforeach
