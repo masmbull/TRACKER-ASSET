@@ -21,10 +21,12 @@ use Illuminate\Support\Facades\Route;
 
 // Public endpoints (no auth required)
 Route::get('/health', fn () => response()->json(['status' => 'ok']));
+Route::get('/agent/register/options', [AgentRegistrationController::class, 'options']);
 Route::post('/agent/register', [AgentRegistrationController::class, 'register']);
 
 Route::middleware(AuthenticateAuditAgent::class)->group(function () {
     Route::post('/audits', [AuditApiController::class, 'submit']);
+    Route::post('/agent/bootstrap-asset', [AgentRegistrationController::class, 'bootstrapAsset']);
 
     // Telemetry heartbeat: the daemon pings this on its own schedule so Live
     // Fleet reflects reality without anyone pressing "Scan Now".

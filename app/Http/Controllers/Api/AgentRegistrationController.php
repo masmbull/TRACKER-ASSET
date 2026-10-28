@@ -3,13 +3,36 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\Asset;
+use App\Models\AssetAudit;
+use App\Models\AssetCategory;
+use App\Models\AssetStatus;
+use App\Models\Company;
+use App\Models\Location;
+use App\Models\User;
+use App\Services\AssetCodeGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AgentRegistrationController extends Controller
 {
+    /** Lookup data used by the first-install registration form. */
+    public function options(): JsonResponse
+    {
+        return response()->json([
+            'companies' => Company::orderBy('name')->get(['id', 'name', 'code']),
+            'categories' => AssetCategory::orderBy('name')->get(['id', 'name']),
+            'locations' => Location::orderBy('name')->get(['id', 'name']),
+            'statuses' => AssetStatus::orderBy('name')->get(['id', 'name']),
+            'users' => User::orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
     /**
      * Next sequential device number, e.g. MITO-0007.
      *
@@ -46,6 +69,7 @@ class AgentRegistrationController extends Controller
             'name' => 'nullable|string|max:255',
             'platform' => 'nullable|string|max:255',
             'agent_version' => 'nullable|string|max:64',
+            'serial_number' => 'nullable|string|max:255',
             'force_new' => 'sometimes|boolean',
             'check_only' => 'sometimes|boolean',
         ]);
@@ -73,14 +97,17 @@ class AgentRegistrationController extends Controller
         if ($checkOnly) {
             $existing = AgentApiToken::where('hardware_id', $hardwareId)->first()
                 ?? AgentApiToken::where('device_id', $deviceId)->first();
+            $asset = $this->findKnownAsset($existing, $request->input('serial_number'));
 
             return response()->json([
-                'known' => $existing !== null,
-                'skip_fields' => $existing !== null,
+                'known' => $asset !== null,
+                'skip_fields' => $asset !== null,
                 'device_id' => $existing?->device_id ?? $deviceId,
                 'token' => $existing?->token_plain ?? null,
                 'is_active' => $existing?->is_active ?? false,
-                'message' => $existing !== null
+                'asset_id' => $asset?->id,
+                'asset_code' => $asset?->asset_id,
+                'message' => $asset !== null
                     ? 'Device sudah dikenal di master data. Lewati 10 field audit.'
                     : 'Device baru. Tampilkan 10 field audit.',
             ]);
@@ -209,5 +236,178 @@ class AgentRegistrationController extends Controller
             'device_id' => $assignedDeviceId,
             'message' => 'Device registered successfully',
         ]);
+    }
+
+    /** Create the selected asset only after registration has issued an API token. */
+    public function bootstrapAsset(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'serial_number' => 'required|string|max:255',
+            'hardware' => 'required|array',
+            'hardware.brand' => 'nullable|string|max:255',
+            'hardware.model' => 'nullable|string|max:255',
+            'hardware.serial_number' => 'required|string|max:255',
+            'hardware.hostname' => 'required|string|max:255',
+            'hardware.processor' => 'nullable|string|max:255',
+            'hardware.storage' => 'nullable|string|max:255',
+            'hardware.ram' => 'nullable|string|max:255',
+            'hardware.os_version' => 'nullable|string|max:255',
+            'hardware.mac_address' => 'nullable|string|max:255',
+            'hardware.static_ip' => 'nullable|string|max:255',
+            'audit_fields' => 'required|array',
+            'audit_fields.company_id' => 'required|exists:companies,id',
+            'audit_fields.category_id' => 'required|exists:asset_categories,id',
+            'audit_fields.location_id' => 'required|exists:locations,id',
+            'audit_fields.asset_status_id' => 'required|exists:asset_statuses,id',
+            'audit_fields.current_user_id' => 'nullable|exists:users,id',
+            'audit_fields.admin_it_pic' => 'nullable|exists:users,id',
+            'audit_fields.purchase_year' => 'required|integer|min:1900|max:'.(date('Y') + 2),
+            'audit_fields.vendor' => 'nullable|string|max:255',
+            'audit_fields.purchase_price' => 'nullable|numeric|min:0',
+        ]);
+
+        $token = AgentApiToken::findOrFail((int) $request->attributes->get('agent_token_id'));
+        $asset = $this->createEnrollmentAsset($request, $token);
+        if (! $asset) {
+            return response()->json(['message' => 'Serial number matches multiple assets; ask IT to resolve the duplicate before enrollment.'], 409);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'asset_id' => $asset->id,
+            'asset_code' => $asset->asset_id,
+            'message' => 'Device asset registered successfully.',
+        ], 201);
+    }
+
+    /**
+     * A bootstrap token is considered known only when it resolves to a real
+     * master asset, not merely because a token row was created by an old install.
+     */
+    private function findKnownAsset(?AgentApiToken $token, ?string $serialNumber): ?Asset
+    {
+        if ($token) {
+            $assetId = $token->telemetry?->asset_id
+                ?? AssetAudit::query()->where('agent_token_id', $token->id)
+                    ->whereNotNull('asset_id')->latest('audit_date')->value('asset_id');
+
+            if ($assetId) {
+                return Asset::find($assetId);
+            }
+        }
+
+        $serial = trim((string) $serialNumber);
+        if ($serial === '' || in_array(strtolower($serial), ['unknown', 'none', 'to be filled by o.e.m.'], true)) {
+            return null;
+        }
+
+        $matches = Asset::query()->where('serial_number', $serial)->limit(2)->get();
+        return $matches->count() === 1 ? $matches->first() : null;
+    }
+
+    /** Create and register a new master asset from the install form, when given. */
+    private function createEnrollmentAsset(Request $request, AgentApiToken $token): ?Asset
+    {
+        $fields = $request->input('audit_fields');
+        if (! is_array($fields)) {
+            return null;
+        }
+
+        $hardware = (array) $request->input('hardware', []);
+        $serial = trim((string) ($hardware['serial_number'] ?? $request->input('serial_number', '')));
+        if ($serial === '') {
+            return null;
+        }
+        if (trim((string) $request->input('serial_number', $serial)) !== $serial) {
+            throw ValidationException::withMessages([
+                'serial_number' => 'The reported and asset serial numbers must match.',
+            ]);
+        }
+
+        $existing = Asset::query()->where('serial_number', $serial)->limit(2)->get();
+        if ($existing->count() === 1) {
+            $asset = $existing->first();
+            $this->attachEnrollmentRecords($token, $asset);
+            return $asset;
+        }
+        if ($existing->count() > 1) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($fields, $hardware, $serial, $token) {
+            $company = Company::findOrFail($fields['company_id']);
+            $category = AssetCategory::findOrFail($fields['category_id']);
+            $assetCode = app(AssetCodeGenerator::class)->next(
+                $company,
+                $category,
+                (int) $fields['purchase_year'],
+            );
+
+            $asset = Asset::create([
+                'asset_id' => $assetCode,
+                'company_id' => $company->id,
+                'category_id' => $category->id,
+                'location_id' => $fields['location_id'],
+                'asset_status_id' => $fields['asset_status_id'],
+                'current_user_id' => $fields['current_user_id'] ?? null,
+                'admin_it_pic' => $fields['admin_it_pic'] ?? null,
+                'purchase_year' => $fields['purchase_year'],
+                'vendor' => $fields['vendor'] ?? null,
+                'purchase_price' => $fields['purchase_price'] ?? null,
+                'brand' => trim((string) ($hardware['brand'] ?? '')) ?: 'Unknown',
+                'model' => trim((string) ($hardware['model'] ?? '')) ?: 'Unknown',
+                'serial_number' => $serial,
+                'hostname' => trim((string) ($hardware['hostname'] ?? '')) ?: $token->name,
+                'processor' => $hardware['processor'] ?? null,
+                'storage' => $hardware['storage'] ?? null,
+                'ram' => $hardware['ram'] ?? null,
+                'os_version' => $hardware['os_version'] ?? null,
+                'mac_address' => $hardware['mac_address'] ?? null,
+                'static_ip' => $hardware['static_ip'] ?? null,
+            ]);
+
+            if ($asset->current_user_id) {
+                $asset->assignments()->create([
+                    'user_id' => $asset->current_user_id,
+                    'assigned_date' => now(),
+                    'created_by' => null,
+                    'notes' => 'Initial assignment recorded during TrackerAgent installation.',
+                ]);
+            }
+
+            $this->attachEnrollmentRecords($token, $asset);
+
+            ActivityLog::create([
+                'actor_id' => null,
+                'action' => 'CREATE',
+                'entity_type' => 'assets',
+                'entity_id' => $asset->id,
+                'entity_identifier' => $asset->asset_id,
+                'source' => 'TrackerAgent Installer',
+                'old_value' => null,
+                'new_value' => json_encode($asset->only([
+                    'company_id', 'category_id', 'location_id', 'asset_status_id',
+                    'current_user_id', 'admin_it_pic', 'purchase_year', 'vendor', 'purchase_price',
+                ])),
+                'metadata' => ['agent_token_id' => $token->id, 'via' => 'first-install'],
+            ]);
+
+            return $asset;
+        });
+    }
+
+    /** Connect any scan/telemetry already collected by this token to its asset. */
+    private function attachEnrollmentRecords(AgentApiToken $token, Asset $asset): void
+    {
+        AssetAudit::query()
+            ->where('agent_token_id', $token->id)
+            ->whereNull('asset_id')
+            ->orderByDesc('audit_date')
+            ->orderByDesc('id')
+            ->limit(1)
+            ->update(['asset_id' => $asset->id]);
+
+        $token->telemetry?->update(['asset_id' => $asset->id]);
+        $token->fingerprint?->update(['asset_id' => $asset->id]);
     }
 }

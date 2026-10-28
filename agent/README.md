@@ -74,16 +74,22 @@ stored binary (any row created before per-release storage, or `agent:release` wi
 
 ## Usage
 
+For manual CLI use, set `TRACKER_AUDIT_TOKEN` through Windows Credential Manager or your
+organization's endpoint-management secret facility. Do not add a token literal to a script,
+shell history, README, or command-line example. The downloaded, server-configured release is
+the preferred unattended deployment path because its token is delivered inside the binary
+configuration trailer.
+
 ### One-shot audit
 
 ```powershell
-.\TrackerAgent.exe --token tat_xxx --url http://your-server:8000
+.\TrackerAgent.exe --url https://your-tracker-host
 ```
 
 ### Daemon mode (background, auto-start)
 
 ```powershell
-.\TrackerAgent.exe --token tat_xxx --url http://your-server:8000 --daemon
+.\TrackerAgent.exe --url https://your-tracker-host --daemon
 ```
 
 ### Remove daemon autostart
@@ -124,7 +130,7 @@ comparison is what drives the three states above.
 ### Manual self-update
 
 ```powershell
-.\TrackerAgent.exe --update --url http://your-server:8000 --token tat_xxx
+.\TrackerAgent.exe --update --url https://your-tracker-host
 ```
 
 ### Auto-update (no user action needed)
@@ -151,29 +157,35 @@ itself with the exact same flags.
 | POST | `/api/agent/commands/{id}/ack` | Acknowledge command execution |
 | GET | `/agent/download` | Fetch the newest agent exe (self-update) |
 | POST | `/api/agent/register` | Register a device during GUI install |
+| GET | `/api/agent/register/options` | Fetch company/category/location/status/user choices for first install |
+| POST | `/api/agent/bootstrap-asset` | Create the first asset from the install form (agent bearer token required) |
 
 
 ## GUI Installer Mode (zero configuration)
 
-Double-clicking `TrackerAgent.exe` with no CLI flags opens the installer window. It is
-fully automatic: the download route inlines the server address, so there is no URL or
-token to type and the only UI while it works is an animated progress bar.
+Double-clicking `TrackerAgent.exe` with no CLI flags opens the installer window. The
+download route inlines the server address, so there is no URL or token to type. The UI
+shows each phase, its current status, a labelled stage message, and a percentage bar.
 
 1. Reads the server address baked into its own binary (see below) - falling back to
    `TRACKER_API_URL`, then `--server-url`, then the address used by a previous
    installation, then `/api/health` probes of `http://127.0.0.1:8000` (plus 8003, 8004
    and `localhost`).
-2. Copies itself to `%LOCALAPPDATA%\TRACKER`, generates or reuses the device id,
-   registers the device on `/api/agent/register` and writes `config.json`.
-3. Adds the `--daemon` autostart entry (HKCU Run), starts the resident agent and runs a
-   first hardware scan. A known unique serial refreshes hardware fields on its asset;
-   an unknown device appears in Live Fleet for an IT operator to add to the register.
-4. Shows "Installation complete" and closes itself. If no server answers, a single
-   **Retry** button is offered.
+2. Collects the device serial and asks `/api/agent/register` whether it is already in
+   the asset register. Known assets skip the data-entry form.
+3. For a new device, shows ten register fields: generated asset code, company, category,
+   location, status, holder, IT PIC, purchase year, vendor, and purchase price. Choice
+   lists are fetched from `/api/agent/register/options`; the server generates the final
+   asset code and saves the form through the authenticated `/api/agent/bootstrap-asset`
+   endpoint after issuing the agent token.
+4. Copies itself to `%LOCALAPPDATA%\TRACKER`, saves `config.json`, configures autostart,
+   starts the tray agent, and queues the first hardware scan. The completed checklist
+   remains visible until the operator closes the result window.
 
-Once configured, later launches go straight to the tray icon (Status / Scan Now /
-Check for Updates). There is no Exit item: the agent is meant to stay resident, and
-it is removed only through the uninstall command on the fleet page.
+Once configured, later launches go straight to the system tray. Its context menu has
+exactly two actions—**Status** and **Check for Updates**—with icons. There is no Exit
+item: the agent remains resident and is removed only through the uninstall command on
+the fleet page.
 
 ## Zero-Config Download (config trailer)
 

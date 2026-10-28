@@ -274,11 +274,11 @@ public partial class App : System.Windows.Application
     {
         var menu = new ContextMenuStrip
         {
-            ShowImageMargin = false,
+            ShowImageMargin = true,
             Font = new System.Drawing.Font("Segoe UI", 9F)
         };
 
-        menu.Items.Add("Status", null, (_, _) =>
+        menu.Items.Add("Status", CreateTrayMenuGlyph("\uE946", System.Drawing.Color.FromArgb(96, 165, 250)), (_, _) =>
             Dispatcher.Invoke(() =>
             {
                 var window = new StatusWindow(config.ServerUrl, config.InstalledAt);
@@ -288,9 +288,26 @@ public partial class App : System.Windows.Application
 
         menu.Items.Add(new ToolStripSeparator());
 
-        menu.Items.Add("Check for Updates", null, (_, _) => RunUpdate(config));
+        menu.Items.Add("Check for Updates", CreateTrayMenuGlyph("\uE72C", System.Drawing.Color.FromArgb(249, 112, 102)), (_, _) => RunUpdate(config));
 
         return menu;
+    }
+
+    private static System.Drawing.Bitmap CreateTrayMenuGlyph(string glyph, System.Drawing.Color color)
+    {
+        var bitmap = new System.Drawing.Bitmap(18, 18);
+        using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+        graphics.Clear(System.Drawing.Color.Transparent);
+        graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        using var font = new System.Drawing.Font("Segoe MDL2 Assets", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Pixel);
+        using var brush = new System.Drawing.SolidBrush(color);
+        using var format = new System.Drawing.StringFormat
+        {
+            Alignment = System.Drawing.StringAlignment.Center,
+            LineAlignment = System.Drawing.StringAlignment.Center,
+        };
+        graphics.DrawString(glyph, font, brush, new System.Drawing.RectangleF(0, 0, 18, 18), format);
+        return bitmap;
     }
 
     private async Task CommandLoop(AgentConfig config)

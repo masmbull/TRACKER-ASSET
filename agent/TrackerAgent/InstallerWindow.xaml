@@ -212,7 +212,7 @@
     </Window.Resources>
 
     <Border x:Name="GlowBorder" Background="Transparent"
-            MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border x:Name="MainCard"
                 Background="{StaticResource CardBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
@@ -279,74 +279,94 @@
                         <DropShadowEffect ShadowDepth="0" BlurRadius="16" Opacity="0.15" Color="#DC2626"/>
                     </Border.Effect>
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Ready to Install"
+                        <TextBlock x:Name="InstallHeadingText" Text="Installing TrackerAgent"
                                    FontSize="18" FontWeight="SemiBold"
                                    Foreground="{StaticResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"/>
                         <TextBlock x:Name="DescriptionText"
-                                   Text="TRACKER-ASSET agent will be installed and registered with the server."
+                                   Text="Setup steps and live progress will appear here. Keep this window open until setup completes."
                                    FontSize="13"
                                    Foreground="{StaticResource MutedTextBrush}"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
                                    MaxWidth="500"
                                    Margin="0,8,0,0"/>
+                        <StackPanel x:Name="InstallStepsPanel" Margin="0,20,0,0" HorizontalAlignment="Stretch">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon1" Grid.Column="0" Text="&#xE774;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel1" Grid.Column="1" Text="Memeriksa koneksi server" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState1" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon2" Grid.Column="0" Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel2" Grid.Column="1" Text="Menyiapkan folder dan menyalin agent" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState2" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon3" Grid.Column="0" Text="&#xE8D4;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel3" Grid.Column="1" Text="Membuat identitas perangkat" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState3" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon4" Grid.Column="0" Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel4" Grid.Column="1" Text="Mendaftarkan perangkat dan menyimpan konfigurasi" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState4" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon5" Grid.Column="0" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel5" Grid.Column="1" Text="Mengatur agent berjalan saat login" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState5" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="StepIcon6" Grid.Column="0" Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StepLabel6" Grid.Column="1" Text="Menjalankan agent di system tray" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
+                                <TextBlock x:Name="StepState6" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <!-- Install Button -->
-                <Button x:Name="InstallButton" Grid.Row="2"
-                        Content="Install Now"
-                        Style="{StaticResource PrimaryButtonStyle}"
-                        HorizontalAlignment="Center"
-                        Margin="0,16,0,0"
-                        Click="InstallButton_Click"/>
+                <Button x:Name="InstallButton" Grid.Row="2" Visibility="Collapsed"
+                        Content="Install Now" Style="{StaticResource PrimaryButtonStyle}"
+                        HorizontalAlignment="Center" Margin="0,16,0,0"/>
 
                 <!-- Progress Bar -->
                 <Border x:Name="OverallProgressTrack" Grid.Row="3"
                         Background="{StaticResource TrackBrush}"
                         BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                        Height="8"
-                        CornerRadius="4"
-                        Visibility="Collapsed">
-                    <Border.Clip>
-                        <RectangleGeometry Rect="0,0,560,8"/>
-                    </Border.Clip>
-                    <Rectangle x:Name="OverallProgressFill"
-                               Fill="{StaticResource FillBrush}"
-                               Width="0"
-                               HorizontalAlignment="Left"
-                               RadiusX="4" RadiusY="4"/>
+                        Height="12"
+                        CornerRadius="6"
+                        Visibility="Visible">
+                    <Grid ClipToBounds="True">
+                        <Rectangle x:Name="OverallProgressFill" Fill="{StaticResource FillBrush}"
+                                   Width="0" HorizontalAlignment="Left" RadiusX="6" RadiusY="6"/>
+                        <Border x:Name="ShimmerBar" Width="100" HorizontalAlignment="Left"
+                                Background="#55FFFFFF" Visibility="Collapsed" IsHitTestVisible="False">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="ShimmerTransform" X="-140"/>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Grid>
                 </Border>
 
                 <!-- Progress Stats -->
-                <Grid x:Name="StatsPanel" Grid.Row="4" Margin="0,12,0,0" Visibility="Collapsed">
+                <Grid x:Name="StatsPanel" Grid.Row="4" Margin="0,10,0,0" Visibility="Visible">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <TextBlock Text="Total" Style="{StaticResource StatLabelStyle}"/>
-                        <TextBlock x:Name="TotalStepsText" Text="0" Style="{StaticResource StatValueStyle}" Margin="6,0,0,0"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="40,0,0,0">
-                        <TextBlock Text="Complete" Style="{StaticResource StatLabelStyle}"/>
-                        <TextBlock x:Name="CompletedText" Text="0" Style="{StaticResource StatValueStyle}" Margin="6,0,0,0"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="40,0,0,0">
-                        <TextBlock Text="Running" Style="{StaticResource StatLabelStyle}"/>
-                        <TextBlock x:Name="RunningText" Text="0" Style="{StaticResource StatValueStyle}" Margin="6,0,0,0"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="40,0,0,0">
-                        <TextBlock Text="Failed" Style="{StaticResource StatLabelStyle}"/>
-                        <TextBlock x:Name="FailedText" Text="0" Style="{StaticResource StatValueStyle}" Margin="6,0,0,0"/>
-                    </StackPanel>
+                    <TextBlock x:Name="StatusText" Grid.Column="0" Text="Menyiapkan instalasi..."
+                               FontSize="12" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PercentText" Grid.Column="1" Text="0%" Margin="12,0,0,0"
+                               FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"
+                               VerticalAlignment="Center"/>
                 </Grid>
 
                 <!-- Progress Counter -->

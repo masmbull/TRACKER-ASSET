@@ -5,7 +5,6 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -32,6 +31,9 @@ public partial class InstallerWindow : Window
     private string _serverUrl = "";
     private string _deviceId = "";
     private string _lastError = "";
+    private string _registeredAssetCode = "";
+    private AgentRegistrationFields? _registrationFields;
+    private Dictionary<string, string> _hardwareDetails = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly InstallerMode _mode;
     private readonly string _installedExe;
@@ -74,6 +76,18 @@ public partial class InstallerWindow : Window
         _newVersion = newVersion;
         _installedExe = InstallCheck.InstalledExe;
         _installDir = InstallCheck.InstallDir;
+
+        if (mode == InstallerMode.Update)
+        {
+            InstallHeadingText.Text = "Memperbarui TrackerAgent";
+            DescriptionText.Text = "Proses pembaruan berjalan. Agent akan kembali aktif di system tray setelah selesai.";
+            StepLabel1.Text = "Memeriksa agent yang sedang berjalan";
+            StepLabel2.Text = "Memeriksa versi agent terpasang";
+            StepLabel3.Text = "Menghentikan agent versi lama";
+            StepLabel4.Text = "Membersihkan sisa file pembaruan";
+            StepLabel5.Text = "Memasang versi agent terbaru";
+            StepLabel6.Text = "Menjalankan ulang agent di system tray";
+        }
 
         switch (mode)
         {
@@ -125,8 +139,8 @@ public partial class InstallerWindow : Window
             // to stop short of the end because the constant no longer matched the
             // track it was drawn into, so the install looked stuck at ~85% even
             // when it had finished.
-            var track = ProgressTrack.ActualWidth;
-            ProgressFill.Width = Math.Max(0, Math.Round(track * _displayedProgress / 100.0));
+            var track = OverallProgressTrack.ActualWidth;
+            OverallProgressFill.Width = Math.Max(0, Math.Round(track * _displayedProgress / 100.0));
             PercentText.Text = $"{_displayedProgress}%";
         };
         _progressTimer.Start();
@@ -141,7 +155,7 @@ public partial class InstallerWindow : Window
                 ShimmerBar.Visibility = Visibility.Visible;
             }
 
-            var trackWidth = ProgressTrack.ActualWidth;
+            var trackWidth = OverallProgressTrack.ActualWidth;
             if (trackWidth <= 0)
             {
                 trackWidth = 480; // fallback before layout
@@ -184,60 +198,55 @@ public partial class InstallerWindow : Window
         {
             _targetProgress = Math.Clamp(percent, 0, 100);
             StatusText.Text = message;
-        });
-    }
+        UpdateInstallSteps(_targetProgress);
+    });
+}
 
-    private string _employeeName = "";
-
-    private string PromptEmployeeName()
+/// <summary>Reflect the actual reported install phase in the visible checklist.</summary>
+    private void UpdateInstallSteps(int percent, bool failed = false)
     {
-        var dialog = new Window
+        var states = new[] { StepState1, StepState2, StepState3, StepState4, StepState5, StepState6 };
+    // A phase is marked complete when the next phase starts, not when its
+    // "starting..." message is reported. This keeps the checklist honest during
+    // slow file copies, registration requests, and task-scheduler setup.
+        var thresholds = _mode == InstallerMode.Update
+            ? new[] { 10, 25, 45, 55, 85, 100 }
+            : new[] { 12, 46, 62, 76, 86, 100 };
+        var complete = 0;
+        var activeIndex = Array.FindIndex(thresholds, threshold => percent < threshold);
+
+        for (var i = 0; i < states.Length; i++)
         {
-            Title = "TRACKER-ASSET Setup",
-            Width = 420,
-            Height = 200,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            ResizeMode = ResizeMode.NoResize,
-        };
+            if (percent >= thresholds[i])
+            {
+                states[i].Text = "Complete";
+                states[i].Foreground = SuccessBrush;
+                complete++;
+            }
+            else if (i == activeIndex && failed)
+            {
+                states[i].Text = "Gagal";
+                states[i].Foreground = ErrorBrush;
+            }
+            else if (i == activeIndex)
+            {
+                states[i].Text = "Berjalan";
+                states[i].Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x60, 0xA5, 0xFA));
+            }
+            else
+            {
+                states[i].Text = "Menunggu";
+                states[i].Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9C, 0xA3, 0xAF));
+            }
+        }
 
-        var panel = new StackPanel { Margin = new Thickness(20) };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Nama karyawan pemakai laptop ini:",
-            Margin = new Thickness(0, 0, 0, 8),
-            FontWeight = FontWeights.SemiBold,
-        });
-
-        var textBox = new System.Windows.Controls.TextBox { Height = 32, FontSize = 14 };
-        panel.Children.Add(textBox);
-
-        var button = new System.Windows.Controls.Button
-        {
-            Content = "OK",
-            Width = 100,
-            Height = 36,
-            Margin = new Thickness(0, 12, 0, 0),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-        };
-        button.Click += (_, _) => dialog.Close();
-        panel.Children.Add(button);
-
-        dialog.Content = panel;
-        dialog.ShowDialog();
-        return textBox.Text?.Trim() ?? string.Empty;
+        ProgressCounterText.Text = $"{complete} dari {states.Length} langkah selesai";
     }
 
 
     private async Task AutoInstallAsync()
     {
-        _employeeName = PromptEmployeeName();
-        if (string.IsNullOrWhiteSpace(_employeeName))
-        {
-            _employeeName = Environment.MachineName;
-        }
-
-
-        Report(2, "Looking for server...");
+        Report(2, "Mencari server TRACKER-ASSET...");
 
         var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
         var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30)); // 30 second overall timeout
@@ -259,7 +268,45 @@ public partial class InstallerWindow : Window
         }
 
         _serverUrl = serverUrl;
-        Report(12, $"Server found");
+        Report(12, "Server terhubung.");
+
+        _deviceId = ReadRegistryString("DeviceId") ?? Convert.ToBase64String(GenerateDeviceId());
+        Report(14, "Membaca identitas dan spesifikasi perangkat...");
+        _hardwareDetails = await Task.Run(() => HardwareCollector.Collect("install"));
+        _hardwareDetails.TryGetValue("serial_number", out var serialNumber);
+
+        try
+        {
+            Report(16, "Memeriksa apakah perangkat sudah terdaftar di master aset...");
+            var registrationCheck = await Task.Run(() => CheckRegistrationFields(serverUrl, _deviceId, serialNumber));
+            _registeredAssetCode = registrationCheck.AssetCode;
+            if (!registrationCheck.SkipFields)
+            {
+                Report(17, "Memuat pilihan data aset...");
+                var lookups = await Task.Run(() => GetRegistrationLookups(serverUrl));
+                Report(17, "Menunggu pengisian 10 data aset...");
+                EndShimmer();
+                var registrationDialog = new AgentRegistrationWindow(lookups) { Owner = this };
+                if (registrationDialog.ShowDialog() != true || registrationDialog.Fields is null)
+                {
+                    ShowFailure("Pendaftaran dibatalkan. Belum ada data perangkat yang dikirim ke server.");
+                    return;
+                }
+
+                _registrationFields = registrationDialog.Fields;
+                BeginShimmer();
+                Report(18, "Data aset lengkap; melanjutkan instalasi...");
+            }
+            else
+            {
+                Report(17, "Perangkat sudah terdaftar. Form data aset dilewati.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowFailure(ex.Message);
+            return;
+        }
 
         var installed = await Task.Run(() => RunInstall(serverUrl));
 
@@ -273,9 +320,75 @@ public partial class InstallerWindow : Window
         }
     }
 
+    private static (bool SkipFields, string AssetCode) CheckRegistrationFields(string serverUrl, string deviceId, string? serialNumber)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        var payload = JsonSerializer.Serialize(new
+        {
+            device_id = deviceId,
+            hardware_id = deviceId,
+            serial_number = serialNumber,
+            check_only = true,
+        });
+        using var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+        using var response = http.PostAsync($"{serverUrl}/api/agent/register", content).GetAwaiter().GetResult();
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Pemeriksaan registrasi gagal (HTTP {(int)response.StatusCode}): {body}");
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        var skipFields = root.TryGetProperty("skip_fields", out var skip) && skip.ValueKind == JsonValueKind.True;
+        var assetCode = root.TryGetProperty("asset_code", out var code) && code.ValueKind == JsonValueKind.String
+            ? code.GetString() ?? string.Empty
+            : string.Empty;
+        return (skipFields, assetCode);
+    }
+
+    private static RegistrationLookups GetRegistrationLookups(string serverUrl)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        using var response = http.GetAsync($"{serverUrl}/api/agent/register/options").GetAwaiter().GetResult();
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Pilihan data aset gagal dimuat (HTTP {(int)response.StatusCode}): {body}");
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        return new RegistrationLookups
+        {
+            Companies = ReadChoices(root, "companies", "code"),
+            Categories = ReadChoices(root, "categories"),
+            Locations = ReadChoices(root, "locations"),
+            Statuses = ReadChoices(root, "statuses"),
+            Users = ReadChoices(root, "users"),
+        };
+    }
+
+    private static List<RegistrationChoice> ReadChoices(JsonElement root, string collection, string codeField = "")
+    {
+        var result = new List<RegistrationChoice>();
+        if (!root.TryGetProperty(collection, out var items) || items.ValueKind != JsonValueKind.Array)
+            return result;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var id) || !id.TryGetInt32(out var numericId) ||
+                !item.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+                continue;
+
+            var code = codeField.Length > 0 && item.TryGetProperty(codeField, out var codeValue)
+                ? codeValue.GetString() ?? string.Empty
+                : string.Empty;
+            result.Add(new RegistrationChoice(numericId, name.GetString() ?? string.Empty, code));
+        }
+
+        return result;
+    }
+
     private async Task CheckForUpdatesAsync()
     {
-        Report(5, "Checking server...");
+        Report(5, "Memeriksa koneksi server...");
 
         var serverDiscoveryTask = Task.Run(DiscoverServerUrl);
         var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
@@ -295,19 +408,19 @@ public partial class InstallerWindow : Window
         }
 
         _serverUrl = serverUrl;
-        Report(35, "Comparing installed version with the latest build...");
+        Report(35, "Membandingkan versi agent...");
 
         var token = ReadTokenFromConfig();
         var hasUpdate = AutoUpdater.CheckForUpdate(serverUrl, token ?? string.Empty, out var message);
 
         if (hasUpdate)
         {
-            Report(100, "Update available");
+            Report(100, "Pembaruan tersedia.");
             ShowUpdateAvailable(message);
             return;
         }
 
-        Report(100, "No update available");
+        Report(100, "Agent sudah menggunakan versi terbaru.");
         ShowNoUpdateAvailable(message);
     }
 
@@ -414,13 +527,13 @@ public partial class InstallerWindow : Window
     {
         try
         {
-            Report(18, "Creating the installation folder...");
+            Report(18, "Menyiapkan folder instalasi...");
             _installDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TRACKER");
             Directory.CreateDirectory(_installDir);
 
-            Report(32, "Copying agent files...");
+            Report(32, "Menyalin file TrackerAgent...");
             var sourceExe = Environment.ProcessPath;
             var destExe = Path.Combine(_installDir, "TrackerAgent.exe");
 
@@ -435,13 +548,16 @@ public partial class InstallerWindow : Window
                 CopyWithRetry(sourceExe, destExe);
             }
 
-            Report(46, "Generating the device identity...");
+            Report(46, "Membuat identitas perangkat...");
             var existingId = ReadRegistryString("DeviceId");
-            _deviceId = string.IsNullOrWhiteSpace(existingId)
-                ? Convert.ToBase64String(GenerateDeviceId())
-                : existingId;
+            if (string.IsNullOrWhiteSpace(_deviceId))
+            {
+                _deviceId = string.IsNullOrWhiteSpace(existingId)
+                    ? Convert.ToBase64String(GenerateDeviceId())
+                    : existingId;
+            }
 
-            Report(62, "Registering the device with the server...");
+            Report(62, "Mendaftarkan perangkat ke server...");
             var token = RegisterDevice(serverUrl);
 
             // Kept so the catch block can report a failure that happened after
@@ -455,24 +571,33 @@ public partial class InstallerWindow : Window
             // the steps are a folder and a file copy - fast, and unreportable
             // because no identity exists yet to report against.
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 62,
-                "Registering the device with the server...");
+                "Mendaftarkan perangkat ke server...");
 
-            Report(76, "Configuring the agent to run at boot...");
+            if (_registrationFields is not null)
+            {
+                Report(68, "Menyimpan data aset ke master register...");
+                RegisterNewAsset(serverUrl, token);
+                Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 68,
+                    "Menyimpan data aset ke master register...");
+            }
+
+            Report(76, "Mengatur agent berjalan otomatis saat login...");
             InstallBootAutostart(serverUrl, token, destExe);
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 76,
-                "Configuring the agent to run at boot...");
+                "Mengatur agent berjalan otomatis saat login...");
 
-            Report(86, "Starting the tray agent...");
+            Report(86, "Menyiapkan agent di system tray...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
-                "Starting the tray agent...");
+                "Menyiapkan agent di system tray...");
+            StartDetached(destExe, string.Empty);
 
-            Report(94, "Finishing agent setup...");
+            Report(94, "Menyelesaikan konfigurasi...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
-                "Finishing agent setup...");
+                "Menyelesaikan konfigurasi...");
 
-            Report(100, "Installation complete");
+            Report(100, "Instalasi selesai.");
             Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
-                "Installation complete",
+                "Instalasi selesai.",
                 new Dictionary<string, string>
                 {
                     ["message"] = "Agent installed; the first hardware scan is queued.",
@@ -525,8 +650,10 @@ public partial class InstallerWindow : Window
             var payload = JsonSerializer.Serialize(new
             {
                 device_id = _deviceId,
-                name = string.IsNullOrWhiteSpace(_employeeName) ? Environment.MachineName : _employeeName,
+                hardware_id = _deviceId,
+                name = Environment.MachineName,
                 platform = Environment.OSVersion.VersionString,
+                agent_version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3),
             });
 
             using var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
@@ -568,6 +695,58 @@ public partial class InstallerWindow : Window
 
         SaveConfig(serverUrl, token);
         return token;
+    }
+
+    private string? HardwareValue(string key) =>
+        _hardwareDetails.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+
+    private void RegisterNewAsset(string serverUrl, string token)
+    {
+        var fields = _registrationFields ?? throw new InvalidOperationException("Data aset belum diisi.");
+        var payload = JsonSerializer.Serialize(new
+        {
+            serial_number = HardwareValue("serial_number"),
+            hardware = new
+            {
+                brand = HardwareValue("brand"),
+                model = HardwareValue("model"),
+                serial_number = HardwareValue("serial_number"),
+                hostname = HardwareValue("hostname") ?? Environment.MachineName,
+                processor = HardwareValue("processor"),
+                storage = HardwareValue("storage"),
+                ram = HardwareValue("ram"),
+                os_version = HardwareValue("os"),
+                mac_address = HardwareValue("mac_address"),
+                static_ip = HardwareValue("ip_address"),
+            },
+            audit_fields = new
+            {
+                company_id = fields.CompanyId,
+                category_id = fields.CategoryId,
+                location_id = fields.LocationId,
+                asset_status_id = fields.StatusId,
+                current_user_id = fields.CurrentUserId,
+                admin_it_pic = fields.ItPicId,
+                purchase_year = fields.PurchaseYear,
+                vendor = fields.Vendor,
+                purchase_price = fields.PurchasePrice,
+            },
+        });
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{serverUrl}/api/agent/bootstrap-asset")
+        {
+            Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var response = http.Send(request);
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Data aset gagal disimpan (HTTP {(int)response.StatusCode}): {body}");
+
+        using var document = JsonDocument.Parse(body);
+        if (document.RootElement.TryGetProperty("asset_code", out var code) && code.ValueKind == JsonValueKind.String)
+            _registeredAssetCode = code.GetString() ?? string.Empty;
     }
 
     private void SaveConfig(string serverUrl, string token)
@@ -730,7 +909,7 @@ public partial class InstallerWindow : Window
     /// </summary>
     private async Task AutoUpdateAsync()
     {
-        Report(2, $"Preparing update...");
+        Report(2, "Memeriksa agent dan versi yang terpasang...");
 
         var updated = await Task.Run(RunUpdate);
 
@@ -761,16 +940,21 @@ public partial class InstallerWindow : Window
                     "This file is the installed application itself - no other build was clicked.");
             }
 
-            Report(25, "Stopping the running background agent...");
+            Report(10, $"Versi terpasang {_installedVersion}; menyiapkan versi {_newVersion}...");
+
+            Report(25, "Menghentikan agent versi lama...");
             StopInstalledAgent();
 
-            Report(55, $"Copying version {_newVersion}...");
+            Report(45, "Membersihkan sisa file pembaruan...");
+            InstallerService.CleanLeftovers(Path.GetDirectoryName(_installedExe)!);
+
+            Report(55, $"Menyalin versi {_newVersion}...");
             CopyWithRetry(sourceExe, _installedExe);
 
-            Report(80, "Restarting the tray agent...");
+            Report(85, "Menjalankan ulang agent di system tray...");
             RestartAgent();
 
-            Report(100, "Update complete");
+            Report(100, "Pembaruan selesai.");
             Thread.Sleep(250);
             return true;
         }
@@ -885,7 +1069,7 @@ public partial class InstallerWindow : Window
     {
         EnsureInstalledTrayIsRunning();
 
-        StatusPanel.Visibility = Visibility.Collapsed;
+        ReadyPanel.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Visible;
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Visible;
@@ -965,23 +1149,18 @@ public partial class InstallerWindow : Window
             _progressTimer.Stop();
             EndShimmer();
 
-            SubtitleText.Text = "Update complete";
-            StatusPanel.Visibility = Visibility.Collapsed;
+            SubtitleText.Text = "Pembaruan selesai";
+            InstallHeadingText.Text = "Agent berhasil diperbarui";
+            DescriptionText.Text = "Versi terbaru sudah terpasang. Agent kembali berjalan di system tray.";
+            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
+            CloseButton.Visibility = Visibility.Visible;
 
             SetResult(
                 GlyphOk,
-                "Update Complete",
-                $"Agent updated successfully.\n\nDevice keeps reporting.",
+                "Pembaruan TrackerAgent berhasil",
+                $"Versi {_newVersion} sudah terpasang.\n\nAgent aktif kembali di system tray.",
                 SuccessBrush);
-
-            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2.5);
-            _autoCloseTimer.Tick += (_, _) =>
-            {
-                _autoCloseTimer.Stop();
-                Close();
-            };
-            _autoCloseTimer.Start();
         });
     }
 
@@ -992,23 +1171,20 @@ public partial class InstallerWindow : Window
             _progressTimer.Stop();
             EndShimmer();
 
-            SubtitleText.Text = "Installation complete";
-            StatusPanel.Visibility = Visibility.Collapsed;
+            SubtitleText.Text = "Instalasi selesai";
+            InstallHeadingText.Text = "TrackerAgent sudah terpasang";
+            DescriptionText.Text = "Instalasi berhasil. Agent tetap berjalan di system tray dan akan mulai melaporkan perangkat ini.";
+            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
+            CloseButton.Visibility = Visibility.Visible;
             SetResult(
                 GlyphOk,
-                "Installation Complete",
-                $"Agent installed to {_installDir}\n\nConnected to {_serverUrl}\n\nDevice is now visible on Live Fleet.",
+                "TrackerAgent berhasil dipasang",
+                $"Agent tersimpan di {_installDir}\n\n" +
+                (_registeredAssetCode.Length > 0 ? $"Kode aset: {_registeredAssetCode}\n\n" : "") +
+                $"Terhubung ke {_serverUrl}\n\nPerangkat akan mengirim laporan ke Live Fleet.",
                 SuccessBrush);
 
-            _autoCloseTimer.Interval = TimeSpan.FromSeconds(2);
-            _autoCloseTimer.Tick += (_, _) =>
-            {
-                _autoCloseTimer.Stop();
-                Debug.WriteLine("[INSTALL] OnClosed: launching tray agent");
-                Close();
-            };
-            _autoCloseTimer.Start();
         });
     }
 
@@ -1019,15 +1195,19 @@ public partial class InstallerWindow : Window
             _progressTimer.Stop();
             EndShimmer();
 
-            SubtitleText.Text = _mode == InstallerMode.Update ? "Update failed" : "Installation failed";
-            StatusPanel.Visibility = Visibility.Collapsed;
+            SubtitleText.Text = _mode == InstallerMode.Update ? "Pembaruan gagal" : "Instalasi gagal";
+            InstallHeadingText.Text = "Proses belum selesai";
+            DescriptionText.Text = "Ada langkah yang tidak berhasil. Periksa pesan di bawah, lalu coba lagi.";
+            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
+            StatusText.Text = message;
+            UpdateInstallSteps(_targetProgress, failed: true);
 
             SetResult(
                 GlyphError,
-                _mode == InstallerMode.Update ? "Update Failed" : "Installation Failed",
+                _mode == InstallerMode.Update ? "Pembaruan gagal" : "Instalasi gagal",
                 message,
                 ErrorBrush);
         });
@@ -1041,7 +1221,7 @@ public partial class InstallerWindow : Window
             EndShimmer();
 
             SubtitleText.Text = "Update available";
-            StatusPanel.Visibility = Visibility.Collapsed;
+            ReadyPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Collapsed;
             CloseButton.Visibility = Visibility.Visible;
@@ -1058,7 +1238,7 @@ public partial class InstallerWindow : Window
             EndShimmer();
 
             SubtitleText.Text = "Update check complete";
-            StatusPanel.Visibility = Visibility.Collapsed;
+            ReadyPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Collapsed;
             CloseButton.Visibility = Visibility.Visible;
@@ -1125,11 +1305,11 @@ public partial class InstallerWindow : Window
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Collapsed;
-        StatusPanel.Visibility = Visibility.Visible;
+        ReadyPanel.Visibility = Visibility.Visible;
 
         _targetProgress = 0;
         _displayedProgress = 0;
-        ProgressFill.Width = 0;
+        OverallProgressFill.Width = 0;
         PercentText.Text = "0%";
 
         _progressTimer.Start();
