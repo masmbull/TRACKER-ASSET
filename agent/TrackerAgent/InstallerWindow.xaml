@@ -135,23 +135,22 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Ellipse Grid.Column="0" Grid.RowSpan="2"
-                             Width="40" Height="40"
-                             Fill="{Binding StatusIconBrush}"
-                             Stroke="{Binding BorderBrush}"
-                             StrokeThickness="2">
-                        <Ellipse.Effect>
-                            <DropShadowEffect ShadowDepth="0" BlurRadius="{Binding IconGlowBlur}" Opacity="{Binding IconGlowOpacity}" Color="#3B82F6"/>
-                        </Ellipse.Effect>
-                        <Ellipse>
-                            <TextBlock Text="{Binding StatusGlyph}"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="16"
-                                       Foreground="White"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                    <Grid Grid.Column="0" Grid.RowSpan="2"
+                          Width="40" Height="40">
+                        <Ellipse Fill="{Binding StatusIconBrush}"
+                                 Stroke="{Binding BorderBrush}"
+                                 StrokeThickness="2">
+                            <Ellipse.Effect>
+                                <DropShadowEffect ShadowDepth="0" BlurRadius="{Binding IconGlowBlur}" Opacity="{Binding IconGlowOpacity}" Color="#3B82F6"/>
+                            </Ellipse.Effect>
                         </Ellipse>
-                    </Ellipse>
+                        <TextBlock Text="{Binding StatusGlyph}"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="16"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
 
                     <TextBlock Grid.Column="1" Grid.Row="0"
                                Text="{Binding Title}"

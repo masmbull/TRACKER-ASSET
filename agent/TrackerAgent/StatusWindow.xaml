@@ -9,272 +9,80 @@
          WindowStartupLocation="CenterScreen"
          ResizeMode="NoResize"
          FontFamily="Segoe UI"
-         WindowStyle="None"
-         AllowsTransparency="True"
-         Background="Transparent">
+         WindowStyle="SingleBorderWindow"
+         Background="#0F1117">
 
-    <Window.Resources>
-        <SolidColorBrush x:Key="BrandBrush" Color="#DC2626"/>
-        <SolidColorBrush x:Key="BrandHoverBrush" Color="#B91C1C"/>
-        <SolidColorBrush x:Key="InkBrush" Color="#101828"/>
-        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#E4E7EC"/>
-        <SolidColorBrush x:Key="PageBrush" Color="#0F1117"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#12B76A"/>
-        <SolidColorBrush x:Key="AccentGlowBrush" Color="#DC2626"/>
-
-        <Storyboard x:Key="PulseAnimation">
-            <DoubleAnimation Storyboard.TargetName="StatusGlow"
-                             Storyboard.TargetProperty="Opacity"
-                             From="0.4" To="0.7"
-                             Duration="0:0:1.2"
-                             AutoReverse="True"
-                             RepeatBehavior="Forever"/>
-            <ColorAnimation Storyboard.TargetName="StatusDotFill"
-                            Storyboard.TargetProperty="Color"
-                            From="#12B76A" To="#22C526"
-                            Duration="0:0:1.2"
-                            AutoReverse="True"
-                            RepeatBehavior="Forever"/>
-        </Storyboard>
-
-        <QuadraticEase x:Key="EaseQuad" EasingMode="EaseInOut"/>
-        <BackEase x:Key="EaseOutBack" EasingMode="EaseOut" Amplitude="0.3"/>
-
-        <Storyboard x:Key="HoverIn">
-            <DoubleAnimation Storyboard.TargetName="MainCard"
-                             Storyboard.TargetProperty="RenderTransform.Y"
-                             From="20" To="0"
-                             Duration="0:0:0.35"
-                             EasingFunction="{StaticResource EaseOutBack}"/>
-            <DoubleAnimation Storyboard.TargetName="MainCard"
-                             Storyboard.TargetProperty="Opacity"
-                             From="0" To="1"
-                             Duration="0:0:0.35"/>
-        </Storyboard>
-
-        <Storyboard x:Key="BorderGlow">
-            <ColorAnimation Storyboard.TargetName="CardBorder"
-                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                            From="#DC2626" To="#FF6B6B"
-                            Duration="0:0:2"
-                            AutoReverse="True"
-                             RepeatBehavior="Forever"/>
-        </Storyboard>
-
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Height" Value="42"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="{StaticResource BrandBrush}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="10"
-                                x:Name="BtnBg">
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35" Color="#DC2626"/>
-                            </Border.Effect>
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="BtnBg" Property="Background" Value="{StaticResource BrandHoverBrush}"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.03" ScaleY="1.03"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="BtnBg" Property="Background" Value="#991C20"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
-            <Setter Property="Margin" Value="0,0,0,3"/>
-            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
-        </Style>
-
-        <Style x:Key="FieldValue" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
-        </Style>
-    </Window.Resources>
-
-    <Border Background="Transparent">
-        <Border x:Name="MainCard" Background="#0F1117"
-                BorderBrush="#1E293B" BorderThickness="1"
-                CornerRadius="18"
-                Padding="1"
-                RenderTransformOrigin="0.5,0.5">
-            <Border.RenderTransform>
-                <TranslateTransform Y="20"/>
-            </Border.RenderTransform>
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="32" Opacity="0.15" Color="#000000"/>
-            </Border.Effect>
-
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="16"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="16"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Border x:Name="CardBorder"
-                        Grid.Row="0"
-                        Background="#111827"
-                        BorderBrush="#DC2626" BorderThickness="1"
-                        CornerRadius="14">
-                    <Border.Effect>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="20" Opacity="0.4" Color="#DC2626"/>
-                    </Border.Effect>
-                    <Grid Margin="20">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Ellipse Grid.Column="0"
-                                 Width="40" Height="40"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,14,0">
-                            <Ellipse.Fill>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#DC2626" Offset="0"/>
-                                    <GradientStop Color="#B91C1C" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Ellipse.Fill>
-                            <Ellipse.Effect>
-                                <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.4" Color="#DC2626"/>
-                            </Ellipse.Effect>
-                        </Ellipse>
-
-                        <TextBlock Grid.Column="1"
-                                   Text="TRACKER-ASSET"
-                                   FontSize="20"
-                                   FontWeight="SemiBold"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Row="1" Height="1" Background="#1E293B" Opacity="0.5"/>
-
-                <Grid Grid.Row="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="SERVER" Style="{StaticResource FieldLabel}"/>
-                            <TextBlock x:Name="ServerText" Text="—" Style="{StaticResource FieldValue}"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="STATUS" Style="{StaticResource FieldLabel}"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse x:Name="StatusDot" Width="8" Height="8"
-                                         Fill="{StaticResource SuccessBrush}"
-                                         VerticalAlignment="Center" Margin="0,0,7,0"/>
-                                <TextBlock Text="Running" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource SuccessBrush}"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-
-                    <Border Grid.Row="2" Height="1" Background="#1E293B" Opacity="0.3"/>
-
-                    <Grid Grid.Row="4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="INSTALLED" Style="{StaticResource FieldLabel}"/>
-                            <TextBlock x:Name="InstalledText" Text="—" Style="{StaticResource FieldValue}"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="DEVICE" Style="{StaticResource FieldLabel}"/>
-                            <TextBlock x:Name="DeviceText" Text="—" Style="{StaticResource FieldValue}"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Border Grid.Row="6" Height="1" Background="#1E293B" Opacity="0.3"/>
-
-                    <Grid Grid.Row="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="USER" Style="{StaticResource FieldLabel}"/>
-                            <TextBlock x:Name="UserText" Text="—" Style="{StaticResource FieldValue}"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="VERSION" Style="{StaticResource FieldLabel}"/>
-                            <TextBlock x:Name="VersionText" Text="—" Style="{StaticResource FieldValue}"/>
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-
-                <Border Grid.Row="3" Height="1" Background="#1E293B" Opacity="0.5"/>
-
-                <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="IP LOCAL" Style="{StaticResource FieldLabel}" Margin="0,0,4,0"/>
-                    <TextBlock x:Name="IpText" Text="—" Style="{StaticResource FieldValue}"/>
-                    <TextBlock Text=" | " Foreground="#1E293B" Margin="8,0"/>
-                    <TextBlock Text="IP PUBLIC" Style="{StaticResource FieldLabel}" Margin="0,0,4,0"/>
-                    <TextBlock x:Name="PublicIpText" Text="checking…" Style="{StaticResource FieldValue}"/>
+    <Border Background="#111827"
+            BorderBrush="#1E293B" BorderThickness="2"
+            CornerRadius="14"
+            Padding="24">
+        <StackPanel>
+            <TextBlock Text="TRACKER-ASSET" FontSize="22" FontWeight="Bold" Foreground="White" Margin="0,0,0,12"/>
+            <Border Height="1" Background="#1E293B" Margin="0,4,0,12"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="SERVER" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="ServerText" Text="—" FontSize="13" Foreground="White"/>
                 </StackPanel>
-
-                <Button Grid.Row="5" x:Name="CloseBtn" Content="Close"
-                        Style="{StaticResource PrimaryButton}"
-                        HorizontalAlignment="Stretch"
-                        Click="CloseButton_Click"/>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="STATUS" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Fill="#12B76A" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Running" FontSize="13" FontWeight="Bold" Foreground="#12B76A"/>
+                    </StackPanel>
+                </StackPanel>
             </Grid>
-        </Border>
+            <Border Height="1" Background="#1E293B" Margin="0,8,0,8"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="INSTALLED" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="InstalledText" Text="—" FontSize="13" Foreground="White"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="DEVICE" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="DeviceText" Text="—" FontSize="13" Foreground="White"/>
+                </StackPanel>
+            </Grid>
+            <Border Height="1" Background="#1E293B" Margin="0,8,0,8"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="USER" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="UserText" Text="—" FontSize="13" Foreground="White"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="VERSION" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="VersionText" Text="—" FontSize="13" Foreground="White"/>
+                </StackPanel>
+            </Grid>
+            <Border Height="1" Background="#1E293B" Margin="0,8,0,8"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <TextBlock Text="IP LOCAL" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,4,0"/>
+                <TextBlock x:Name="IpText" Text="—" FontSize="13" Foreground="White"/>
+                <TextBlock Text=" | " Foreground="#1E293B" Margin="8,0"/>
+                <TextBlock Text="IP PUBLIC" FontSize="10" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,4,0"/>
+                <TextBlock x:Name="PublicIpText" Text="checking..." FontSize="13" Foreground="White"/>
+            </StackPanel>
+            <Button x:Name="CloseBtn" Content="Close"
+                    Height="42" FontSize="14" FontWeight="SemiBold"
+                    Foreground="White" Background="#DC2626"
+                    Cursor="Hand"
+                    Margin="0,12,0,0"
+                    Click="CloseButton_Click"/>
+        </StackPanel>
     </Border>
-
-    <Window.Triggers>
-        <EventTrigger RoutedEvent="Loaded">
-            <BeginStoryboard Storyboard="{StaticResource HoverIn}"/>
-        </EventTrigger>
-    </Window.Triggers>
 </Window>

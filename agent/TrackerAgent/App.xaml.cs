@@ -144,8 +144,18 @@ public partial class App : System.Windows.Application
             var clickedIdentity = InstallCheck.ReadBuildIdentity(Environment.ProcessPath);
             var installedIdentity = InstallCheck.ReadBuildIdentity(InstallCheck.InstalledExe);
 
-            if (!InstallCheck.IsSameFile(Environment.ProcessPath, InstallCheck.InstalledExe) &&
-                clickedIdentity != null && installedIdentity != null)
+            // Clicking the installed copy is the tray, on purpose. Anything else
+            // - including an identity that could not be read - reaches the
+            // installer window, because falling through to StartTray here is
+            // indistinguishable from "nothing happened": no window is shown and
+            // the operator who just double-clicked the freshly downloaded .exe
+            // sees the agent sit silently in the notification area. The old
+            // condition also required both identities to be readable, so a
+            // binary whose version resource was missing took the tray path and
+            // the install never started.
+            var isInstalledCopy = InstallCheck.IsSameFile(Environment.ProcessPath, InstallCheck.InstalledExe);
+
+            if (!isInstalledCopy)
             {
                 // Compared on the full build identity, not the version number. Two
                 // binaries that both say 1.2.0 but were built from different
@@ -153,6 +163,10 @@ public partial class App : System.Windows.Application
                 // silently blocked every bug fix published under an unchanged
                 // version - the machine reported the agent was already installed
                 // and the new binary never landed.
+                AgentLog.Write(
+                    "Installer opened: clicked " + (clickedIdentity ?? "unknown") +
+                    " vs installed " + (installedIdentity ?? "unknown") + ".");
+
                 MainWindow = new InstallerWindow(
                     InstallCheck.IsSameBuild(clickedIdentity, installedIdentity)
                         ? InstallerMode.AlreadyInstalled

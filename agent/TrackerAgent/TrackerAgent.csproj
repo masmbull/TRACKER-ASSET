@@ -23,13 +23,23 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.9</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.13</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
                     so devices with a SYSTEM daemon show 'admin' on Live Fleet
                1.7.7: first-install asset enrollment form, secure asset bootstrap API,
-                    and visible step-by-step installer/update progress -->
+                    and visible step-by-step installer/update progress
+               1.7.13: the installer window could not be created at all. The step-card
+                    DataTemplate wrapped its glyph TextBlock in a bare <Ellipse>, which
+                    is not a panel, so BAML threw "Trying to add to Ellipse which is
+                    not a collection" while parsing InstallerWindow.xaml - the process
+                    died with a "TrackerAgent Error" box or, when it came from the
+                    tray's update path, silently fell back to the tray. A double-click
+                    on a freshly downloaded .exe therefore showed no installer. Any
+                    clicked copy that is not the installed file now reaches the
+                    installer even when a build identity cannot be read, instead of
+                    quietly starting the tray. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
