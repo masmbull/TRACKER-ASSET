@@ -120,6 +120,9 @@
                 CornerRadius="18"
                 Padding="1"
                 RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </Border.RenderTransform>
             <Border.Effect>
                 <DropShadowEffect ShadowDepth="0" BlurRadius="32" Opacity="0.15" Color="#000000"/>
             </Border.Effect>

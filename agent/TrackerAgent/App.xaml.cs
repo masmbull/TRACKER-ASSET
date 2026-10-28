@@ -281,9 +281,16 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Status", CreateTrayMenuGlyph("\uE946", System.Drawing.Color.FromArgb(96, 165, 250)), (_, _) =>
             Dispatcher.Invoke(() =>
             {
-                var window = new StatusWindow(config.ServerUrl, config.InstalledAt);
-                window.Show();
-                window.Activate();
+                try
+                {
+                    var window = new StatusWindow(config.ServerUrl, config.InstalledAt);
+                    window.Show();
+                    window.Activate();
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show(ex.Message, "Status", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                }
             }));
 
         menu.Items.Add(new ToolStripSeparator());
