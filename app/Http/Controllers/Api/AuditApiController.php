@@ -69,6 +69,7 @@ class AuditApiController extends Controller
         // the audit), but the field had no validation rule, so Laravel dropped
         // it from the payload and it never reached the database at all.
         $this->rememberMacAddress($request, $payload);
+        $this->rememberRustdeskId($request, $payload);
 
         return response()->json([
             'ok' => true,
@@ -98,6 +99,23 @@ class AuditApiController extends Controller
         }
 
         $token->mac_address = $reported;
+        $token->save();
+    }
+
+    private function rememberRustdeskId(Request $request, array $payload): void
+    {
+        $reported = trim((string) ($payload['rustdesk_id'] ?? ''));
+        if ($reported === '') {
+            return;
+        }
+
+        $token = AgentApiToken::find($request->attributes->get('agent_token_id'));
+        if (! $token || $token->rustdesk_id === $reported) {
+            return;
+        }
+
+        $token->rustdesk_id = $reported;
+        $token->rustdesk_reported_at = now();
         $token->save();
     }
 
@@ -183,6 +201,7 @@ class AuditApiController extends Controller
             // and the only thing that makes a sleeping laptop wakeable over
             // the network - see rememberMacAddress().
             'mac_address' => 'nullable|string|max:255',
+            'rustdesk_id' => 'nullable|string|max:64',
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
             'agent_mode' => 'nullable|string|in:tray,service,unknown',
@@ -211,6 +230,7 @@ class AuditApiController extends Controller
             'serial_number' => 'nullable|string|max:255',
             'hostname' => 'nullable|string|max:255',
             'mac_address' => 'nullable|string|max:255',
+            'rustdesk_id' => 'nullable|string|max:64',
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'processor' => 'nullable|string|max:255',

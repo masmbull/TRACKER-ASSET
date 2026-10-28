@@ -379,6 +379,9 @@
                                 @else
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
                                 @endif
+                                @if($device->rustdesk_id)
+                                    <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
+                                @endif
                                 <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                             </div>
                         </td>
@@ -679,6 +682,9 @@
                         <x-badge variant="error" :dot="true">revoked</x-badge>
                     </td>
                     <td class="py-3 px-4">
+                        @if($device->rustdesk_id)
+                            <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
+                        @endif
                         <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                     </td>
                 </tr>

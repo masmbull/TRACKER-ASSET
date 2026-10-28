@@ -112,6 +112,34 @@ public static class HardwareCollector
         }
         catch { }
 
+        // RustDesk self-hosted remote desktop id, if RustDesk is installed.
+        // The ID lives in RustDesk's own config file, so we just read it;
+        // a missing file or parse failure leaves the field unset and the
+        // fleet page falls back to RDP.
+        try
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var configPath = Path.Combine(appData, "RustDesk", "config", "RustDesk.toml");
+            if (File.Exists(configPath))
+            {
+                foreach (var line in File.ReadAllLines(configPath))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.StartsWith("id ", StringComparison.OrdinalIgnoreCase) ||
+                        trimmed.StartsWith("id=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = trimmed.Split('=', 2).Last().Trim().Trim('"', '\'');
+                        if (!string.IsNullOrWhiteSpace(value))
+                        {
+                            data["rustdesk_id"] = value;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
         // Live Fleet telemetry (PRD §11) — battery wear, C: disk space, RAM
         // layout, Wi-Fi link and the Windows user that is logged in.
         try { data["logged_in_user"] = Environment.UserName; } catch { }

@@ -11,6 +11,7 @@ class AgentApiToken extends Model
     protected $fillable = [
         'name', 'token_hash', 'token_plain', 'abilities', 'last_used_at', 'expires_at', 'is_active',
         'device_id', 'platform', 'agent_version', 'last_seen_at', 'hardware_id', 'mac_address',
+        'rustdesk_id', 'rustdesk_password', 'rustdesk_reported_at',
     ];
 
     protected function casts(): array
@@ -21,6 +22,7 @@ class AgentApiToken extends Model
             'expires_at' => 'datetime',
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
+            'rustdesk_reported_at' => 'datetime',
             'token_plain' => 'encrypted',
         ];
     }
