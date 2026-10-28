@@ -3,75 +3,116 @@
          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
          Title="TRACKER-ASSET Setup"
          Icon="mito-icon.png"
-         Width="720" Height="Auto"
-         MinWidth="720" MinHeight="520"
+         Width="760" Height="Auto"
+         MinWidth="760" MinHeight="560"
          SizeToContent="Height"
          WindowStartupLocation="CenterScreen"
          ResizeMode="NoResize"
          FontFamily="Segoe UI"
          UseLayoutRounding="True"
          TextOptions.TextFormattingMode="Display"
-         Background="Transparent"
-         WindowStyle="None"
-         AllowsTransparency="True">
+         Background="#F3F4F6"
+         WindowStyle="SingleBorderWindow">
 
+    <!-- Light, document-like installer surface.
+         The previous window was a dark, borderless, transparency-enabled card
+         with red glows. It read as a game launcher rather than a setup wizard,
+         and AllowsTransparency forced software rendering for every frame of the
+         shimmer animation. This follows the Windows 11 setup conventions instead:
+         a single light surface, one accent colour used only for the primary
+         action and the progress fill, and a real title bar the user can move. -->
     <Window.Resources>
+        <!-- Accent: the MITO red, used sparingly. -->
         <SolidColorBrush x:Key="BrandBrush" Color="#DC2626"/>
         <SolidColorBrush x:Key="BrandHover" Color="#B91C1C"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#22C55E"/>
-        <SolidColorBrush x:Key="ErrorBrush" Color="#EF4444"/>
+        <SolidColorBrush x:Key="BrandPressed" Color="#991B1B"/>
+
+        <!-- Semantic status colours, light-surface variants (600/700 weights). -->
+        <SolidColorBrush x:Key="SuccessBrush" Color="#047857"/>
+        <SolidColorBrush x:Key="SuccessSoftBrush" Color="#ECFDF5"/>
+        <SolidColorBrush x:Key="ErrorBrush" Color="#B42318"/>
+        <SolidColorBrush x:Key="ErrorSoftBrush" Color="#FEF3F2"/>
+        <SolidColorBrush x:Key="RunningBrush" Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="RunningSoftBrush" Color="#EFF6FF"/>
         <SolidColorBrush x:Key="PendingBrush" Color="#6B7280"/>
-        <SolidColorBrush x:Key="RunningBrush" Color="#3B82F6"/>
-        <SolidColorBrush x:Key="SkippedBrush" Color="#9CA3AF"/>
-        <SolidColorBrush x:Key="NeutralTextBrush" Color="#F3F4F6"/>
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#9CA3AF"/>
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#D1D5DB"/>
-        <SolidColorBrush x:Key="CardBrush" Color="#11131B"/>
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#1F2937"/>
-        <SolidColorBrush x:Key="TrackBrush" Color="#1F2937"/>
+        <SolidColorBrush x:Key="PendingSoftBrush" Color="#F3F4F6"/>
+
+        <!-- Text: three levels, all dark-on-light. -->
+        <SolidColorBrush x:Key="NeutralTextBrush" Color="#101828"/>
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#344054"/>
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#667085"/>
+
+        <!-- Surfaces and lines. -->
+        <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#E4E7EC"/>
+        <SolidColorBrush x:Key="SubtleSurfaceBrush" Color="#F9FAFB"/>
+        <SolidColorBrush x:Key="TrackBrush" Color="#EAECF0"/>
         <SolidColorBrush x:Key="FillBrush" Color="#DC2626"/>
 
-        <Thickness x:Key="CardPadding" Left="24" Top="24" Right="24" Bottom="24"/>
-
-        <!-- GlowLoop and CardFloatIn storyboards removed: CardFloatIn referenced
-             MainCard.RenderTransform.(TranslateTransform.Y) which was not set,
-             causing "Provide value on StaticResourceExtension threw an exception"
-             on every fresh install. -->
-
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="44"/>
-            <Setter Property="MinWidth" Value="120"/>
-            <Setter Property="Padding" Value="28,0"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="Padding" Value="24,0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Background" Value="{StaticResource BrandBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BrandHover}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="BtnBg"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="12">
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35" Color="#DC2626"/>
-                            </Border.Effect>
+                                CornerRadius="6">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="BtnBg" Property="Background" Value="{StaticResource BrandHover}"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.03" ScaleY="1.03"/>
-                                    </Setter.Value>
-                                </Setter>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="BtnBg" Property="Background" Value="#7F1D1D"/>
+                                <Setter TargetName="BtnBg" Property="Background" Value="{StaticResource BrandPressed}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="BtnBg" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GhostButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#D0D5DD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BtnBg"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BtnBg" Property="Background" Value="{StaticResource SubtleSurfaceBrush}"/>
+                                <Setter TargetName="BtnBg" Property="BorderBrush" Value="#98A2B3"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BtnBg" Property="Background" Value="#EAECF0"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="BtnBg" Property="Opacity" Value="0.5"/>
@@ -82,95 +123,43 @@
             </Setter>
         </Style>
 
-        <Style x:Key="GhostButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="44"/>
-            <Setter Property="MinWidth" Value="120"/>
-            <Setter Property="Padding" Value="28,0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#9CA3AF"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource CardBorderBrush}"/>
-                                <Setter Property="BorderBrush" Value="#6B7280"/>
-                                <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
+        <!-- One checklist row. Kept flat and quiet: the state is carried by a
+             small glyph and a text label, not by a coloured card per step. -->
         <DataTemplate x:Key="StepCardTemplate">
-            <Border Background="{Binding BackgroundBrush}"
-                    BorderBrush="{Binding BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Margin="0,0,0,8">
-                <Border.Effect>
-                    <DropShadowEffect ShadowDepth="0" BlurRadius="{Binding GlowBlur}" Opacity="{Binding GlowOpacity}" Color="#3B82F6"/>
-                </Border.Effect>
-                <Grid Margin="18">
+            <Border Background="Transparent"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="0,10">
+                <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
 
-                    <Grid Grid.Column="0" Grid.RowSpan="2"
-                          Width="40" Height="40">
-                        <Ellipse Fill="{Binding StatusIconBrush}"
-                                 Stroke="{Binding BorderBrush}"
-                                 StrokeThickness="2">
-                            <Ellipse.Effect>
-                                <DropShadowEffect ShadowDepth="0" BlurRadius="{Binding IconGlowBlur}" Opacity="{Binding IconGlowOpacity}" Color="#3B82F6"/>
-                            </Ellipse.Effect>
-                        </Ellipse>
-                        <TextBlock Text="{Binding StatusGlyph}"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   FontSize="16"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-
-                    <TextBlock Grid.Column="1" Grid.Row="0"
-                               Text="{Binding Title}"
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusGlyph}"
+                               FontFamily="Segoe MDL2 Assets"
                                FontSize="14"
-                               FontWeight="SemiBold"
-                               Foreground="{Binding StatusTextBrush}"/>
+                               Foreground="{Binding StatusIconBrush}"
+                               VerticalAlignment="Center"/>
 
-                    <TextBlock Grid.Column="1" Grid.Row="1"
-                               Text="{Binding Description}"
-                               FontSize="11.5"
-                               Foreground="{Binding DescriptionBrush}"
-                               TextWrapping="Wrap"
-                               TextAlignment="Left"
-                               Margin="0,4,0,0"/>
+                    <StackPanel Grid.Column="1" Margin="8,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="13"
+                                   Foreground="{Binding StatusTextBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Description}"
+                                   FontSize="11.5"
+                                   Foreground="{Binding DescriptionBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
 
-                    <Border Grid.Column="2" Grid.RowSpan="2"
+                    <Border Grid.Column="2"
                             Background="{Binding BadgeBrush}"
-                            CornerRadius="20"
-                            Padding="12,4"
-                            HorizontalAlignment="Center"
+                            CornerRadius="10"
+                            Padding="8,2"
                             VerticalAlignment="Center">
                         <TextBlock Text="{Binding StatusLabel}"
                                    FontSize="11"
@@ -181,158 +170,140 @@
                 </Grid>
             </Border>
         </DataTemplate>
-
-        <Style x:Key="StatLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
-
-        <Style x:Key="StatValueStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="22"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="{StaticResource NeutralTextBrush}"/>
-        </Style>
     </Window.Resources>
 
-    <Border x:Name="GlowBorder" Background="Transparent"
-            MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Background="#F3F4F6" Padding="24">
         <Border x:Name="MainCard"
                 Background="{StaticResource CardBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                CornerRadius="20"
-                RenderTransformOrigin="0.5,0.5">
-            <Border.RenderTransform>
-                <TranslateTransform Y="20"/>
-            </Border.RenderTransform>
+                CornerRadius="8">
             <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="40" Opacity="0.3" Color="#000000"/>
+                <DropShadowEffect ShadowDepth="1" BlurRadius="12" Opacity="0.06" Color="#101828"/>
             </Border.Effect>
 
-            <Grid Margin="32,28,32,28">
+            <Grid Margin="28,24,28,24">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Header -->
-                <Grid Grid.Row="0" Margin="0,0,0,24">
+                <Grid Grid.Row="0" Margin="0,0,0,20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Width="64" Height="64" CornerRadius="16"
+                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="8"
                             Background="{StaticResource BrandBrush}">
-                        <Border.Effect>
-                            <DropShadowEffect ShadowDepth="0" BlurRadius="16" Opacity="0.4" Color="#DC2626"/>
-                        </Border.Effect>
                         <TextBlock Text="M"
-                                   FontSize="28" FontWeight="Bold"
+                                   FontSize="20" FontWeight="Bold"
                                    Foreground="White"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
                     </Border>
 
-                    <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="TRACKER-ASSET"
-                                   FontSize="24" FontWeight="SemiBold"
+                                   FontSize="18" FontWeight="SemiBold"
                                    Foreground="{StaticResource NeutralTextBrush}"/>
                         <TextBlock x:Name="SubtitleText"
-                                   Text="Installation Wizard"
-                                   FontSize="13"
+                                   Text="Instalasi agen"
+                                   FontSize="12.5"
                                    Foreground="{StaticResource MutedTextBrush}"
-                                   Margin="0,2,0,0"/>
+                                   Margin="0,1,0,0"/>
                     </StackPanel>
                 </Grid>
 
-                <!-- Ready State -->
-                <Border x:Name="ReadyPanel" Grid.Row="1"
-                        Background="#0F1117"
+                <!-- Heading and description -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,16">
+                    <TextBlock x:Name="InstallHeadingText" Text="Memasang TrackerAgent"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource NeutralTextBrush}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock x:Name="DescriptionText"
+                               Text="Jangan tutup jendela ini sampai proses selesai."
+                               FontSize="12.5"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,6,0,0"/>
+                </StackPanel>
+
+                <!-- Checklist -->
+                <Border Grid.Row="2"
+                        Background="{StaticResource CardBrush}"
                         BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="32"
-                        HorizontalAlignment="Center">
-                    <Border.Effect>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="16" Opacity="0.15" Color="#DC2626"/>
-                    </Border.Effect>
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock x:Name="InstallHeadingText" Text="Installing TrackerAgent"
-                                   FontSize="18" FontWeight="SemiBold"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="DescriptionText"
-                                   Text="Setup steps and live progress will appear here. Keep this window open until setup completes."
-                                   FontSize="13"
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="500"
-                                   Margin="0,8,0,0"/>
-                        <StackPanel x:Name="InstallStepsPanel" Margin="0,20,0,0" HorizontalAlignment="Stretch">
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon1" Grid.Column="0" Text="&#xE774;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel1" Grid.Column="1" Text="Memeriksa koneksi server" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState1" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon2" Grid.Column="0" Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel2" Grid.Column="1" Text="Menyiapkan folder dan menyalin agent" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState2" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon3" Grid.Column="0" Text="&#xE8D4;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel3" Grid.Column="1" Text="Membuat identitas perangkat" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState3" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon4" Grid.Column="0" Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel4" Grid.Column="1" Text="Mendaftarkan perangkat dan menyimpan konfigurasi" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState4" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon5" Grid.Column="0" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel5" Grid.Column="1" Text="Mengatur agent berjalan saat login" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState5" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="StepIcon6" Grid.Column="0" Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="StepLabel6" Grid.Column="1" Text="Menjalankan agent di system tray" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12"/>
-                                <TextBlock x:Name="StepState6" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                            </Grid>
-                        </StackPanel>
+                        CornerRadius="6"
+                        Padding="16,6">
+                    <StackPanel x:Name="InstallStepsPanel">
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon1" Grid.Column="0" Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel1" Grid.Column="1" Margin="8,0,16,0" Text="Memeriksa koneksi server" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState1" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Height="1" Background="{StaticResource CardBorderBrush}"/>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon2" Grid.Column="0" Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel2" Grid.Column="1" Margin="8,0,16,0" Text="Menyiapkan folder dan menyalin agent" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState2" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Height="1" Background="{StaticResource CardBorderBrush}"/>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon3" Grid.Column="0" Text="&#xE8D4;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel3" Grid.Column="1" Margin="8,0,16,0" Text="Membuat identitas perangkat" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState3" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Height="1" Background="{StaticResource CardBorderBrush}"/>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon4" Grid.Column="0" Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel4" Grid.Column="1" Margin="8,0,16,0" Text="Mendaftarkan perangkat ke server" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState4" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Height="1" Background="{StaticResource CardBorderBrush}"/>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon5" Grid.Column="0" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel5" Grid.Column="1" Margin="8,0,16,0" Text="Mengatur agent berjalan saat login" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState5" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Height="1" Background="{StaticResource CardBorderBrush}"/>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StepIcon6" Grid.Column="0" Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource PendingBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepLabel6" Grid.Column="1" Margin="8,0,16,0" Text="Menjalankan agent di system tray" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StepState6" Grid.Column="2" Text="Menunggu" Foreground="{StaticResource MutedTextBrush}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
-                <!-- Install Button -->
-                <Button x:Name="InstallButton" Grid.Row="2" Visibility="Collapsed"
+                <!-- Install button (kept for the manual path) -->
+                <Button x:Name="InstallButton" Grid.Row="3" Visibility="Collapsed"
                         Content="Install Now" Style="{StaticResource PrimaryButtonStyle}"
-                        HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                        HorizontalAlignment="Right" Margin="0,16,0,0"/>
 
-                <!-- Progress Bar -->
-                <Border x:Name="OverallProgressTrack" Grid.Row="3"
+                <!-- Progress bar -->
+                <Border x:Name="OverallProgressTrack" Grid.Row="4"
                         Background="{StaticResource TrackBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                        Height="12"
-                        CornerRadius="6"
+                        Height="6"
+                        CornerRadius="3"
+                        Margin="0,20,0,0"
                         Visibility="Visible">
                     <Grid ClipToBounds="True">
                         <Rectangle x:Name="OverallProgressFill" Fill="{StaticResource FillBrush}"
-                                   Width="0" HorizontalAlignment="Left" RadiusX="6" RadiusY="6"/>
+                                   Width="0" HorizontalAlignment="Left" RadiusX="3" RadiusY="3"/>
                         <Border x:Name="ShimmerBar" Width="100" HorizontalAlignment="Left"
-                                Background="#55FFFFFF" Visibility="Collapsed" IsHitTestVisible="False">
+                                Background="#33FFFFFF" Visibility="Collapsed" IsHitTestVisible="False">
                             <Border.RenderTransform>
                                 <TranslateTransform x:Name="ShimmerTransform" X="-140"/>
                             </Border.RenderTransform>
@@ -340,32 +311,32 @@
                     </Grid>
                 </Border>
 
-                <!-- Progress Stats -->
-                <Grid x:Name="StatsPanel" Grid.Row="4" Margin="0,10,0,0" Visibility="Visible">
+                <!-- Status line -->
+                <Grid x:Name="StatsPanel" Grid.Row="5" Margin="0,10,0,0" Visibility="Visible">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="StatusText" Grid.Column="0" Text="Menyiapkan instalasi..."
-                               FontSize="12" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                               FontSize="12.5" Foreground="{StaticResource MutedTextBrush}"
+                               TextWrapping="Wrap" VerticalAlignment="Center"/>
                     <TextBlock x:Name="PercentText" Grid.Column="1" Text="0%" Margin="12,0,0,0"
-                               FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"
                                VerticalAlignment="Center"/>
                 </Grid>
 
-                <!-- Progress Counter -->
-                <TextBlock x:Name="ProgressCounterText" Grid.Row="5"
-                           Text="0 of 0 steps completed"
-                           FontSize="13"
+                <TextBlock x:Name="ProgressCounterText" Grid.Row="6"
+                           Text="0 dari 6 langkah selesai"
+                           FontSize="12"
                            Foreground="{StaticResource MutedTextBrush}"
-                           HorizontalAlignment="Center"
-                           Margin="0,6,0,0"/>
-
-                <!-- Step Cards List -->
+                           HorizontalAlignment="Left"
+                           Margin="0,6,0,0"
+                           VerticalAlignment="Top"/>
                 <ScrollViewer x:Name="StepsScrollViewer" Grid.Row="6"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
-                              Margin="0,8,0,0"
+                              MaxHeight="220"
+                              Margin="0,26,0,0"
                               Visibility="Collapsed">
                     <ItemsControl x:Name="StepCards">
                         <ItemsControl.ItemsPanel>
@@ -379,64 +350,61 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-                <!-- Result Panel -->
-                <Border x:Name="ResultPanel" Grid.Row="5" Grid.RowSpan="3"
-                        Background="#0F1117"
+                <!-- Result panel: below the checklist, never on top of it.
+                     It used to span rows 5-7 and cover the steps, progress bar and
+                     status line, so a failure looked like a frozen window with a
+                     second dialog stacked in the middle. -->
+                <Border x:Name="ResultPanel" Grid.Row="7"
+                        Background="{StaticResource SubtleSurfaceBrush}"
                         BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="32"
-                        HorizontalAlignment="Center"
+                        CornerRadius="6"
+                        Padding="20,16"
+                        Margin="0,18,0,0"
                         Visibility="Collapsed">
-                    <Border.Effect>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="24" Opacity="0.2" Color="#DC2626"/>
-                    </Border.Effect>
-                    <StackPanel HorizontalAlignment="Center">
-                        <Grid Width="80" Height="80" Margin="0,0,0,18">
-                            <Ellipse x:Name="ResultBadge"
-                                     Width="80" Height="80"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" Width="36" Height="36" Margin="0,2,14,0"
+                              VerticalAlignment="Top">
+                            <Ellipse x:Name="ResultBadge" Width="36" Height="36">
                                 <Ellipse.Fill>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                        <GradientStop Color="#22C55E" Offset="0"/>
-                                        <GradientStop Color="#16A34A" Offset="1"/>
-                                    </LinearGradientBrush>
+                                    <SolidColorBrush Color="#ECFDF5"/>
                                 </Ellipse.Fill>
-                                <Ellipse.Effect>
-                                    <DropShadowEffect ShadowDepth="0" BlurRadius="16" Opacity="0.4" Color="#22C55E"/>
-                                </Ellipse.Effect>
                             </Ellipse>
                             <TextBlock x:Name="ResultIcon"
                                        FontFamily="Segoe MDL2 Assets"
-                                       FontSize="32"
-                                       Foreground="White"
+                                       FontSize="16"
+                                       Foreground="{StaticResource SuccessBrush}"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
-                                       Text="&#x2713;"/>
+                                       Text="&#xE73E;"/>
                         </Grid>
 
-                        <TextBlock x:Name="ResultText" Text="Install Complete"
-                                   FontSize="22" FontWeight="SemiBold"
-                                   Foreground="{StaticResource NeutralTextBrush}"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,0,0,12"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock x:Name="ResultText" Text="Instalasi selesai"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource NeutralTextBrush}"
+                                       TextWrapping="Wrap"/>
 
-                        <TextBlock x:Name="ResultDetail"
-                                   FontSize="14"
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="500"
-                                   Margin="0,0,0,0"/>
-                    </StackPanel>
+                            <TextBlock x:Name="ResultDetail"
+                                       FontSize="12.5"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       TextWrapping="Wrap"
+                                       LineHeight="19"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Buttons -->
-                <StackPanel Grid.Row="7" Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,0,0,0">
+                <StackPanel Grid.Row="8" Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,20,0,0">
                     <Button x:Name="RetryButton" Content="Ulangi" Visibility="Collapsed"
-                            Margin="0,0,16,0" Style="{StaticResource GhostButtonStyle}"
+                            Margin="0,0,10,0" Style="{StaticResource GhostButtonStyle}"
                             Click="RetryButton_Click"/>
                     <Button x:Name="CloseButton" Content="Tutup" Visibility="Collapsed"
                             Style="{StaticResource PrimaryButtonStyle}"
@@ -445,8 +413,4 @@
             </Grid>
         </Border>
     </Border>
-
-    <!-- CardFloatIn animation removed: it referenced MainCard.RenderTransform.(TranslateTransform.Y)
-         which was never set, causing "Provide value on StaticResourceExtension threw an
-         exception" on every fresh install. -->
 </Window>

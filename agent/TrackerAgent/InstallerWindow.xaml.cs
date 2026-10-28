@@ -32,6 +32,7 @@ public partial class InstallerWindow : Window
     private string _deviceId = "";
     private string _lastError = "";
     private string _registeredAssetCode = "";
+    private string _resolvedExePath = "";
     private AgentRegistrationFields? _registrationFields;
     private Dictionary<string, string> _hardwareDetails = new(StringComparer.OrdinalIgnoreCase);
 
@@ -202,41 +203,58 @@ public partial class InstallerWindow : Window
     });
 }
 
-/// <summary>Reflect the actual reported install phase in the visible checklist.</summary>
+    /// <summary>Reflect the actual reported install phase in the visible checklist.</summary>
     private void UpdateInstallSteps(int percent, bool failed = false)
     {
         var states = new[] { StepState1, StepState2, StepState3, StepState4, StepState5, StepState6 };
-    // A phase is marked complete when the next phase starts, not when its
-    // "starting..." message is reported. This keeps the checklist honest during
-    // slow file copies, registration requests, and task-scheduler setup.
+        var icons = new[] { StepIcon1, StepIcon2, StepIcon3, StepIcon4, StepIcon5, StepIcon6 };
+
+        // A phase is marked complete when the next phase starts, not when its
+        // "starting..." message is reported. This keeps the checklist honest during
+        // slow file copies, registration requests, and task-scheduler setup.
         var thresholds = _mode == InstallerMode.Update
             ? new[] { 10, 25, 45, 55, 85, 100 }
             : new[] { 12, 46, 62, 76, 86, 100 };
         var complete = 0;
         var activeIndex = Array.FindIndex(thresholds, threshold => percent < threshold);
 
+        // Failed before the threshold that marks the step complete means the step
+        // that was running is the one that failed. The old code only looked at
+        // activeIndex, so a failure on the very step whose threshold had just been
+        // crossed was drawn as "Complete" with the next step still "Berjalan".
+        if (failed && activeIndex < 0)
+        {
+            activeIndex = states.Length - 1;
+        }
+
         for (var i = 0; i < states.Length; i++)
         {
-            if (percent >= thresholds[i])
-            {
-                states[i].Text = "Complete";
-                states[i].Foreground = SuccessBrush;
-                complete++;
-            }
-            else if (i == activeIndex && failed)
+            if (failed && i == activeIndex)
             {
                 states[i].Text = "Gagal";
                 states[i].Foreground = ErrorBrush;
+                icons[i].Text = "\uE783"; // Error
+                icons[i].Foreground = ErrorBrush;
+            }
+            else if (percent >= thresholds[i])
+            {
+                states[i].Text = "Selesai";
+                states[i].Foreground = SuccessBrush;
+                icons[i].Text = "\uE73E"; // Accept
+                icons[i].Foreground = SuccessBrush;
+                complete++;
             }
             else if (i == activeIndex)
             {
                 states[i].Text = "Berjalan";
-                states[i].Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x60, 0xA5, 0xFA));
+                states[i].Foreground = RunningBrush;
+                icons[i].Foreground = RunningBrush;
             }
             else
             {
                 states[i].Text = "Menunggu";
-                states[i].Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9C, 0xA3, 0xAF));
+                states[i].Foreground = PendingBrush;
+                icons[i].Foreground = PendingBrush;
             }
         }
 
@@ -257,7 +275,9 @@ public partial class InstallerWindow : Window
 
             if (completedTask == timeoutTask)
             {
-                ShowFailure("Server discovery timed out. Check network connection or provide server URL manually.");
+                ShowFailure(
+                    "Server tidak merespons dalam 30 detik.\n\n" +
+                    "Periksa koneksi jaringan, atau unduh ulang installer langsung dari server TRACKER-ASSET.");
                 return;
             }
 
@@ -265,7 +285,9 @@ public partial class InstallerWindow : Window
 
             if (serverUrl is null)
             {
-                ShowFailure("No TRACKER-ASSET server found. Ensure server is running or download from it.");
+                ShowFailure(
+                    "Server TRACKER-ASSET tidak ditemukan.\n\n" +
+                    "Pastikan server berjalan dan bisa diakses dari jaringan ini, lalu unduh ulang installer dari server tersebut.");
                 return;
             }
 
@@ -545,8 +567,39 @@ public partial class InstallerWindow : Window
                 // removed to test a fresh install) locks its own exe and the
                 // copy would fail with a sharing violation. Stop it first, then
                 // copy with the bounded retry used by the update path.
+                //
+                // Stopping is not always possible: when the machine already runs
+                // the SYSTEM scheduled task, that process owns the handle from
+                // session 0 and a standard user cannot kill it. Copying over a
+                // locked exe fails no matter how many times it is retried, which
+                // used to surface as the useless "check disk space" message.
                 StopInstalledAgent();
-                CopyWithRetry(sourceExe, destExe);
+
+                if (!TryCopyInstalledExe(sourceExe, destExe))
+                {
+                    // The clean way out is a side-by-side install: a versioned
+                    // binary next to the locked one, which the SYSTEM task is then
+                    // pointed at. No handle needs releasing and no elevation is
+                    // needed for the copy itself.
+                    var versionedExe = Path.Combine(
+                        _installDir,
+                        $"TrackerAgent-{(InstallCheck.ReadVersion(sourceExe)?.ToString() ?? "new")}.exe");
+
+                    StopInstalledAgent();
+
+                    if (TryCopyInstalledExe(sourceExe, versionedExe))
+                    {
+                        destExe = versionedExe;
+                    }
+                    else
+                    {
+                        throw new InstallBlockedException(
+                            "Agent versi lama sedang berjalan sebagai service Windows dan file-nya tidak bisa diganti.\n\n" +
+                            "Tutup aplikasi ini, lalu jalankan ulang dengan klik kanan > Run as administrator.");
+                    }
+                }
+
+                _resolvedExePath = destExe;
             }
 
             Report(46, "Membuat identitas perangkat...");
@@ -596,6 +649,10 @@ public partial class InstallerWindow : Window
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
                 "Menyelesaikan konfigurasi...");
 
+            // The clickable code belongs in the success panel: it is the only
+            // thing the user can quote when asking IT about this machine.
+            _installDir = Path.GetDirectoryName(destExe) ?? _installDir;
+
             Report(100, "Instalasi selesai.");
             Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
                 "Instalasi selesai.",
@@ -611,10 +668,15 @@ public partial class InstallerWindow : Window
             // Better error messages for common failure modes
             string friendlyMessage = ex switch
             {
-                System.IO.IOException => "File operation failed. Check disk space and permissions.",
-                System.Net.Http.HttpRequestException => "Cannot reach server. Check network connection.",
-                System.Reflection.TargetInvocationException => "Installation script error. Contact support.",
-                System.UnauthorizedAccessException => "Permission denied. Run as Administrator.",
+                InstallBlockedException => ex.Message,
+                System.IO.IOException io when IsSharingViolation(io) =>
+                    "File agent sedang dipakai proses lain (biasanya service TrackerAgent).\n\n" +
+                    "Tutup aplikasi ini, lalu jalankan ulang dengan klik kanan > Run as administrator.",
+                System.IO.IOException => "Operasi file gagal. Periksa ruang disk dan izin folder instalasi.",
+                System.Net.Http.HttpRequestException => "Tidak bisa menghubungi server. Periksa koneksi jaringan.",
+                System.Reflection.TargetInvocationException => "Ada kesalahan pada proses instalasi. Hubungi tim IT.",
+                System.UnauthorizedAccessException =>
+                    "Izin ditolak. Jalankan installer dengan klik kanan > Run as administrator.",
                 _ => ex.Message
             };
 
@@ -1065,12 +1127,64 @@ public partial class InstallerWindow : Window
         throw last!;
     }
 
+    /// <summary>
+    /// Copy that reports failure instead of retrying a lock it can never clear.
+    /// </summary>
+    /// <remarks>
+    /// Only a sharing violation is worth waiting for - it can be a handle that is
+    /// closing. Any other IOException (disk full, path too long, security) will
+    /// fail identically on every attempt, and spending three seconds per attempt
+    /// on it only delays the error message the user needs.
+    /// </remarks>
+    private static bool TryCopyInstalledExe(string source, string destination)
+    {
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite: true);
+                return true;
+            }
+            catch (IOException ex) when (IsSharingViolation(ex))
+            {
+                Thread.Sleep(500);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A Windows sharing violation (ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION),
+    /// i.e. another process still has the file open.
+    /// </summary>
+    private static bool IsSharingViolation(IOException ex)
+    {
+        var code = ex.HResult & 0xFFFF;
+
+        return code == 32 || code == 33;
+    }
+
+    /// <summary>
+    /// Thrown for a block the user can resolve deliberately (usually by
+    /// elevating), as opposed to an unexpected failure. Its message is shown
+    /// verbatim, because it names the action that fixes it.
+    /// </summary>
+    private sealed class InstallBlockedException : Exception
+    {
+        public InstallBlockedException(string message) : base(message)
+        {
+        }
+    }
+
     /// <summary>Clicked build == installed build: ensure the tray agent is running.</summary>
     private void ShowAlreadyInstalled()
     {
         EnsureInstalledTrayIsRunning();
-
-        ReadyPanel.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Visible;
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Visible;
@@ -1153,7 +1267,6 @@ public partial class InstallerWindow : Window
             SubtitleText.Text = "Pembaruan selesai";
             InstallHeadingText.Text = "Agent berhasil diperbarui";
             DescriptionText.Text = "Versi terbaru sudah terpasang. Agent kembali berjalan di system tray.";
-            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
 
@@ -1175,7 +1288,6 @@ public partial class InstallerWindow : Window
             SubtitleText.Text = "Instalasi selesai";
             InstallHeadingText.Text = "TrackerAgent sudah terpasang";
             DescriptionText.Text = "Instalasi berhasil. Agent tetap berjalan di system tray dan akan mulai melaporkan perangkat ini.";
-            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
             SetResult(
@@ -1199,11 +1311,14 @@ public partial class InstallerWindow : Window
             SubtitleText.Text = _mode == InstallerMode.Update ? "Pembaruan gagal" : "Instalasi gagal";
             InstallHeadingText.Text = "Proses belum selesai";
             DescriptionText.Text = "Ada langkah yang tidak berhasil. Periksa pesan di bawah, lalu coba lagi.";
-            ReadyPanel.Visibility = Visibility.Visible;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
-            StatusText.Text = message;
+
+            // The bar keeps the percentage it reached - it is evidence of how far
+            // the install got - but the status line names the outcome instead of
+            // repeating the message that the result panel already shows in full.
+            StatusText.Text = "Instalasi berhenti.";
             UpdateInstallSteps(_targetProgress, failed: true);
 
             SetResult(
@@ -1222,7 +1337,6 @@ public partial class InstallerWindow : Window
             EndShimmer();
 
             SubtitleText.Text = "Update available";
-            ReadyPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Collapsed;
             CloseButton.Visibility = Visibility.Visible;
@@ -1239,7 +1353,6 @@ public partial class InstallerWindow : Window
             EndShimmer();
 
             SubtitleText.Text = "Update check complete";
-            ReadyPanel.Visibility = Visibility.Collapsed;
             ResultPanel.Visibility = Visibility.Visible;
             RetryButton.Visibility = Visibility.Collapsed;
             CloseButton.Visibility = Visibility.Visible;
@@ -1284,29 +1397,63 @@ public partial class InstallerWindow : Window
     private const string GlyphInfo = "\uE946";  // Info
 
     private static readonly System.Windows.Media.Brush SuccessBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x22, 0xC5, 0x5E)); // green-500
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x04, 0x78, 0x57)); // emerald-700
     private static readonly System.Windows.Media.Brush ErrorBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xEF, 0x44, 0x44)); // red-500
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x23, 0x18)); // red-700
     private static readonly System.Windows.Media.Brush InfoBrush =
-        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4F, 0x8E, 0xF7)); // blue
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1D, 0x4E, 0xD8)); // blue-700
+    private static readonly System.Windows.Media.Brush PendingBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x66, 0x70, 0x85)); // gray-500
+    private static readonly System.Windows.Media.Brush RunningBrush =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1D, 0x4E, 0xD8)); // blue-700
+
+    /// <summary>The step glyph and badge colours, kept in step with the light theme.</summary>
+    private static readonly System.Windows.Media.Color SuccessSoftColor =
+        System.Windows.Media.Color.FromRgb(0xEC, 0xFD, 0xF5);
+    private static readonly System.Windows.Media.Color ErrorSoftColor =
+        System.Windows.Media.Color.FromRgb(0xFE, 0xF3, 0xF2);
+    private static readonly System.Windows.Media.Color RunningSoftColor =
+        System.Windows.Media.Color.FromRgb(0xEF, 0xF6, 0xFF);
+    private static readonly System.Windows.Media.Color PendingSoftColor =
+        System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6);
 
     /// <summary>
     /// Fills the result card in one place.
     /// </summary>
+    /// <remarks>
+    /// The badge is a soft tint with a strong glyph rather than a saturated disc
+    /// with white text: on a light surface the filled disc reads as an alert
+    /// dialog pasted into the page, and at 36 px it swallowed the message.
+    /// </remarks>
     private void SetResult(string glyph, string title, string detail, System.Windows.Media.Brush accent)
     {
         ResultIcon.Text = glyph;
         ResultIcon.Foreground = accent;
+
+        var soft = ReferenceEquals(accent, ErrorBrush) ? ErrorSoftColor
+            : ReferenceEquals(accent, InfoBrush) ? RunningSoftColor
+            : SuccessSoftColor;
+
+        if (ResultBadge.Fill is SolidColorBrush badge)
+        {
+            // Ellipse.Fill is a frozen brush from XAML; replacing it is cheaper
+            // than trying to mutate a frozen Freezable.
+            ResultBadge.Fill = new SolidColorBrush(soft);
+        }
+
         ResultText.Text = title;
+        ResultText.Foreground = ReferenceEquals(accent, ErrorBrush) ? ErrorBrush : neutralText;
         ResultDetail.Text = detail;
     }
+
+    private static readonly System.Windows.Media.Brush neutralText =
+        new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x10, 0x18, 0x28));
 
     private async void RetryButton_Click(object sender, RoutedEventArgs e)
     {
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Collapsed;
         ResultPanel.Visibility = Visibility.Collapsed;
-        ReadyPanel.Visibility = Visibility.Visible;
 
         _targetProgress = 0;
         _displayedProgress = 0;

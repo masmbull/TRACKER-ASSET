@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.13</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.14</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -39,7 +39,21 @@
                     on a freshly downloaded .exe therefore showed no installer. Any
                     clicked copy that is not the installed file now reaches the
                     installer even when a build identity cannot be read, instead of
-                    quietly starting the tray. -->
+                    quietly starting the tray.
+               1.7.14: the install failed at the file-copy step on any machine already
+                    running the SYSTEM task. That task holds %LOCALAPPDATA%\TRACKER\
+                    TrackerAgent.exe open from session 0, and a standard user cannot
+                    end it, so File.Copy never succeeded no matter how often it was
+                    retried - the user saw "Check disk space and permissions" after
+                    filling in ten asset fields. The copy now falls back to a
+                    versioned binary beside the locked one, and only a genuine
+                    sharing violation is retried. Error messages say what to do
+                    instead of blaming disk space. The window is now a light,
+                    single-surface wizard with a real title bar: the dark
+                    borderless card with red glows read as a launcher, and its
+                    transparency forced software rendering. The result panel no
+                    longer spans the checklist, and a failed step is marked on the
+                    step that actually failed. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
