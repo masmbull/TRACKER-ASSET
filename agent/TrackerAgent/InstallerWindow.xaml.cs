@@ -4,6 +4,7 @@ using System.Management;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -33,6 +34,12 @@ public partial class InstallerWindow : Window
     private string _lastError = "";
     private string _registeredAssetCode = "";
     private string _resolvedExePath = "";
+
+    /// <summary>Held for the lifetime of the window; null when another setup owns it.</summary>
+    private Mutex? _installerMutex;
+
+    /// <summary>True when this window must not install anything.</summary>
+    private bool _anotherInstanceRunning;
     private AgentRegistrationFields? _registrationFields;
     private Dictionary<string, string> _hardwareDetails = new(StringComparer.OrdinalIgnoreCase);
 
@@ -68,6 +75,27 @@ public partial class InstallerWindow : Window
     {
         InitializeComponent();
 
+        // One setup at a time.
+        //
+        // Opening the downloaded file twice - easy to do, the download bar makes
+        // it look like nothing happened - started two full wizards against the
+        // same folder. Both copied, both restarted the agent, and whichever
+        // finished last decided the version. The operator saw three stacked
+        // "TRACKER-ASSET Setup" windows and could not tell which was real. The
+        // second instance now says so and closes instead of racing.
+        //
+        // Global, not Local: an elevated re-launch runs in the same session but a
+        // per-session mutex would not cover an installer started by another
+        // account on the same machine.
+        _installerMutex = new Mutex(true, @"Global\MITO.TRACKER-ASSET.Setup", out var ownsMutex);
+
+        if (!ownsMutex)
+        {
+            _installerMutex.Dispose();
+            _installerMutex = null;
+            _anotherInstanceRunning = true;
+        }
+
         ResultPanel.Visibility = Visibility.Collapsed;
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Collapsed;
@@ -88,6 +116,12 @@ public partial class InstallerWindow : Window
             StepLabel4.Text = "Membersihkan sisa file pembaruan";
             StepLabel5.Text = "Memasang versi agent terbaru";
             StepLabel6.Text = "Menjalankan ulang agent di system tray";
+        }
+
+        if (_anotherInstanceRunning)
+        {
+            ShowAnotherInstanceRunning();
+            return;
         }
 
         switch (mode)
@@ -1182,7 +1216,26 @@ public partial class InstallerWindow : Window
 
         if (updated)
         {
-            ShowUpdateSuccess();
+            // Report what is actually on disk, not what was meant to be there.
+            //
+            // The success screen used to print _newVersion - the version of the
+            // installer - so it announced "Versi 1.7.28 sudah terpasang" while
+            // TrackerAgent.exe was still 1.7.21, because the guard had restored its
+            // older copy a second earlier. A claim the operator cannot verify is
+            // worse than no claim: it sent them looking in the wrong place.
+            var installed = InstallCheck.ReadVersion(
+                _resolvedExePath.Length > 0 ? _resolvedExePath : _installedExe);
+
+            if (_newVersion is not null && installed is not null && installed < _newVersion)
+            {
+                ShowFailure(
+                    $"Versi {installed} masih terpasang, bukan {_newVersion}.\n\n" +
+                    "Agent versi lama kemungkinan dipulihkan oleh service guard. " +
+                    "Jalankan ulang sebagai Administrator, atau hubungi tim IT.");
+                return;
+            }
+
+            ShowUpdateSuccess(installed);
         }
         else
         {
@@ -1662,6 +1715,38 @@ public partial class InstallerWindow : Window
         }
     }
 
+    /// <summary>
+    /// Tells the user another setup is already running, and does nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Two concurrent wizards against one folder is not a race the installer can
+    /// win: both stop the agent, both copy, both restart it, and the last one to
+    /// finish decides the installed version. The visible symptom was stacked setup
+    /// windows with different progress, which reads as an infinite loop.
+    /// </remarks>
+    private void ShowAnotherInstanceRunning()
+    {
+        InstallStepsPanel.Visibility = Visibility.Collapsed;
+        OverallProgressTrack.Visibility = Visibility.Collapsed;
+        StatsPanel.Visibility = Visibility.Collapsed;
+        ProgressCounterText.Visibility = Visibility.Collapsed;
+
+        SubtitleText.Text = "Instalasi lain sedang berjalan";
+        InstallHeadingText.Text = "Setup sudah terbuka";
+        DescriptionText.Text = "Selesaikan atau tutup jendela setup yang lain, lalu coba lagi.";
+
+        ResultPanel.Visibility = Visibility.Visible;
+        RetryButton.Visibility = Visibility.Collapsed;
+        CloseButton.Visibility = Visibility.Visible;
+
+        SetResult(
+            GlyphInfo,
+            "Setup lain sedang berjalan",
+            "Hanya satu proses instalasi atau pembaruan yang boleh berjalan pada satu waktu.\n\n" +
+            "Tutup jendela TRACKER-ASSET Setup lainnya, lalu jalankan installer ini kembali.",
+            InfoBrush);
+    }
+
     /// <summary>Clicked build == installed build: ensure the tray agent is running.</summary>
     private void ShowAlreadyInstalled()
     {
@@ -1756,7 +1841,7 @@ public partial class InstallerWindow : Window
     }
 
     /// <summary>Swap finished: report the version jump, then auto-close.</summary>
-    private void ShowUpdateSuccess()
+    private void ShowUpdateSuccess(Version? installedVersion)
     {
         Dispatcher.BeginInvoke(() =>
         {
@@ -1772,7 +1857,7 @@ public partial class InstallerWindow : Window
             SetResult(
                 GlyphOk,
                 "Pembaruan TrackerAgent berhasil",
-                $"Versi {_newVersion} sudah terpasang.\n\nAgent aktif kembali di system tray.",
+                $"Versi {installedVersion ?? _newVersion} terpasang dan berjalan.\n\nAgent aktif kembali di system tray.",
                 SuccessBrush);
         });
     }
@@ -2020,6 +2105,23 @@ public partial class InstallerWindow : Window
     {
         base.OnClosed(e);
 
+        // Release the single-instance guard even when the window is closed with
+        // the title bar button - a leaked mutex would make every later setup
+        // report "already running" until the process happened to exit.
+        try
+        {
+            _installerMutex?.ReleaseMutex();
+        }
+        catch (ApplicationException)
+        {
+            // Not the owner: this window lost the race and never held it.
+        }
+        finally
+        {
+            _installerMutex?.Dispose();
+            _installerMutex = null;
+        }
+
         if (_mode == InstallerMode.Install && _installDir.Length > 0 &&
             !string.IsNullOrWhiteSpace(_installTokenForReporting))
         {
@@ -2038,5 +2140,8 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
+
+
 
 

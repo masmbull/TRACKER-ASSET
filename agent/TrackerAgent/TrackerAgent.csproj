@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.28</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.29</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -180,7 +180,18 @@
                     starts it. The password and key were also being written inside
                     the options section, where RustDesk never reads them - they are
                     top-level keys, which is why the client kept showing "One-time
-                    password: Generating". -->
+                    password: Generating".
+               1.7.29: three setup windows ran at once. Nothing stopped a second copy,
+                    so opening the downloaded file again started a whole second
+                    wizard against the same folder - both stopped the agent, both
+                    copied, both restarted it, and the last to finish decided the
+                    version. Setup now holds a machine-wide mutex and the second
+                    instance says so and stops. The success screen also reports the
+                    version read back from disk instead of the installer's own: it
+                    was claiming 1.7.28 had been installed while the file was still
+                    1.7.21, because the guard had restored its older copy. If the
+                    on-disk version is lower than expected the wizard now fails
+                    instead of announcing success. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -221,6 +232,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

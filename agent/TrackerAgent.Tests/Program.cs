@@ -568,6 +568,27 @@ internal static class Program
         Check("purchase price parses digits, not the formatted string",
             registrationCode is not null &&
             registrationCode.Contains("char.IsDigit", StringComparison.Ordinal));
+
+        // ------------------------------------------------------------------
+        // The setup that announced a version it had not installed, and let
+        // several copies run against the same folder at once.
+        // ------------------------------------------------------------------
+        var installerCode = SourceOf("InstallerWindow.xaml.cs");
+
+        Check("setup holds a single-instance mutex",
+            installerCode is not null &&
+            installerCode.Contains("Global\\MITO.TRACKER-ASSET.Setup", StringComparison.Ordinal));
+
+        Check("setup releases its mutex when the window closes",
+            installerCode is not null &&
+            installerCode.Contains("ReleaseMutex", StringComparison.Ordinal));
+
+        // The success screen prints the version read back from disk. It used to
+        // print the installer's own version, so it claimed 1.7.28 was installed
+        // while the file on disk was still 1.7.21.
+        Check("update success reads the installed version from disk",
+            installerCode is not null &&
+            installerCode.Contains("ShowUpdateSuccess(installed)", StringComparison.Ordinal));
     }
 
     /// <summary>A source file from the agent project, or null when not found.</summary>
