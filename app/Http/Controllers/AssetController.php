@@ -305,6 +305,27 @@ class AssetController extends Controller
         $assetId = $asset->asset_id;
         $assetDbId = $asset->getKey();
 
+        // Refuse while the asset still has history.
+        //
+        // Seven tables reference assets without ON DELETE CASCADE, and deleting
+        // one with rows in them raised a foreign-key violation: a full 500 page,
+        // no explanation, and nothing done. The audit rows are the machine's
+        // history - who held it, what was repaired, where it moved - so the
+        // correct answer is to keep them and say so, not to delete them quietly
+        // or cascade into them.
+        $blocking = $this->assetHistoryCounts($asset);
+
+        if ($blocking !== []) {
+            $summary = collect($blocking)
+                ->map(fn (int $count, string $label) => "{$count} {$label}")
+                ->implode(', ');
+
+            return back()->withErrors([
+                'delete' => "Aset {$assetId} tidak bisa dihapus permanen karena masih punya riwayat: {$summary}. "
+                    .'Gunakan Arsipkan untuk menonaktifkannya tanpa menghilangkan riwayat.',
+            ]);
+        }
+
         // Written before the delete: afterwards there is no row left to name.
         ActivityLog::create([
             'actor_id' => Auth::id(),
@@ -320,6 +341,42 @@ class AssetController extends Controller
 
         return redirect()->route('assets.index')
             ->with('success', "Asset {$assetId} permanently deleted.");
+    }
+
+    /**
+     * Rows that reference an asset and block its deletion.
+     *
+     * @return array<string, int> human label => count, only non-empty entries
+     */
+    private function assetHistoryCounts(Asset $asset): array
+    {
+        $relations = [
+            'audit' => ['asset_audits', 'catatan audit'],
+            'repairs' => ['asset_repairs', 'catatan perbaikan'],
+            'transfers' => ['asset_transfers', 'riwayat transfer'],
+            'assignments' => ['asset_assignments', 'riwayat penugasan'],
+            'attachments' => ['attachments', 'lampiran'],
+            'documents' => ['documents', 'dokumen'],
+            'inspections' => ['ike_bast_inspection_sessions', 'sesi inspeksi'],
+        ];
+
+        $counts = [];
+
+        foreach ($relations as [$table, $label]) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                continue;
+            }
+
+            $count = \Illuminate\Support\Facades\DB::table($table)
+                ->where('asset_id', $asset->getKey())
+                ->count();
+
+            if ($count > 0) {
+                $counts[$label] = $count;
+            }
+        }
+
+        return $counts;
     }
 
     /**

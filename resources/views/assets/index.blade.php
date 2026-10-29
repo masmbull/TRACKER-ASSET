@@ -4,6 +4,23 @@
 @section('header', 'All Assets')
 
 @section('content')
+{{-- Deletion can be refused: an asset with audit or transfer history cannot be
+     removed without destroying that history. The message is shown here rather
+     than as a crash, so the operator learns what to do instead. --}}
+@if($errors->any())
+    <div class="mb-5 rounded-lg border border-error-200 bg-error-50 px-4 py-3 dark:border-error-500/30 dark:bg-error-500/10">
+        @foreach($errors->all() as $message)
+            <p class="text-theme-sm text-error-700 dark:text-error-300">{{ $message }}</p>
+        @endforeach
+    </div>
+@endif
+
+@if(session('success'))
+    <div class="mb-5 rounded-lg border border-success-200 bg-success-50 px-4 py-3 dark:border-success-500/30 dark:bg-success-500/10">
+        <p class="text-theme-sm text-success-700 dark:text-success-300">{{ session('success') }}</p>
+    </div>
+@endif
+
 <x-page-header title="Assets" :subtitle="$assets->total() . ' total'">
     <x-slot:actions>
         @can('export-assets')

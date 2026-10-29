@@ -135,4 +135,68 @@ class AssetDeleteTest extends TestCase
 
         $this->assertDatabaseHas('assets', ['asset_id' => $asset->asset_id, 'is_active' => false]);
     }
+
+    /**
+     * An asset with audit history cannot be deleted: those rows are the machine's
+     * history, and the database refuses the delete without ON DELETE CASCADE. That
+     * used to surface as a 500 page with no explanation.
+     */
+    public function test_asset_with_audit_history_is_refused_with_a_message(): void
+    {
+        $asset = $this->asset();
+
+        \DB::table('asset_audits')->insert([
+            'asset_id' => $asset->id,
+            'audit_date' => now()->toDateString(),
+            'result' => 'ok',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->delete(route('assets.force-destroy', $asset), ['confirm_asset_id' => $asset->asset_id])
+            ->assertSessionHasErrors('delete');
+
+        $this->assertDatabaseHas('assets', ['asset_id' => $asset->asset_id]);
+        $this->assertDatabaseHas('asset_audits', ['asset_id' => $asset->id]);
+    }
+
+    /** The refusal names what is holding the asset, not just that it failed. */
+    public function test_refusal_message_names_the_blocking_history(): void
+    {
+        $asset = $this->asset();
+
+        \DB::table('asset_audits')->insert([
+            'asset_id' => $asset->id,
+            'audit_date' => now()->toDateString(),
+            'result' => 'ok',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->admin())
+            ->delete(route('assets.force-destroy', $asset), ['confirm_asset_id' => $asset->asset_id]);
+
+        $response->assertSessionHasErrors('delete');
+
+        $message = (string) $response->getSession()->get('errors')->first('delete');
+
+        $this->assertStringContainsString('catatan audit', $message);
+        $this->assertStringContainsString('Arsipkan', $message);
+    }
+
+
+    /** No history means nothing blocks it, and the row really goes. */
+    public function test_asset_without_history_is_deleted(): void
+    {
+        $asset = $this->asset();
+
+        $this->actingAs($this->admin())
+            ->delete(route('assets.force-destroy', $asset), ['confirm_asset_id' => $asset->asset_id])
+            ->assertRedirect(route('assets.index'));
+
+        $this->assertDatabaseMissing('assets', ['asset_id' => $asset->asset_id]);
+    }
 }
+
+
