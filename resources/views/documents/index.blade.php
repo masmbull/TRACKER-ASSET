@@ -51,9 +51,16 @@
                 @foreach($documents as $document)
                     <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5">
                         <td class="py-3 px-4">
-                            <a href="{{ route('documents.preview', $document) }}" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
-                                {{ $document->document_number }}
-                            </a>
+                            {{-- The number opens the document in place. It used to
+                                 navigate to a page whose only content was a
+                                 browser-embedded PDF with its own download toolbar,
+                                 which read as a file being downloaded rather than a
+                                 record being reviewed. --}}
+                            <x-document-preview :document="$document">
+                                <button type="button" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                                    {{ $document->document_number }}
+                                </button>
+                            </x-document-preview>
                         </td>
                         <td class="py-3 px-4">
                             <span class="inline-flex rounded-full bg-brand-50 px-2 py-1 text-theme-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">

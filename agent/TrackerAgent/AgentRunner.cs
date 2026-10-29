@@ -632,6 +632,85 @@ public static class AgentRunner
         }
     }
 
+    /// <summary>
+    /// Applies a RustDesk server, key and one-time password pushed by the server.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a typed command rather than a PowerShell script: the payload
+    /// carries a credential, and the generic script path writes the body to a file
+    /// on disk and may echo it into the command result. Here the password only
+    /// ever travels from the request into RustDesk's config file.
+    /// </remarks>
+    internal static bool RunRustDeskCommand(string url, string token, long commandId, JsonElement command)
+    {
+        try
+        {
+            if (!command.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "RustDesk payload was empty.",
+                });
+                return false;
+            }
+
+            string? Read(string name) =>
+                payload.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+                    ? el.GetString()
+                    : null;
+
+            var server = Read("server");
+            var key = Read("key");
+            var password = Read("password");
+
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "RustDesk password was missing from the payload.",
+                });
+                return false;
+            }
+
+            var exe = RustDeskProvisioner.FindExecutable();
+
+            if (exe is null)
+            {
+                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+                {
+                    ["message"] = "RustDesk is not installed on this machine.",
+                });
+                return false;
+            }
+
+            Api.ReportProgress(url, token, commandId, 40, "Menulis konfigurasi RustDesk...");
+            var written = RustDeskProvisioner.Apply(server, key, password);
+
+            Api.ReportProgress(url, token, commandId, 75, "Menjalankan ulang layanan RustDesk...");
+            RustDeskProvisioner.TryRestartService(out var serviceMessage);
+
+            // The id is read back after the restart so the server learns the id of
+            // the service that is actually listening, not whatever was cached.
+            var id = HardwareCollector.ResolveRustDeskIdForReporting();
+
+            Api.Ack(url, token, commandId, "done", new Dictionary<string, string>
+            {
+                ["message"] = $"RustDesk configured in {written} profile(s). {serviceMessage}",
+                ["rustdesk_id"] = id ?? "",
+            });
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
+            {
+                ["message"] = "RustDesk configuration failed: " + ex.Message,
+            });
+            return false;
+        }
+    }
+
     internal static int RunScriptCommand(string url, string token, long commandId, JsonElement command)
     {
         try
@@ -1500,6 +1579,13 @@ public static class AgentRunner
                             var scriptExitCode = RunScriptCommand(url, token, id, cmd);
                             Console.WriteLine($"[OK] Command #{id} script -> {(scriptExitCode == 0 ? "done" : "failed")}");
                         }
+                        else if (command == "rustdesk")
+                        {
+                            Console.WriteLine($"[*] Command #{id} rustdesk received. Applying configuration...");
+                            Api.ReportProgress(url, token, id, 10, "Menerapkan konfigurasi RustDesk...");
+                            var rustDeskOk = RunRustDeskCommand(url, token, id, cmd);
+                            Console.WriteLine($"[OK] Command #{id} rustdesk -> {(rustDeskOk ? "done" : "failed")}");
+                        }
                         else if (command == "power")
                         {
                             Console.WriteLine($"[*] Command #{id} power received. Executing...");
@@ -2114,6 +2200,76 @@ public static class AgentRunner
                 return 0;
             }
 
+            // A newer sibling means the canonical exe is an old build that could
+            // not be replaced (the SYSTEM task holds it open). Start that newer
+            // build instead of the stale one: restoring TrackerAgent.exe here used
+            // to launch the old agent a minute after every update, which showed up
+            // as two TrackerAgent processes and an agent that never actually
+            // advanced its version.
+            var newestSibling = FindNewerSiblingBuild(targetDir, installedExe);
+
+            if (newestSibling is not null)
+            {
+                if (!File.Exists(ProtectedExe))
+                {
+                    // Keep the sibling running, but say what is missing.
+                    Console.Error.WriteLine("[!] Newer build present, but no protected copy exists to repair from.");
+                }
+                else
+                {
+                    // Refresh the protected copy so a later repair does not bring
+                    // the old build back.
+                    try
+                    {
+                        File.Copy(newestSibling, ProtectedExe, overwrite: true);
+                        Console.WriteLine($"[OK] Protected copy updated from {Path.GetFileName(newestSibling)}.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[!] Could not refresh the protected copy: {ex.Message}");
+                    }
+                }
+
+                RestoreAutostartBestEffort(newestSibling);
+
+                if (IsRunning(newestSibling))
+                {
+                    Console.WriteLine("[OK] Newest build already running; nothing to start.");
+                    return 0;
+                }
+
+                // A spawn budget, not a bare Process.Start.
+                //
+                // The guard runs every minute. Without a bound, a build that exits
+                // on its own - crashed, was killed, or refused to start - would be
+                // relaunched once a minute forever, and on a machine that was also
+                // spawning installers that is indistinguishable from a fork bomb.
+                // Two attempts per window is enough to recover from a real crash
+                // and few enough that a broken build stops instead of multiplying.
+                if (!TryConsumeSpawnBudget(targetDir, out var remaining))
+                {
+                    Console.WriteLine($"[!] Spawn budget exhausted for this hour; not restarting {Path.GetFileName(newestSibling)}.");
+                    return 0;
+                }
+
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = newestSibling,
+                        UseShellExecute = true,
+                    });
+
+                    Console.WriteLine($"[OK] Started newest build {Path.GetFileName(newestSibling)} (spawns left this hour: {remaining}).");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[!] Could not start the newest build: {ex.Message}");
+                }
+
+                return 0;
+            }
+
             if (!File.Exists(ProtectedExe))
             {
                 Console.Error.WriteLine("[!] Agent is missing and no protected copy exists to restore from.");
@@ -2154,6 +2310,84 @@ public static class AgentRunner
         }
     }
 
+    /// <summary>Restart attempts the guard may make in one hour.</summary>
+    internal const int SpawnBudgetPerHour = 2;
+
+    /// <summary>
+    /// Counts one restart and reports whether it is still within budget.
+    /// </summary>
+    /// <remarks>
+    /// State lives in a file rather than in memory because each guard run is a
+    /// short-lived process on a one-minute timer: nothing survives between ticks
+    /// to count in. The file records the hour it belongs to, so the allowance
+    /// resets on its own and never needs cleaning up.
+    /// </remarks>
+    internal static bool TryConsumeSpawnBudget(string targetDir, out int remaining)
+    {
+        remaining = 0;
+
+        try
+        {
+            var path = Path.Combine(targetDir, ".spawn-budget");
+            var hour = DateTime.UtcNow.ToString("yyyyMMddHH");
+            var used = 0;
+
+            if (File.Exists(path))
+            {
+                var parts = File.ReadAllText(path).Trim().Split('|');
+
+                if (parts.Length == 2 && parts[0] == hour && int.TryParse(parts[1], out var parsed))
+                {
+                    used = parsed;
+                }
+            }
+
+            if (used >= SpawnBudgetPerHour)
+            {
+                return false;
+            }
+
+            used++;
+            remaining = SpawnBudgetPerHour - used;
+
+            File.WriteAllText(path, $"{hour}|{used}");
+
+            return true;
+        }
+        catch
+        {
+            // An unwritable folder must not become an excuse to spawn forever.
+            return false;
+        }
+    }
+
+    /// <summary>True when a TrackerAgent process is already running from that path.</summary>
+    internal static bool IsRunning(string exePath)
+    {
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher(
+                "SELECT ExecutablePath FROM Win32_Process WHERE Name = 'TrackerAgent.exe'");
+
+            foreach (var entry in searcher.Get())
+            {
+                using var process = (System.Management.ManagementObject)entry;
+
+                if (InstallCheck.IsSameFile(process["ExecutablePath"] as string, exePath))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // Query failed: assume not running, so the caller starts it. A second
+            // process is stopped by the single-instance mutex anyway.
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// True when the agent is present and plausibly intact at the install folder.
     /// Split out so the "do no harm" decision is one testable line: the guard must
@@ -2166,11 +2400,109 @@ public static class AgentRunner
         {
             var installedExe = Path.Combine(targetDir, "TrackerAgent.exe");
 
-            return File.Exists(installedExe) && new FileInfo(installedExe).Length > 1024 * 1024;
+            // A canonical exe that cannot be replaced (the SYSTEM task holds it
+            // open) forces the installer to put the new build beside it. The
+            // presence of TrackerAgent.exe then means nothing: it may be an old
+            // build that is still locked. Treat the folder as healthy only when
+            // the canonical exe is intact AND there is no newer sibling, so the
+            // guard never mistakes "old binary still there" for "nothing to do".
+            if (!File.Exists(installedExe) || new FileInfo(installedExe).Length <= 1024 * 1024)
+            {
+                return false;
+            }
+
+            return FindNewerSiblingBuild(targetDir, installedExe) is null;
         }
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// A versioned sibling (<c>TrackerAgent-1.2.3.exe</c>) that is newer than the
+    /// canonical exe, or null when the canonical exe is already the newest build.
+    /// </summary>
+    /// <remarks>
+    /// The version in the file name is what the installer wrote, but the file's own
+    /// version resource is authoritative: a truncated or copied-over sibling should
+    /// not win. Both are compared, newest first.
+    /// </remarks>
+    internal static string? FindNewerSiblingBuild(string targetDir, string installedExe)
+    {
+        try
+        {
+            var installedVersion = ReadFileVersion(installedExe);
+            string? best = null;
+            Version? bestVersion = null;
+
+            foreach (var candidate in Directory.EnumerateFiles(targetDir, "TrackerAgent-*.exe"))
+            {
+                if (string.Equals(candidate, installedExe, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var candidateVersion = ReadFileVersion(candidate);
+
+                if (candidateVersion is null)
+                {
+                    continue;
+                }
+
+                // Only a strictly newer codebase counts. An equal version is the
+                // same build copied to two names, which needs no repair.
+                if (installedVersion is not null && candidateVersion <= installedVersion)
+                {
+                    continue;
+                }
+
+                if (bestVersion is null || candidateVersion > bestVersion)
+                {
+                    best = candidate;
+                    bestVersion = candidateVersion;
+                }
+            }
+
+            return best;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The file version resource, or null when it cannot be read.</summary>
+    internal static Version? ReadFileVersion(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var info = FileVersionInfo.GetVersionInfo(path);
+            var text = info.ProductVersion ?? info.FileVersion;
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            // ProductVersion can carry a build suffix ("1.7.15+abc123"); the numeric
+            // part is the only part that compares.
+            var cut = text.IndexOfAny(new[] { '+', ' ', '-' });
+            if (cut >= 0)
+            {
+                text = text[..cut];
+            }
+
+            return Version.TryParse(text, out var version) ? version : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -2365,6 +2697,13 @@ public static class AgentRunner
             Run("schtasks", $"/Delete /TN \"{SystemTaskName}\" /F", 30);
             Run("schtasks", $"/Delete /TN \"{GuardTaskName}\" /F", 30);
             RemoveProtectedCopy();
+
+            // 0c. The install folder carries a deny-delete rule for Users, so an
+            //     ordinary profile cannot remove the agent. It has to come off
+            //     before this deliberate uninstall can delete the folder, or the
+            //     removal fails on its own protection.
+            InstallFolderProtection.Clear(installDir, out var protectionCleared);
+            Console.WriteLine($"[OK] {protectionCleared}");
 
             // 1. Autostart first - nothing may restart the agent after this.
             using (var runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))

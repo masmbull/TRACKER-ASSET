@@ -193,6 +193,15 @@ public partial class InstallerWindow : Window
     private Storyboard? _shimmerStoryboard;
 
     /// <summary>Thread-safe progress report (called from the worker thread).</summary>
+    /// <summary>
+    /// Updates the status line without moving the progress bar, for a step that
+    /// reports several sub-stages (copying an embedded installer, waiting for it).
+    /// </summary>
+    private void SetStepDetail(string detail)
+    {
+        StatusText.Text = detail;
+    }
+
     private void Report(int percent, string message)
     {
         Dispatcher.BeginInvoke(() =>
@@ -581,9 +590,9 @@ public partial class InstallerWindow : Window
                     // binary next to the locked one, which the SYSTEM task is then
                     // pointed at. No handle needs releasing and no elevation is
                     // needed for the copy itself.
-                    var versionedExe = Path.Combine(
+                    var versionedExe = ReserveSiblingPath(
                         _installDir,
-                        $"TrackerAgent-{(InstallCheck.ReadVersion(sourceExe)?.ToString() ?? "new")}.exe");
+                        InstallCheck.ReadVersion(sourceExe)?.ToString() ?? "new");
 
                     StopInstalledAgent();
 
@@ -600,6 +609,27 @@ public partial class InstallerWindow : Window
                 }
 
                 _resolvedExePath = destExe;
+            }
+
+            // Dependencies go in before the device registers, so the first
+            // heartbeat can already report the RustDesk id and the fleet page has
+            // a Remote button from the very first second.
+            //
+            // It runs under the generic "dependencies" heading on purpose: setup is
+            // an IT-managed install, and a step that names every third-party
+            // product only invites the person at the laptop to wonder what else is
+            // being put on it. The detail line says enough for IT to know.
+            Report(44, "Memasang dependensi agent...");
+
+            try
+            {
+                RustDeskInstaller.TryInstall(stage => Dispatcher.Invoke(() => SetStepDetail(stage)));
+            }
+            catch (Exception ex)
+            {
+                // A dependency is not worth failing the whole install over: the
+                // machine still reports inventory, which is the main job.
+                Debug.WriteLine($"RustDesk dependency skipped: {ex}");
             }
 
             Report(46, "Membuat identitas perangkat...");
@@ -643,7 +673,12 @@ public partial class InstallerWindow : Window
             Report(86, "Menyiapkan agent di system tray...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 86,
                 "Menyiapkan agent di system tray...");
-            StartDetached(destExe, string.Empty);
+
+            // Start the file this run wrote, never a path that merely happens to
+            // exist. destExe is reassigned to the versioned sibling whenever the
+            // canonical copy failed, and a stale value here is what re-launched an
+            // old build that then re-opened this installer.
+            StartDetached(_resolvedExePath.Length > 0 ? _resolvedExePath : destExe, string.Empty);
 
             Report(94, "Menyelesaikan konfigurasi...");
             Api.ReportInstallProgress(serverUrl, token, "install", "in_progress", 94,
@@ -652,6 +687,11 @@ public partial class InstallerWindow : Window
             // The clickable code belongs in the success panel: it is the only
             // thing the user can quote when asking IT about this machine.
             _installDir = Path.GetDirectoryName(destExe) ?? _installDir;
+
+            // Last, and after the agent is already running: the deny rule must never
+            // be the reason a running agent cannot write its own log or config.
+            InstallFolderProtection.Protect(_installDir, out var protection);
+            AgentLog.Write(protection);
 
             Report(100, "Instalasi selesai.");
             Api.ReportInstallProgress(serverUrl, token, "install", "done", 100,
@@ -914,6 +954,13 @@ public partial class InstallerWindow : Window
     {
         try
         {
+            if (!SpawnAllowed(exePath, InstallCheck.ReadVersion(Environment.ProcessPath)))
+            {
+                AgentLog.Write(
+                    $"Not starting {Path.GetFileName(exePath)}: it is the same build or older than this installer.");
+                return;
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName         = exePath,
@@ -927,6 +974,56 @@ public partial class InstallerWindow : Window
             Process.Start(psi);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Whether the installer may launch the binary at <paramref name="exePath"/>.
+    /// </summary>
+    /// <remarks>
+    /// The single guard against the install loop that this file used to cause.
+    ///
+    /// Setup started whatever it had just "installed", and on a machine whose
+    /// canonical exe was locked by the SYSTEM task, that path could still hold the
+    /// OLD build restored a moment earlier by the guard. The old build then saw a
+    /// newer version on disk, opened the installer again, which started the old
+    /// build again - once every fifteen seconds, indefinitely, adding a process and
+    /// a versioned exe each round.
+    ///
+    /// The rule: never launch anything older than, or equal to, the running
+    /// installer. The version that just copied itself into place is the only thing
+    /// worth starting, and if that exact file cannot be identified, nothing is
+    /// started. An agent that fails to auto-start is a small problem; a machine
+    /// spawning installers forever is not.
+    /// </remarks>
+    internal static bool SpawnAllowed(string? exePath, Version? installerVersion)
+    {
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+        {
+            return false;
+        }
+
+        return SpawnAllowedForVersions(InstallCheck.ReadVersion(exePath), installerVersion);
+    }
+
+    /// <summary>
+    /// The rule on its own, with the versions supplied: strictly newer only.
+    /// </summary>
+    /// <remarks>
+    /// Split from the file check so it is testable without building executables
+    /// with embedded version resources, which is the only part of this that needs
+    /// a real binary. Equal is refused as firmly as older: running the build that
+    /// is already installed cannot make progress and, in a loop, is the difference
+    /// between one restart and an endless one.
+    /// </remarks>
+    internal static bool SpawnAllowedForVersions(Version? target, Version? installerVersion)
+    {
+        // Without a known installer version there is no safe comparison to make.
+        if (installerVersion is null || target is null)
+        {
+            return false;
+        }
+
+        return target > installerVersion;
     }
 
     private static string? ReadRegistryString(string name)
@@ -1004,11 +1101,15 @@ public partial class InstallerWindow : Window
             // binary beside the locked one and point autostart at it.
             if (!TryCopyInstalledExe(sourceExe, _installedExe))
             {
-                var versionedExe = Path.Combine(
-                    Path.GetDirectoryName(_installedExe)!,
-                    $"TrackerAgent-{_newVersion?.ToString() ?? "new"}.exe");
-
                 StopInstalledAgent();
+
+                // A versioned name can already exist and be running: this is the
+                // second update on a machine whose canonical exe is locked, and
+                // the first update is what put TrackerAgent-<ver>.exe there. Reusing
+                // that name fails exactly like the canonical path did, which is why
+                // a repeat update still stopped at 55% with "file tidak bisa
+                // diganti". Each attempt now claims its own name.
+                var versionedExe = ReserveSiblingPath(_installDir, _newVersion?.ToString() ?? "new");
 
                 if (!TryCopyInstalledExe(sourceExe, versionedExe))
                 {
@@ -1046,6 +1147,87 @@ public partial class InstallerWindow : Window
     /// Stops every agent process running from the installed path before the
     /// binary is replaced.
     /// </summary>
+    /// <summary>
+    /// A versioned sibling path that nothing is currently holding open.
+    /// </summary>
+    /// <remarks>
+    /// Tries <c>TrackerAgent-1.7.17.exe</c>, then <c>-2</c>, <c>-3</c>... A name is
+    /// only taken when the file does not exist, so the first candidate after a cut
+    /// short update is a fresh one rather than the binary the tray is running from.
+    /// </remarks>
+    private static string ReserveSiblingPath(string installDir, string version)
+    {
+        for (var suffix = 1; suffix <= 50; suffix++)
+        {
+            var name = suffix == 1
+                ? $"TrackerAgent-{version}.exe"
+                : $"TrackerAgent-{version}-{suffix}.exe";
+            var candidate = Path.Combine(installDir, name);
+
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            // Exists but nobody holds it: an old, unused sibling. Removing it is
+            // safe and keeps the folder from filling with dead builds.
+            try
+            {
+                using (var probe = new FileStream(candidate, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    probe.Close();
+                }
+
+                File.Delete(candidate);
+                return candidate;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return candidate;
+            }
+            catch (IOException)
+            {
+                // Locked by a running process: try the next name.
+            }
+        }
+
+        return Path.Combine(installDir, $"TrackerAgent-{version}-{Guid.NewGuid():N}.exe");
+    }
+
+    /// <summary>
+    /// A versioned copy of the agent living next to the installed one
+    /// (<c>TrackerAgent-1.7.15.exe</c>), which is what a locked exe leaves behind.
+    /// </summary>
+    /// <remarks>
+    /// These are real running agents, not stale files: when the canonical exe is
+    /// held open by the SYSTEM task, the installer puts the new build beside it and
+    /// points autostart there. Stopping only the canonical path therefore left the
+    /// previous sibling running, and the next update failed to overwrite it - the
+    /// exact failure that made every update after the first locked one fail at 55%.
+    /// </remarks>
+    private static bool IsSiblingBuild(string? executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var dir = Path.GetDirectoryName(executablePath);
+            var name = Path.GetFileName(executablePath);
+
+            return dir is not null &&
+                   string.Equals(dir.TrimEnd('\\'), InstallCheck.InstallDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) &&
+                   name.StartsWith("TrackerAgent-", StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void StopInstalledAgent()
     {
         try
@@ -1056,9 +1238,10 @@ public partial class InstallerWindow : Window
             foreach (var entry in searcher.Get())
             {
                 using var process = (ManagementObject)entry;
-
                 if (!InstallCheck.IsSameFile(
-                        process["ExecutablePath"] as string, InstallCheck.InstalledExe))
+                    process["ExecutablePath"] as string,
+                    InstallCheck.InstalledExe) &&
+                    !IsSiblingBuild(process["ExecutablePath"] as string))
                 {
                     continue;
                 }
@@ -1109,10 +1292,15 @@ public partial class InstallerWindow : Window
     /// Starts without CLI flags so the installed config launches the tray and
     /// resumes fleet reporting.
     /// </summary>
-    private static void RestartAgent()
+    private void RestartAgent()
     {
-        RegisterAutostart(InstallCheck.InstalledExe);
-        StartDetached(InstallCheck.InstalledExe, string.Empty);
+        // The freshly written file, not the canonical name: after a locked-file
+        // install the canonical exe is still the previous build, and starting it
+        // is how the old agent came back and reopened setup.
+        var target = _resolvedExePath.Length > 0 ? _resolvedExePath : InstallCheck.InstalledExe;
+
+        RegisterAutostart(target);
+        StartDetached(target, string.Empty);
     }
 
     /// <summary>
@@ -1338,6 +1526,22 @@ public partial class InstallerWindow : Window
             DescriptionText.Text = "Instalasi berhasil. Agent tetap berjalan di system tray dan akan mulai melaporkan perangkat ini.";
             ResultPanel.Visibility = Visibility.Visible;
             CloseButton.Visibility = Visibility.Visible;
+
+            // The checklist and bar are finished states too.
+            //
+            // The update path returns early after a side-by-side copy and never
+            // reaches the 94% report, so this window stopped at "Berjalan / 55%"
+            // under a success panel: the operator saw a green "berhasil dipasang"
+            // next to a progress bar that had clearly not finished and a step that
+            // said it was still running.
+            _targetProgress = 100;
+            UpdateInstallSteps(100);
+            OverallProgressFill.Width = OverallProgressTrack.ActualWidth > 0
+                ? OverallProgressTrack.ActualWidth
+                : 400;
+            PercentText.Text = "100%";
+            StatusText.Text = "Instalasi selesai.";
+
             SetResult(
                 GlyphOk,
                 "TrackerAgent berhasil dipasang",

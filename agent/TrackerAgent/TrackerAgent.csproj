@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.15</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.18</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -59,7 +59,40 @@
                     "The process cannot access the file ..." text, so every update
                     on a machine with the SYSTEM task failed at 55% while a fresh
                     install succeeded. Updates fall back to a versioned binary and
-                    restart from it, and both paths share one message translator. -->
+                    restart from it, and both paths share one message translator.
+               1.7.16: remote access is provisioned, not installed by hand.
+                    RustDesk 1.5.0 is embedded and installed silently as part of
+                    the "dependencies" step, then pointed at the self-hosted
+                    rendezvous server. The fleet page offers one Remote button
+                    instead of RDP and .rdp; clicking it mints a single-use
+                    password, pushes it to the device and opens the client, so
+                    the operator never types or copies a credential. The password
+                    is encrypted at rest and rotated on every session; only
+                    admins can trigger it and every use is logged.
+                    The install folder carries a deny-delete rule for Users, so a
+                    standard profile cannot remove the agent from Explorer; the
+                    uninstall path clears it first. `Check for Updates` in the tray
+                    now says updates are managed by IT instead of doing nothing.
+                    The status window is a light card with the MITO mark, matching
+                    setup. A device whose canonical exe is locked now gets its
+                    newer build started by the guard instead of the old one
+                    coming back.
+               1.7.17: an update after a side-by-side install failed at 55% every
+                    time. Stopping the agent only killed the process running
+                    TrackerAgent.exe, not the sibling build that autostart was
+                    actually using, so the copy could never replace it. Every
+                    versioned sibling is now stopped too, and the guard starts the
+                    newest build it finds instead of re-running the stale
+                    canonical exe.
+               1.7.18: a machine could spawn installers forever, roughly every
+                    fifteen seconds. Setup launched whichever path it had just
+                    written, and on a machine whose canonical exe was locked that
+                    path could still be the OLD build a moment after the guard had
+                    restored it; that build saw a newer version on disk and reopened
+                    setup. Nothing now starts a binary that is not strictly newer
+                    than the running installer, restart uses the file this run
+                    actually wrote, and the guard gets two restarts an hour so a
+                    crashing build stops instead of multiplying. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -80,6 +113,19 @@
   <ItemGroup>
     <Resource Include="mito-logo-white.png" />
     <Resource Include="mito-icon.png" />
+  </ItemGroup>
+
+  <!-- The RustDesk installer ships inside the agent.
+       A managed laptop must reach a remote session without anyone installing
+       software first, and downloading a 26 MB executable at install time would
+       make setup fail on a machine with no internet - exactly the machine IT is
+       most likely to be asked about. Embedded, the install is one local process.
+       The file is vendored, not fetched at build time, so a build is reproducible
+       and cannot silently pick up a newer upstream release. -->
+  <ItemGroup>
+    <EmbeddedResource Include="bundled\rustdesk-setup-1.5.0.exe">
+      <LogicalName>TrackerAgent.vendor.rustdesk-setup.exe</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

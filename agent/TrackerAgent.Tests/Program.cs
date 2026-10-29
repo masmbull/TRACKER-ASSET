@@ -411,6 +411,39 @@ internal static class Program
 
         try { Directory.Delete(dir, recursive: true); } catch { }
 
+        // ------------------------------------------------------------------
+        // The install loop. Setup used to launch whatever path it had just
+        // written, which on a locked machine could still be the OLD build the
+        // guard had restored a moment earlier. That build saw a newer version on
+        // disk and reopened setup, roughly every fifteen seconds, forever.
+        // SpawnAllowed is the single rule that makes that impossible.
+        // ------------------------------------------------------------------
+        Check("spawn refuses a null path", !InstallerWindow.SpawnAllowed(null, new Version(1, 7, 17)));
+        Check("spawn refuses when the installer version is unknown",
+            !InstallerWindow.SpawnAllowed("anything.exe", null));
+
+        // The exact case that looped: target 1.7.15, installer 1.7.17.
+        Check("spawn refuses an older build",
+            !InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 15), new Version(1, 7, 17)));
+        Check("spawn refuses the same build",
+            !InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 17), new Version(1, 7, 17)));
+        Check("spawn refuses a build with no version resource",
+            !InstallerWindow.SpawnAllowedForVersions(null, new Version(1, 7, 17)));
+        Check("spawn allows a newer build",
+            InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 18), new Version(1, 7, 17)));
+
+        // The guard's own bound. Two restarts an hour, then it stops; a crashed
+        // build must not be relaunched every minute forever.
+        var budgetDir = Path.Combine(Path.GetTempPath(), "ta_budget_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(budgetDir);
+        Check("budget allows the first restart", AgentRunner.TryConsumeSpawnBudget(budgetDir, out _));
+        Check("budget allows the second restart", AgentRunner.TryConsumeSpawnBudget(budgetDir, out var left) && left == 0);
+        Check("budget refuses the third restart", !AgentRunner.TryConsumeSpawnBudget(budgetDir, out _));
+        try { Directory.Delete(budgetDir, recursive: true); } catch { }
+
+        Check("budget is refused when the folder cannot be written",
+            !AgentRunner.TryConsumeSpawnBudget(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing"), out _));
+
         // Casing must not decide it: the launcher lower-cases, and a mixed-case
         // spelling from a script should still be treated as the same mode.
         Check("--Install-Service is recognised case-insensitively", AgentRunner.IsCliFlagForTest("--Install-Service"));

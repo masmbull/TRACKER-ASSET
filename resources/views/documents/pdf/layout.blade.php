@@ -21,8 +21,14 @@
     .letterhead { border-bottom: 2px solid #1e40af; padding-bottom: 5px; margin-bottom: 6px; }
     .letterhead table { border: none; width: 100%; margin: 0; }
     .letterhead td { border: none; vertical-align: middle; padding: 0; }
-    .logo-cell { width: 120px; padding: 4px 7px; background: #ed1c24; }
-    .logo-cell img { width: 104px; display: block; }
+    /* The brand block: a red tile holding the mark, sized to the mark's own
+       aspect ratio. The old rule boxed an 800x200 canvas - mostly empty - at
+       104px wide, so the wordmark rendered about 20px across inside a wide red
+       bar, which is why the logo looked like a placeholder. The source image is
+       now cropped to the mark and supersampled for print, so it is drawn at its
+       real proportions and stays sharp at 96 dpi and above. */
+    .logo-cell { width: 74px; padding: 5px 7px; background: #e11d2e; text-align: center; }
+    .logo-cell img { width: 60px; height: auto; display: block; margin: 0 auto; image-rendering: auto; }
     .entities { padding-left: 11px; }
     .entities .legal { font-size: 8.5px; font-weight: bold; color: #0f172a; }
     .doc-title { text-align: right; }
@@ -51,7 +57,7 @@
 </style>
 </head>
 <body>
-@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-white.png'))))
+@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-pdf.png'))))
 <div class="letterhead">
     <table>
         <tr>

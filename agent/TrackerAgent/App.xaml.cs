@@ -72,6 +72,9 @@ public partial class App : System.Windows.Application
     /// </summary>
     private int _trayStopped;
 
+    /// <summary>The single Status dialog, so repeated menu clicks never stack.</summary>
+    private StatusWindow? _statusWindow;
+
     /// <summary>
     /// How often an elevate command re-reports progress while a human decides,
     /// and how long it may wait. The server calls a command stalled after two
@@ -322,23 +325,59 @@ public partial class App : System.Windows.Application
         };
 
         menu.Items.Add("Status", CreateTrayMenuGlyph("\uE946", System.Drawing.Color.FromArgb(96, 165, 250)), (_, _) =>
-            Dispatcher.Invoke(() =>
+        {
+            // Dispatcher.BeginInvoke, not Invoke: the tray menu handler runs on
+            // the WinForms pump, and Invoke blocks that pump until the UI thread
+            // finishes - including the modal error MessageBox below. A blocked
+            // menu pump is what made the notification icon vanish: the menu was
+            // still tearing down while the window opened, and Windows dropped an
+            // icon whose owner looked gone. BeginInvoke returns immediately.
+            Dispatcher.BeginInvoke(new Action(() =>
             {
                 try
                 {
-                    var window = new StatusWindow(config.ServerUrl, config.InstalledAt);
-                    window.Show();
-                    window.Activate();
+                    // Reuse one window: two Status entries used to stack two
+                    // identical dialogs, and closing either one is enough to
+                    // confuse an operator looking for "the" status.
+                    if (_statusWindow is { IsLoaded: true })
+                    {
+                        _statusWindow.Activate();
+                        return;
+                    }
+
+                    _statusWindow = new StatusWindow(config.ServerUrl, config.InstalledAt);
+                    _statusWindow.Closed += (_, _) => _statusWindow = null;
+                    _statusWindow.Show();
+                    _statusWindow.Activate();
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show(ex.Message, "Status", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    AgentLog.Write($"Could not open the status window: {ex}");
+                    System.Windows.MessageBox.Show(
+                        ex.Message, "Status",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
                 }
             }));
+        });
 
         menu.Items.Add(new ToolStripSeparator());
 
-        menu.Items.Add("Check for Updates", CreateTrayMenuGlyph("\uE72C", System.Drawing.Color.FromArgb(249, 112, 102)), (_, _) => RunUpdate(config));
+        // Not a self-service update. The build that runs on a managed laptop is
+        // chosen by IT and rolled out from the server, so an update started from
+        // the tray would install a build nobody approved - and on a machine whose
+        // exe is held open by the SYSTEM task it would fail anyway. The menu entry
+        // stays because an empty menu looks broken; it explains who to ask.
+        menu.Items.Add("Check for Updates", CreateTrayMenuGlyph("\uE72C", System.Drawing.Color.FromArgb(249, 112, 102)), (_, _) =>
+        {
+            System.Windows.MessageBox.Show(
+                "Pembaruan agent dikelola oleh tim IT.\n\n" +
+                "Hubungi tim IT untuk mendapatkan versi terbaru. " +
+                "Anda tidak perlu mengunduh atau memasang sendiri.",
+                "Pembaruan Agent",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+        });
 
         return menu;
     }
@@ -532,6 +571,13 @@ public partial class App : System.Windows.Application
 
                             AgentRunner.SelfRemove();
                             return;
+                        }
+                        else if (command == "rustdesk")
+                        {
+                            AgentLog.Write($"RustDesk command #{id} received. Applying configuration...");
+                            Api.ReportProgress(config.ServerUrl, config.Token, id, 10, "Menerapkan konfigurasi RustDesk...");
+                            var rustDeskOk = AgentRunner.RunRustDeskCommand(config.ServerUrl, config.Token, id, cmd);
+                            AgentLog.Write($"RustDesk command #{id} -> {(rustDeskOk ? "done" : "failed")}.");
                         }
                         else if (command == "script")
                         {
@@ -1069,25 +1115,6 @@ public partial class App : System.Windows.Application
             // Swallowed on purpose. The server marks the device offline when it
             // stops reporting, which is the visible signal.
             return 1;
-        }
-    }
-
-    /// <summary>
-    /// Apply a queued update, again without saying so on this machine.
-    /// </summary>
-    private void RunUpdate(AgentConfig config)
-    {
-        try
-        {
-            if (AutoUpdater.PerformUpdate(config.ServerUrl, config.Token))
-            {
-                // Replaced the running binary; this process is now the old one.
-                Environment.Exit(0);
-            }
-        }
-        catch
-        {
-            // Nothing useful to show a user who did not ask for detail.
         }
     }
 

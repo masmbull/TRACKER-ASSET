@@ -113,32 +113,15 @@ public static class HardwareCollector
         catch { }
 
         // RustDesk self-hosted remote desktop id, if RustDesk is installed.
-        // The ID lives in RustDesk's own config file, so we just read it;
-        // a missing file or parse failure leaves the field unset and the
-        // fleet page falls back to RDP.
-        try
-        {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var configPath = Path.Combine(appData, "RustDesk", "config", "RustDesk.toml");
-            if (File.Exists(configPath))
-            {
-                foreach (var line in File.ReadAllLines(configPath))
-                {
-                    var trimmed = line.Trim();
-                    if (trimmed.StartsWith("id ", StringComparison.OrdinalIgnoreCase) ||
-                        trimmed.StartsWith("id=", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var value = trimmed.Split('=', 2).Last().Trim().Trim('"', '\'');
-                        if (!string.IsNullOrWhiteSpace(value))
-                        {
-                            data["rustdesk_id"] = value;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
+        //
+        // Reading only %APPDATA%\RustDesk\config\RustDesk.toml was wrong on most
+        // machines: the config file only exists after the interactive client has
+        // been run, while the Windows service - the thing that actually accepts
+        // connections - keeps its own state. A freshly installed RustDesk
+        // therefore reported no id at all and the fleet page hid the Remote
+        // button, even though `RustDesk.exe --get-id` answers immediately.
+        // So: every known config location first, then ask the binary itself.
+        data["rustdesk_id"] = ResolveRustDeskId() ?? "";
 
         // Live Fleet telemetry (PRD §11) — battery wear, C: disk space, RAM
         // layout, Wi-Fi link and the Windows user that is logged in.
@@ -172,6 +155,179 @@ public static class HardwareCollector
     }
 
     const double Gigabyte = 1024.0 * 1024.0 * 1024.0;
+
+    /// <summary>
+    /// The RustDesk peer id for this machine, or null when RustDesk is not
+    /// installed or has never generated one.
+    /// </summary>
+    /// <remarks>
+    /// Three sources, cheapest first. The tray runs in the user session and can
+    /// read its own profile; the SYSTEM daemon cannot, so its profile and the
+    /// machine-wide locations are checked too. Only when none of them has an id
+    /// is the binary asked - it starts a short-lived process, which is fine on a
+    /// heartbeat because the answer is cached by the caller's interval.
+    /// </remarks>
+    /// <summary>Public entry point for the RustDesk command, which reports the id back.</summary>
+    internal static string? ResolveRustDeskIdForReporting() => ResolveRustDeskId();
+
+    static string? ResolveRustDeskId()
+    {
+        foreach (var configPath in RustDeskConfigPaths())
+        {
+            var id = ReadRustDeskIdFromToml(configPath);
+
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                return id;
+            }
+        }
+
+        return QueryRustDeskId();
+    }
+
+    /// <summary>Every place a RustDesk install keeps its peer id.</summary>
+    static IEnumerable<string> RustDeskConfigPaths()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        yield return Path.Combine(appData, "RustDesk", "config", "RustDesk.toml");
+
+        // The SYSTEM daemon's profile: its id is the one the service answers on,
+        // so it is preferred over any per-user file when both exist.
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+
+        if (!string.IsNullOrWhiteSpace(windows))
+        {
+            yield return Path.Combine(windows, "System32", "config", "systemprofile",
+                "AppData", "Roaming", "RustDesk", "config", "RustDesk.toml");
+            yield return Path.Combine(windows, "ServiceProfiles", "LocalService",
+                "AppData", "Roaming", "RustDesk", "config", "RustDesk.toml");
+        }
+
+        // Service-mode install: the config sits beside the binary.
+        foreach (var programFiles in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                 })
+        {
+            if (!string.IsNullOrWhiteSpace(programFiles))
+            {
+                yield return Path.Combine(programFiles, "RustDesk", "config", "RustDesk.toml");
+                yield return Path.Combine(programFiles, "RustDesk", "data", "config", "RustDesk.toml");
+            }
+        }
+    }
+
+    /// <summary>Parses the <c>id</c> key out of a RustDesk.toml, if present.</summary>
+    static string? ReadRustDeskIdFromToml(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var trimmed = line.Trim();
+
+                if (!trimmed.StartsWith("id ", StringComparison.OrdinalIgnoreCase) &&
+                    !trimmed.StartsWith("id=", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var value = trimmed.Split('=', 2).Last().Trim().Trim('"', '\'');
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+        catch
+        {
+            // Unreadable or malformed: fall through to the next source.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Asks RustDesk for its own id (<c>RustDesk.exe --get-id</c>).
+    /// </summary>
+    /// <remarks>
+    /// This is the only source that works on a service-only install with no
+    /// config file yet. Bounded hard: a hung RustDesk must not stall the
+    /// heartbeat, so the process is killed after a few seconds and a null is
+    /// returned - the fleet page then shows no Remote button rather than lying.
+    /// </remarks>
+    static string? QueryRustDeskId()
+    {
+        foreach (var exe in RustDeskExecutables())
+        {
+            try
+            {
+                if (!File.Exists(exe))
+                {
+                    continue;
+                }
+
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "--get-id",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                });
+
+                if (process is null)
+                {
+                    continue;
+                }
+
+                if (!process.WaitForExit(8000))
+                {
+                    try { process.Kill(entireProcessTree: true); } catch { }
+                    continue;
+                }
+
+                var text = process.StandardOutput.ReadToEnd().Trim();
+
+                // Output is a bare id ("149246498"). Anything longer or containing
+                // whitespace is a usage/error banner, not an id.
+                if (text.Length is > 0 and <= 32 && !text.Contains(' ') && !text.Contains('\n'))
+                {
+                    return text;
+                }
+            }
+            catch
+            {
+                // Not installed here, or blocked: try the next candidate.
+            }
+        }
+
+        return null;
+    }
+
+    static IEnumerable<string> RustDeskExecutables()
+    {
+        foreach (var programFiles in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                 })
+        {
+            if (!string.IsNullOrWhiteSpace(programFiles))
+            {
+                yield return Path.Combine(programFiles, "RustDesk", "RustDesk.exe");
+            }
+        }
+    }
 
     /// <summary>
     /// Formats numbers with a dot as the decimal separator: the API validates

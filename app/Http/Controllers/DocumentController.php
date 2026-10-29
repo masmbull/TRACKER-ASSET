@@ -225,7 +225,29 @@ class DocumentController extends Controller
     }
 
     /**
-     * Stream the generated PDF (inline for the preview iframe, or as a download).
+     * Metadata the modal preview needs before it fetches the PDF itself.
+     *
+     * Split from the file response on purpose: the viewer renders into a canvas,
+     * so it needs the byte URL and the title separately, and a JSON round trip
+     * lets it show a real error instead of a blank iframe when the file is gone.
+     */
+    public function previewData(Document $document)
+    {
+        $this->authorize('view', $document->asset()->firstOrFail());
+
+        abort_unless($document->file_path && Storage::exists($document->file_path), 404);
+
+        return response()->json([
+            'title' => $document->title,
+            'document_number' => $document->document_number,
+            'pages' => 0,
+            'file_url' => route('documents.download', $document) . '?inline=1',
+            'download_url' => route('documents.download', $document),
+        ]);
+    }
+
+    /**
+     * Stream the generated PDF (inline for the preview, or as a download).
      */
     public function download(Request $request, Document $document)
     {

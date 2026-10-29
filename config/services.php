@@ -79,4 +79,20 @@ return [
         'script_token' => env('INTERNAL_SCRIPT_TOKEN'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Self-hosted RustDesk
+    |--------------------------------------------------------------------------
+    |
+    | Every managed laptop is pointed at this rendezvous server, so a remote
+    | session never leaves the office network. The public key is not a secret -
+    | it ships inside every client config by design - but it must match the key
+    | the server itself was started with, or clients connect and are refused.
+    |
+    */
+    'rustdesk' => [
+        'rendezvous' => env('RUSTDESK_RENDEZVOUS', 'REDACTED_SERVER_IP'),
+        'public_key' => env('RUSTDESK_PUBLIC_KEY'),
+    ],
+
 ];
