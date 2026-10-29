@@ -231,14 +231,14 @@
                             @endif
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
+                            @php($elevated = $telemetry?->is_elevated ?? $fp?->is_elevated)
                             {{-- Elevation is reported on every heartbeat, so the
                                  telemetry row is the live answer. This column used
-                                 to read $fp?->is_elevated, a column the
+                                 to read the fingerprint's is_elevated, a column the
                                  fingerprints table never had: the value was always
                                  null, so a device that had just been elevated still
                                  showed "Standard User" and kept offering "Make
                                  admin" after the command had already succeeded. --}}
-                            @php($elevated = $telemetry?->is_elevated ?? $fp?->is_elevated)
                             @if($elevated === true)
                                 <span class="inline-flex items-center gap-1 font-medium text-success-600 dark:text-success-400"><x-icon name="access" class="h-3.5 w-3.5" /> Admin Elevated</span>
                             @elseif($elevated === false)
