@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.21</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.22</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -118,7 +118,16 @@
                     TrackerAgent.exe stayed on the old build - which is why the next
                     run still described itself as an update. The guard is now
                     stopped and disabled before the copy and re-enabled after, so
-                    the canonical file is actually replaced. -->
+                    the canonical file is actually replaced.
+               1.7.22: one machine appeared twice in Live Fleet as MBUL and MBUL-1.
+                    The device id was 32 random bytes kept in HKCU and config.json,
+                    so any reinstall whose config was gone minted a new identity, and
+                    the server - which matches a device on that id - treated the
+                    laptop as a second device. The id is now derived from the
+                    machine's GUID, which is unique per installation, survives
+                    reinstalls and reads the same from the user session and from
+                    SYSTEM; it is written to HKLM and ProgramData as well, because
+                    the tray and the daemon each had their own copy and disagreed. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -159,5 +168,6 @@
   </ItemGroup>
 
 </Project>
+
 
 

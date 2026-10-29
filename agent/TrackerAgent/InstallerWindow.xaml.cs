@@ -303,7 +303,15 @@ public partial class InstallerWindow : Window
             _serverUrl = serverUrl;
             Report(12, "Server terhubung.");
 
-            _deviceId = ReadRegistryString("DeviceId") ?? Convert.ToBase64String(GenerateDeviceId());
+            // Deterministic identity, not "whatever the registry happens to hold".
+            //
+            // A previously stored id is only trusted when it is the value this
+            // machine now generates. Random ids from older installers were what
+            // made a reinstall look like a new device; keeping one would preserve
+            // the duplicate. Every source is written after this so the tray, the
+            // SYSTEM daemon and a later repair all agree.
+            _deviceId = Convert.ToBase64String(GenerateDeviceId());
+            PersistDeviceIdEverywhere(_deviceId);
             Report(14, "Membaca identitas dan spesifikasi perangkat...");
             _hardwareDetails = await Task.Run(() => HardwareCollector.Collect("install"));
             _hardwareDetails.TryGetValue("serial_number", out var serialNumber);
@@ -1060,8 +1068,92 @@ public partial class InstallerWindow : Window
         }
     }
 
+    /// <summary>
+    /// Writes the device id where the tray, the SYSTEM daemon and future repairs
+    /// can all find the same value.
+    /// </summary>
+    /// <remarks>
+    /// HKLM and ProgramData need elevation; both are best effort because a
+    /// non-elevated install must still work. The config.json copy is written by
+    /// SaveConfig as usual, so the per-user path is covered separately.
+    /// </remarks>
+    private static void PersistDeviceIdEverywhere(string deviceId)
+    {
+        try
+        {
+            using var hkcu = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Mito\AuditTracker");
+            hkcu?.SetValue("DeviceId", deviceId);
+        }
+        catch
+        {
+            // No registry access: the config file still carries it.
+        }
+
+        try
+        {
+            using var hklm = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Mito\AuditTracker");
+            hklm?.SetValue("DeviceId", deviceId);
+        }
+        catch
+        {
+            // Not elevated: only the per-user copy exists.
+        }
+
+        try
+        {
+            var common = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "MITO");
+
+            Directory.CreateDirectory(common);
+
+            File.WriteAllText(
+                Path.Combine(common, "device.json"),
+                "{\"device_id\":\"" + deviceId + "\"}");
+        }
+        catch
+        {
+            // Same: the per-user config is enough for the tray.
+        }
+    }
+
+    /// <summary>
+    /// A stable per-machine identity.
+    /// </summary>
+    /// <remarks>
+    /// This used to be 32 random bytes, which is stable only for as long as the
+    /// registry key and config.json survive. Any reinstall on a machine whose
+    /// config was gone produced a different id, and the server - which matches a
+    /// device on hardware_id - treated the same laptop as a second device. That is
+    /// exactly how one machine ended up listed twice as MBUL and MBUL-1.
+    ///
+    /// Windows already has a value that is unique to the installation and stable
+    /// across reinstalls: MachineGuid. Hashing it means the id cannot be guessed
+    /// from the registry value by outside software, and it is readable by SYSTEM
+    /// as well as the user - the two contexts that were registering separately.
+    /// Random bytes remain the fallback only if MachineGuid is unavailable.
+    /// </remarks>
+    internal static string DeviceIdForTest() => Convert.ToBase64String(GenerateDeviceId());
+
     private static byte[] GenerateDeviceId()
     {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Cryptography");
+
+            if (key?.GetValue("MachineGuid") is string machineGuid && machineGuid.Length > 0)
+            {
+                using var sha = System.Security.Cryptography.SHA256.Create();
+
+                return sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes("tracker-agent:" + machineGuid));
+            }
+        }
+        catch
+        {
+            // Fall through to the random id.
+        }
+
         var id = new byte[32];
         Random.Shared.NextBytes(id);
         return id;
@@ -1908,4 +2000,5 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
 

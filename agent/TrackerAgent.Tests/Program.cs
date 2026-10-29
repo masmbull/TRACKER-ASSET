@@ -450,9 +450,24 @@ internal static class Program
 
         // Casing must not decide it: the launcher lower-cases, and a mixed-case
         // spelling from a script should still be treated as the same mode.
-        Check("--Install-Service is recognised case-insensitively", AgentRunner.IsCliFlagForTest("--Install-Service"));
-    }
+        Check("--Install-Service is recognised case-insensitively",
+            AgentRunner.IsCliFlagForTest("--Install-Service"));
 
+        // ------------------------------------------------------------------
+        // One token per machine. The device id used to be 32 random bytes stored
+        // in HKCU and config.json, so a reinstall on a machine whose config was
+        // gone produced a new id; the server matches on that id, and one laptop
+        // appeared twice in Live Fleet as MBUL and MBUL-1.
+        // ------------------------------------------------------------------
+        var id1 = InstallerWindow.DeviceIdForTest();
+        var id2 = InstallerWindow.DeviceIdForTest();
+
+        Check("device id is deterministic across calls", id1 == id2);
+        Check("device id is non-empty", !string.IsNullOrWhiteSpace(id1));
+        Check("device id is a 32-byte base64 value", Convert.FromBase64String(id1).Length == 32);
+        Check("device id does not expose the machine guid",
+            !id1.Contains("8bbab9dd", StringComparison.OrdinalIgnoreCase));
+    }
     private sealed class RecordingHttpServer : IDisposable
     {
         private readonly HttpListener _listener = new();

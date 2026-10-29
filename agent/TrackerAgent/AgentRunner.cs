@@ -342,6 +342,22 @@ public static class AgentRunner
     {
         try
         {
+            // Machine-wide first, then per-user.
+            //
+            // The tray runs as the logged-in user and the daemon runs as SYSTEM,
+            // and each has its own HKCU and %LOCALAPPDATA%. Reading only the
+            // per-user copy meant the daemon found nothing, generated its own
+            // identity, and registered the same laptop as a second device - which
+            // is how one machine appeared in Live Fleet twice. The installer
+            // writes the machine-wide copy precisely so both contexts agree.
+            foreach (var fromMachine in ReadMachineDeviceIds())
+            {
+                if (!string.IsNullOrWhiteSpace(fromMachine))
+                {
+                    return fromMachine;
+                }
+            }
+
             using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Mito\AuditTracker"))
             {
                 if (key?.GetValue("DeviceId") is string fromRegistry && !string.IsNullOrWhiteSpace(fromRegistry))
@@ -350,25 +366,81 @@ public static class AgentRunner
                 }
             }
 
-            var configPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "TRACKER",
-                "config.json");
-
-            if (!File.Exists(configPath))
+            foreach (var configPath in DeviceIdConfigPaths())
             {
-                return null;
+                if (!File.Exists(configPath))
+                {
+                    continue;
+                }
+
+                using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+
+                if (doc.RootElement.TryGetProperty("device_id", out var id) &&
+                    id.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(id.GetString()))
+                {
+                    return id.GetString();
+                }
             }
 
-            using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
-
-            return doc.RootElement.TryGetProperty("device_id", out var id) && id.ValueKind == JsonValueKind.String
-                ? id.GetString()
-                : null;
+            return null;
         }
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>Device ids stored where every account on the machine can read them.</summary>
+    static IEnumerable<string> ReadMachineDeviceIds()
+    {
+        string? value = null;
+
+        try
+        {
+            // HKLM is writable only by an elevated installer, so this can be
+            // trusted over a per-user copy that any user session could have
+            // created.
+            using var hklm = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Mito\AuditTracker");
+            value = hklm?.GetValue("DeviceId") as string;
+        }
+        catch
+        {
+            // Unreadable key: fall through to the other sources.
+        }
+
+        // Yielded outside the try: C# forbids yield inside a catch-bearing block.
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            yield return value;
+        }
+    }
+
+    /// <summary>Every config.json that could describe this machine.</summary>
+    static IEnumerable<string> DeviceIdConfigPaths()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+
+        // The current account's copy.
+        if (!string.IsNullOrWhiteSpace(localAppData))
+        {
+            yield return Path.Combine(localAppData, "TRACKER", "config.json");
+        }
+
+        // The SYSTEM profile's copy: what the daemon writes.
+        if (!string.IsNullOrWhiteSpace(windows))
+        {
+            yield return Path.Combine(windows, "System32", "config", "systemprofile",
+                "AppData", "Local", "TRACKER", "config.json");
+        }
+
+        // Elevated installs publish it here for everyone.
+        if (!string.IsNullOrWhiteSpace(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)))
+        {
+            yield return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "MITO", "device.json");
         }
     }
 
@@ -1890,7 +1962,23 @@ public static class AgentRunner
 
         if (!Run("schtasks", create, 60))
         {
-            Console.Error.WriteLine("[X] Could not register the SYSTEM task. Run the installer as an administrator.");
+            // Name the actual cause instead of the action to take.
+            //
+            // schtasks fails identically whether the command was run from a plain
+            // PowerShell (the common case: the account is an Administrator, but
+            // the shell holds a filtered standard token) or whether permissions
+            // are genuinely broken. Saying only "run as administrator" left the
+            // user repeating the same command in a window that looked elevated and
+            // failing again. So the diagnosis is made here and stated plainly.
+            var elevated = IsElevated();
+
+            Console.Error.WriteLine(elevated
+                ? "[X] This process is elevated, but schtasks still refused to create the SYSTEM task. " +
+                  "Group policy or an endpoint-protection rule is likely blocking it."
+                : "[X] This shell is NOT elevated. Being a member of Administrators is not enough: " +
+                  "the current window runs with a standard token. " +
+                  "Run the installer, or start an Administrator PowerShell, and try again.");
+
             return 1;
         }
         Console.WriteLine("[OK] Registered SYSTEM task (runs at boot as SYSTEM).");
