@@ -203,7 +203,7 @@
 
                     <Border Grid.Column="0" Width="44" Height="44" CornerRadius="8"
                             Background="{StaticResource BrandBrush}">
-                        <Image Source="mito-logo-white.png" Width="30" Stretch="Uniform"
+                        <Image Source="mito-logo-white.png" Width="32" MaxHeight="24" Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
 

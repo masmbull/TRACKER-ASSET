@@ -22,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -271,6 +272,54 @@ class AssetController extends Controller
         ]);
 
         return redirect()->route('assets.index')->with('success', 'Asset archived.');
+    }
+
+    /**
+     * Permanently delete an asset.
+     *
+     * Separate from destroy(), which archives. Archive is the everyday action -
+     * the device is gone but its history has to survive for audit - while this one
+     * removes the row and everything hanging off it. It exists because a duplicate
+     * created by a bad import has no history worth keeping, and an archived
+     * duplicate only pollutes the retired list.
+     *
+     * Guarded twice: only admins pass the policy, and the caller must type the
+     * asset number, so a mis-click cannot destroy a device record.
+     */
+    public function forceDestroy(Request $request, Asset $asset)
+    {
+        $this->authorize('forceDelete', $asset);
+
+        $request->validate([
+            'confirm_asset_id' => ['required', 'string'],
+        ], [
+            'confirm_asset_id.required' => 'Ketik nomor aset untuk konfirmasi penghapusan.',
+        ]);
+
+        if (! hash_equals($asset->asset_id, (string) $request->input('confirm_asset_id'))) {
+            throw ValidationException::withMessages([
+                'confirm_asset_id' => 'Nomor aset tidak cocok. Penghapusan dibatalkan.',
+            ]);
+        }
+
+        $assetId = $asset->asset_id;
+        $assetDbId = $asset->getKey();
+
+        // Written before the delete: afterwards there is no row left to name.
+        ActivityLog::create([
+            'actor_id' => Auth::id(),
+            'action' => 'DELETE',
+            'entity_type' => 'assets',
+            'entity_id' => $assetDbId,
+            'entity_identifier' => $assetId,
+            'source' => 'Web UI',
+            'old_value' => $assetId,
+        ]);
+
+        $asset->delete();
+
+        return redirect()->route('assets.index')
+            ->with('success', "Asset {$assetId} permanently deleted.");
     }
 
     /**
@@ -820,3 +869,4 @@ class AssetController extends Controller
         return redirect()->route('assets.show', $asset)->with('success', 'Repair record deleted.');
     }
 }
+

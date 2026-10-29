@@ -259,9 +259,17 @@ class DocumentController extends Controller
         $fileName = (Str::slug($document->document_number) ?: 'document').'.pdf';
         $headers = ['Content-Type' => 'application/pdf'];
 
-        return $request->boolean('inline')
-            ? response()->file($path, $headers)
-            : response()->download($path, $fileName, $headers);
+        if ($request->boolean('inline')) {
+            // Explicit, not implicit: response()->file() does set this, but the
+            // preview depends on it, so it is stated here and pinned by a test.
+            // Anything that changes the default would otherwise silently turn the
+            // viewer's PDF into a download prompt.
+            return response()->file($path, $headers + [
+                'Content-Disposition' => 'inline; filename="'.$fileName.'"',
+            ]);
+        }
+
+        return response()->download($path, $fileName, $headers);
     }
 
     public function create(Asset $asset)

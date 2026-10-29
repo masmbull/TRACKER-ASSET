@@ -85,6 +85,8 @@ Route::middleware('auth')->group(function () {
     // crawler and silently rotate the code out from under a printed sticker.
     Route::post('/assets/{asset}/qr/generate', [QrController::class, 'generate'])->name('assets.qr.generate');
 
+    Route::delete('/assets/{asset}/permanent', [AssetController::class, 'forceDestroy'])->name('assets.force-destroy');
+
     Route::resource('assets', AssetController::class);
 
     Route::get('/assets/{asset}/audit', [AssetController::class, 'audit'])->name('assets.audit');
@@ -247,3 +249,4 @@ Route::post('/agent/{token}/delete', [AgentFleetController::class, 'destroy'])->
         Route::get('/ike-bast/inspection/{session}/print', [IkeBastInspectionController::class, 'print'])->name('ike-bast.inspection.print');
     });
 });
+

@@ -9,8 +9,8 @@
         .letterhead { border-bottom: 2px solid #1e40af; padding-bottom: 6px; margin-bottom: 10px; }
         .letterhead table { border: none; width: 100%; margin: 0; }
         .letterhead td { border: none; vertical-align: middle; padding: 0; }
-        .logo-cell { width: 128px; padding: 5px 8px; background: #ed1c24; }
-        .logo-cell img { width: 110px; display: block; }
+        .logo-cell { width: 86px; padding: 6px 8px; background: #ed1c24; text-align: center; }
+        .logo-cell img { width: 70px; height: auto; display: block; margin: 0 auto; }
         .entities { padding-left: 12px; }
         .entities .legal { font-size: 9px; font-weight: bold; color: #0f172a; }
         .doc-title { text-align: right; }
@@ -36,7 +36,7 @@
     </style>
 </head>
 <body>
-@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-white.png'))))
+@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-pdf.png'))))
 <div class="print-bar"><button onclick="window.print()">Print</button></div>
 
 <div class="sheet">

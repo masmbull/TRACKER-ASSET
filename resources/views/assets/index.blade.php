@@ -123,6 +123,19 @@
                             @can('update', $asset)
                                 <a href="{{ route('assets.edit', $asset) }}" class="text-theme-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">Edit</a>
                             @endcan
+                            {{-- Delete, not Archive. Deletion is permanent, so it asks for
+                                 the asset number: a confirm() dialog is one stray Enter
+                                 away from destroying a device record, and this one cannot
+                                 be undone from the UI. --}}
+                            @can('forceDelete', $asset)
+                                <form method="POST" action="{{ route('assets.force-destroy', $asset) }}"
+                                      onsubmit="const answer = prompt('Hapus permanen {{ $asset->asset_id }}?\n\nKetik nomor aset untuk konfirmasi. Tindakan ini tidak bisa dibatalkan.'); if (answer === null) { return false; } this.confirm_asset_id.value = answer; return answer.trim() === '{{ $asset->asset_id }}';">
+                                    @csrf
+                                    @method('DELETE')
+                                    <input type="hidden" name="confirm_asset_id" value="">
+                                    <button type="submit" class="text-theme-sm font-medium text-error-600 hover:text-error-700 dark:text-error-400" title="Hapus aset secara permanen">Delete</button>
+                                </form>
+                            @endcan
                         </div>
                     </td>
                 </tr>

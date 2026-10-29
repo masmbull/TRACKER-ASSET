@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AssetNumberService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,6 +21,24 @@ class Asset extends Model
         'repair_notes', 'retire_date', 'qr_code', 'qr_token', 'qr_generated_at', 'barcode', 'is_active',
         'storage_type', 'storage_capacity',
     ];
+
+    /**
+     * Assign the running asset number when none was supplied.
+     *
+     * The number is what is printed on the label stuck to the device, so it is
+     * allocated here rather than left to each form: a screen that forgot to ask
+     * the numbering service would either save a blank number or invent its own
+     * scheme. An explicit number is still honoured - imports carry the number
+     * from the source sheet, and that is the number already on the hardware.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Asset $asset) {
+            if (blank($asset->asset_id)) {
+                $asset->asset_id = app(AssetNumberService::class)->forAsset($asset);
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -212,3 +231,4 @@ class Asset extends Model
         return $base.'/a/'.$this->qr_token;
     }
 }
+
