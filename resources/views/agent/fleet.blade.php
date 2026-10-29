@@ -81,7 +81,7 @@
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Battery</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Disk</th>
-                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">RDP</th>
+                    <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Remote</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Security</th>
                     <th class="py-2.5 px-3 text-left text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Register</th>
                     <th class="py-2.5 px-3 text-right text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
@@ -102,6 +102,31 @@
                         $status = $state['status'];
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
+
+                        // Remote readiness, from what actually decides it.
+                        //
+                        // Computed once per device here because two places use it:
+                        // the Remote column and the Remote action. It used to show
+                        // Windows RDP, which has nothing to do with our remote
+                        // access - RustDesk dials its own rendezvous server on 21116
+                        // and never touches RDP. A device reading "RDP Off" could be
+                        // perfectly reachable, and one reading "RDP On" could have no
+                        // RustDesk id at all.
+                        //
+                        // Three facts decide it: the agent has an id (RustDesk is
+                        // installed and registered), it is elevated (the client can
+                        // accept a session), and it has reported recently.
+                        $remoteId = $device->rustdesk_id;
+                        $remoteElevated = ($telemetry?->is_elevated ?? $fp?->is_elevated) === true;
+                        $remoteOnline = $telemetry?->reported_at !== null
+                            && $telemetry->reported_at->gt(now()->subMinutes(3));
+
+                        $remoteReady = filled($remoteId) && $remoteElevated && $remoteOnline;
+                        $remoteReason = ! filled($remoteId)
+                            ? 'RustDesk belum melaporkan ID'
+                            : (! $remoteElevated
+                                ? 'Agent belum elevated'
+                                : (! $remoteOnline ? 'Perangkat offline' : 'Siap'));
                     @endphp
                     <tr class="border-b border-gray-100 bg-white/60 hover:bg-gray-50 dark:border-gray-800 dark:bg-[#1d2939]/50 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
                         <td class="py-3 px-3">
@@ -221,13 +246,14 @@
                                 <span class="text-gray-400">—</span>
                             @endif
                         </td>
-                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-rdp>
-                            @if($fp?->rdp_enabled === true)
-                                <span class="font-medium text-success-600 dark:text-success-400">🟢 RDP On</span>
-                            @elseif($fp?->rdp_enabled === false)
-                                <span class="font-medium text-error-600 dark:text-error-400">🔴 RDP Off</span>
+                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-remote title="{{ $remoteReason }}">
+                            @if($remoteReady)
+                                <span class="inline-flex items-center gap-1 font-medium text-success-600 dark:text-success-400"><x-icon name="remote" class="h-3.5 w-3.5" /> Remote Ready</span>
+                            @elseif(filled($remoteId))
+                                <span class="font-medium text-warning-600 dark:text-warning-400">Remote Idle</span>
+                                <span class="block text-theme-xs text-gray-400">{{ $remoteReason }}</span>
                             @else
-                                <span class="text-gray-400">—</span>
+                                <span class="text-gray-400" title="RustDesk belum terpasang atau belum mendaftar">Remote —</span>
                             @endif
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
@@ -311,7 +337,7 @@
                                          Enabled only when the id is known and the
                                          agent is elevated: without either, the
                                          session would fail after the click. --}}
-                                    @if($telemetry?->is_elevated === true && $device->rustdesk_id)
+                                    @if($remoteReady)
                                         <x-row-action variant="info" icon="remote"
                                                       x-on:click.prevent="$dispatch('open-remote', { id: {{ $device->id }} })"
                                                       title="Buka sesi remote RustDesk">Remote</x-row-action>
@@ -992,4 +1018,5 @@
     }
 </script>
 @endsection
+
 
