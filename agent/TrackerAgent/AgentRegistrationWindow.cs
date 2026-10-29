@@ -93,7 +93,7 @@ public sealed partial class AgentRegistrationWindow : Window
                 DateTime.Now.Year.ToString(CultureInfo.InvariantCulture),
                 placeholder: "Contoh: 2026", icon: "\uE787", maxLength: 4)),
             ("Vendor", "\uE719", () => _vendor = MakeTextBox(placeholder: "Nama vendor (opsional)", icon: "\uE719")),
-            ("Harga pembelian", "\uE8C7", () => _purchasePrice = MakeTextBox(placeholder: "0", icon: "\uE8C7")),
+            ("Harga pembelian", "\uE8C7", () => _purchasePrice = MakeTextBox(placeholder: "0", icon: "\uE716", maxLength: 18)),
         };
 
         // Each field is two cells wide in a two-column grid, so the pairs are laid
@@ -119,7 +119,91 @@ public sealed partial class AgentRegistrationWindow : Window
 
         _purchaseYear.TextChanged += (_, _) => UpdateCodePreview();
 
+        WireRupiahInput();
+
         AnimateIn();
+    }
+
+    /// <summary>Rupiah grouping: dot between thousands, no decimals.</summary>
+    private static readonly CultureInfo RupiahFormat = CreateRupiahFormat();
+
+    private static CultureInfo CreateRupiahFormat()
+    {
+        var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+
+        culture.NumberFormat.NumberGroupSeparator = ".";
+        culture.NumberFormat.NumberDecimalSeparator = ",";
+        culture.NumberFormat.NumberGroupSizes = [3];
+
+        return culture;
+    }
+
+    /// <summary>
+    /// Formats the purchase price as rupiah while it is typed.
+    /// </summary>
+    /// <remarks>
+    /// The field accepts digits only and regroups them with dots as the operator
+    /// types, so 15000000 reads 15.000.000 - the way a price is written on a
+    /// purchase order. Parsing uses the same invariant digits underneath, so a
+    /// stored value is never a string with formatting in it.
+    ///
+    /// The caret is restored by digit count rather than character index: grouping
+    /// inserts dots, and a raw index would jump the cursor to the wrong place after
+    /// every fourth digit.
+    /// </remarks>
+    private void WireRupiahInput()
+    {
+        // The "Rp" prefix is added by AddField, inside the same cell as the field,
+        // so it is never part of the value. Only the padding and formatting live
+        // here: the text starts after the prefix and is regrouped as it is typed.
+        _purchasePrice.Padding = new Thickness(64, 0, 11, 0);
+        _purchasePrice.TextChanged += (_, _) =>
+        {
+            var digits = new string(_purchasePrice.Text.Where(char.IsDigit).ToArray());
+
+            if (digits.Length > 15)
+            {
+                digits = digits[..15];
+            }
+
+            // Indonesian grouping: a dot between thousands, which is how a rupiah
+            // price is written here. InvariantCulture was a mistake - it groups
+            // with commas, so a price read "15,000,000".
+            var formatted = digits.Length == 0
+                ? string.Empty
+                : long.Parse(digits, CultureInfo.InvariantCulture).ToString("#,##0", RupiahFormat);
+
+            if (formatted == _purchasePrice.Text)
+            {
+                return;
+            }
+
+            // Count digits before the caret, then put the caret after that many
+            // digits in the new text.
+            var caret = _purchasePrice.CaretIndex;
+            var digitsBefore = _purchasePrice.Text.Take(Math.Min(caret, _purchasePrice.Text.Length))
+                .Count(char.IsDigit);
+
+            _purchasePrice.Text = formatted;
+
+            var seen = 0;
+            var target = formatted.Length;
+            for (var i = 0; i < formatted.Length; i++)
+            {
+                if (seen == digitsBefore)
+                {
+                    target = i;
+                    break;
+                }
+
+                if (char.IsDigit(formatted[i]))
+                {
+                    seen++;
+                }
+            }
+
+            _purchasePrice.CaretIndex = target;
+        };
     }
 
     /// <summary>Fades and lifts the form in, so the window does not just appear.</summary>
@@ -167,7 +251,31 @@ public sealed partial class AgentRegistrationWindow : Window
         });
 
         field.Children.Add(labelRow);
-        field.Children.Add(control);
+
+        if (ReferenceEquals(control, _purchasePrice))
+        {
+            // The "Rp" prefix is drawn inside the same cell as the field instead of
+            // being typed into it, so the value stays a number.
+            var overlay = new Grid();
+
+            overlay.Children.Add(control);
+            overlay.Children.Add(new TextBlock
+            {
+                Text = "Rp",
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0x40, 0x54)),
+                Margin = new Thickness(34, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            });
+
+            field.Children.Add(overlay);
+        }
+        else
+        {
+            field.Children.Add(control);
+        }
 
         Grid.SetRow(field, row);
         Grid.SetColumn(field, column);
@@ -322,9 +430,17 @@ public sealed partial class AgentRegistrationWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_purchasePrice.Text))
         {
-            if (!decimal.TryParse(_purchasePrice.Text.Trim(), NumberStyles.Number,
-                    CultureInfo.CurrentCulture, out var parsed) || parsed < 0)
+            // The field shows "15.000.000", so the digits are what actually carry
+            // the value. Parsing the formatted string with the current culture
+            // would read the dots as decimal points in some locales and as grouping
+            // in others - the same price recorded 1000x wrong depending on the
+            // machine's regional settings.
+            var digits = new string(_purchasePrice.Text.Where(char.IsDigit).ToArray());
+
+            if (!decimal.TryParse(digits, NumberStyles.None,
+                    CultureInfo.InvariantCulture, out var parsed) || parsed < 0)
             {
+
                 ValidationText.Text = "Harga pembelian harus berupa angka nol atau lebih.";
                 return;
             }
@@ -350,6 +466,8 @@ public sealed partial class AgentRegistrationWindow : Window
     private static string? NullIfBlank(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+
+
 
 
 

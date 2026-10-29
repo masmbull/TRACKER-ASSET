@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.26</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.27</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -160,7 +160,15 @@
                     now a two-column grid with an icon and a numbered label each, the
                     asset code sits in its own amber bar instead of a disabled field,
                     placeholders appear inside empty boxes, and the form fades and
-                    lifts in. Five more checks pin the layout. -->
+                    lifts in. Five more checks pin the layout.
+               1.7.27: the text fields could not be typed into. The template's content
+                    host stretched across the whole field instead of sitting beside
+                    the icon, so it swallowed every click: the year showed its value
+                    and nothing the operator typed appeared. The purchase price now
+                    takes digits only, regroups them as rupiah (15.000.000) with an
+                    Rp prefix, and is parsed from those digits rather than the
+                    formatted string - reading the dots as a decimal point under a
+                    different locale would have stored a price 1000x wrong. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -201,6 +209,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

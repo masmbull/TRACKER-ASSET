@@ -65,7 +65,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Border x:Name="Bd"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{StaticResource CardBorderBrush}"
@@ -91,9 +91,16 @@
                                        IsHitTestVisible="False"
                                        Visibility="Collapsed"/>
 
+                            <!-- The content host is the editable surface, so it must
+                                 sit beside the icon, not on top of the whole field.
+                                 Stretched over the Grid it swallowed every click: the
+                                 box looked normal, showed its value, and could not be
+                                 focused or typed into. -->
                             <ScrollViewer x:Name="PART_ContentHost"
                                           Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center"
+                                          HorizontalAlignment="Stretch"
+                                          Focusable="False"
                                           HorizontalScrollBarVisibility="Hidden"
                                           VerticalScrollBarVisibility="Hidden"/>
                         </Grid>

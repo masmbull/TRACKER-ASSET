@@ -553,6 +553,21 @@ internal static class Program
         Check("registration form animates in",
             registrationCode is not null &&
             registrationCode.Contains("AnimateIn", StringComparison.Ordinal));
+
+        // The content host covered the whole field, so the box could not take
+        // focus: the year showed its value and typing did nothing.
+        Check("text field content host does not cover the field",
+            registrationXaml is not null &&
+            registrationXaml.Contains("x:Name=\"PART_ContentHost\"", StringComparison.Ordinal));
+
+        Check("purchase price is formatted as rupiah",
+            registrationCode is not null &&
+            registrationCode.Contains("RupiahFormat", StringComparison.Ordinal) &&
+            registrationCode.Contains("NumberGroupSeparator = \".\"", StringComparison.Ordinal));
+
+        Check("purchase price parses digits, not the formatted string",
+            registrationCode is not null &&
+            registrationCode.Contains("char.IsDigit", StringComparison.Ordinal));
     }
 
     /// <summary>A source file from the agent project, or null when not found.</summary>
