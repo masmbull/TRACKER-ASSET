@@ -359,7 +359,7 @@
                              role="alert"
                              aria-labelledby="validation-errors-heading">
                             <p id="validation-errors-heading" class="font-semibold">
-                                {{ trans_choice('There is :count problem with this form.|There are :count problems with this form.', $errors->count(), ['count' => $errors->count()]) }}
+                                {{ trans_choice('Ada :count masalah pada permintaan ini.|Ada :count masalah pada permintaan ini.', $errors->count(), ['count' => $errors->count()]) }}
                             </p>
                             <ul class="mt-2 list-inside list-disc space-y-1">
                                 @foreach($errors->all() as $error)

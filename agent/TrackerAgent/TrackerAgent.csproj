@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.32</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.33</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -218,7 +218,20 @@
                     side-by-side file. The stop now runs through one elevated
                     PowerShell invocation, and it ends stray agent processes as well,
                     because a task started outside the scheduler - or an orphan whose
-                    parent has died - keeps the handle even after the task is ended. -->
+                    parent has died - keeps the handle even after the task is ended.
+               1.7.33: opening the installer on a machine that already ran this build
+                    only ever printed "already installed". That is true of the files
+                    and says nothing about the enrolment: a token that had been
+                    revoked, or a device removed from the fleet, still counted as
+                    installed, so the form never appeared and the machine reported
+                    nothing while every heartbeat was answered 401. The wizard now
+                    asks the server whether it recognises the token before deciding.
+                    Recognised -> the notice, unchanged. Unknown, missing, or
+                    unreachable -> the install path runs as a repair: re-register,
+                    rewrite config.json, and show the ten fields when there is no
+                    asset to match. It also sweeps the folder first, removing
+                    .spawn-budget, _new_* copies, _update_runner.bat and superseded
+                    siblings, which is what those leftovers in Local\TRACKER were. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -259,6 +272,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

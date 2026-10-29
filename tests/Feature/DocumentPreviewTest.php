@@ -118,4 +118,3 @@ class DocumentPreviewTest extends TestCase
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
     }
 }
-

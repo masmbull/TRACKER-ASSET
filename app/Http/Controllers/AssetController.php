@@ -22,8 +22,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 class AssetController extends Controller
@@ -363,11 +364,11 @@ class AssetController extends Controller
         $counts = [];
 
         foreach ($relations as [$table, $label]) {
-            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 continue;
             }
 
-            $count = \Illuminate\Support\Facades\DB::table($table)
+            $count = DB::table($table)
                 ->where('asset_id', $asset->getKey())
                 ->count();
 
@@ -926,4 +927,3 @@ class AssetController extends Controller
         return redirect()->route('assets.show', $asset)->with('success', 'Repair record deleted.');
     }
 }
-

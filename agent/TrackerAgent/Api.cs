@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.IO;
 using System.Text.Json;
 
 namespace TrackerAgent;
@@ -130,6 +131,71 @@ public static class Api
         {
             Console.Error.WriteLine($"[!] Heartbeat unreachable: {ex.Message}");
 
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether the server still recognises this token.
+    /// </summary>
+    /// <remarks>
+    /// The installer decides between repair and fresh registration, and the only
+    /// authority on that is the server: config.json can name a token that was
+    /// revoked, deleted, or belongs to a device someone removed from the fleet. A
+    /// locally present token was treated as "already installed" and skipped the
+    /// form, which left a machine that looked enrolled and reported nothing -
+    /// /api/agent/heartbeat would answer 401 forever and the only clue was a
+    /// device missing from the fleet.
+    ///
+    /// Returns false when the server cannot be reached too: an unverifiable token
+    /// must not be trusted for a destructive decision, and registration is the
+    /// safe path - it repairs the token rather than leaving a dead one in place.
+    /// </remarks>
+    public static bool IsTokenKnown(string url, string token, string hardwareId)
+    {
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
+            var body = JsonSerializer.Serialize(new
+            {
+                device_id = hardwareId,
+                hardware_id = hardwareId,
+                check_only = true,
+            });
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{url}/api/agent/register")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
+
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var response = http.Send(req);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var text = new StreamReader(response.Content.ReadAsStream()).ReadToEnd();
+
+            using var doc = JsonDocument.Parse(text);
+
+            // The server echoes the known token back in check_only mode; a null
+            // there means it does not know this device.
+            return doc.RootElement.TryGetProperty("token", out var echoed) &&
+                   echoed.ValueKind == JsonValueKind.String &&
+                   !string.IsNullOrWhiteSpace(echoed.GetString());
+        }
+        catch
+        {
             return false;
         }
     }
@@ -657,3 +723,4 @@ private sealed record PrinterEntry(
         }
     }
 }
+

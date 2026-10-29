@@ -3,18 +3,13 @@
 @section('title', 'Document ' . $document->document_number)
 
 @section('content')
-{{--
-    The document opens as a modal over this page, not as an embedded viewer.
+{{-- The document opens as a native <dialog> the moment this page loads.
 
-    An inline viewer was still a page you had to navigate to and leave, and the
-    operator asked for a popup: click the document, read it, close it, stay where
-    you were. The page underneath stays mounted (the header, the buttons), and the
-    PDF renders in the modal's own canvas through PDF.js - so no browser PDF
-    toolbar, which was the original complaint.
-
-    The modal opens on load because this route IS the "open the document" target,
-    so arriving here should show the document rather than a button to reveal it.
---}}
+     The page exists as the "open the document" target, so arriving here should
+     show the document rather than a button to reveal it. The dialog is plain
+     JavaScript - no Alpine - because the Alpine version silently rendered
+     nothing when the framework had not started, and a preview that does not
+     appear is indistinguishable from a broken route. --}}
 <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
     <div class="min-w-0">
         <h1 class="truncate text-xl font-semibold text-gray-900 dark:text-white">{{ $document->title }}</h1>
@@ -30,24 +25,19 @@
     </div>
 </div>
 
-<div class="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
-    <p class="text-theme-sm text-gray-500 dark:text-gray-400">Pratinjau dokumen terbuka di jendela popup.</p>
-
+<div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
     <x-document-preview :document="$document" :auto-open="true">
-        <button type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-semibold text-white transition hover:bg-brand-600 active:scale-[0.98]">
-            Buka Pratinjau
-        </button>
+        <x-button variant="primary">Buka Pratinjau</x-button>
     </x-document-preview>
 
-    <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <a href="{{ route('documents.download', $document) }}"
-           class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-success-600">
-            <x-icon name="download" class="h-4 w-4" /> Download PDF
-        </a>
-        <a href="{{ $document->asset_id ? route('assets.show', $document->asset_id) : route('documents.index') }}"
-           class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
-            Back
-        </a>
-    </div>
+    <a href="{{ route('documents.download', $document) }}"
+       class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-success-600">
+        <x-icon name="download" class="h-4 w-4" /> Download PDF
+    </a>
+
+    <a href="{{ $document->asset_id ? route('assets.show', $document->asset_id) : route('documents.index') }}"
+       class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+        Back
+    </a>
 </div>
 @endsection

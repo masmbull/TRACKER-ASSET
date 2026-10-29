@@ -128,10 +128,20 @@ public partial class InstallerWindow : Window
         switch (mode)
         {
             case InstallerMode.AlreadyInstalled:
-                SubtitleText.Text = "Already installed";
-                ShowAlreadyInstalled();
-                EnsureInstalledTrayIsRunning();
+                // Same build, but "installed" is not the same as "enrolled".
+                //
+                // The version match alone sent the wizard down the notice path,
+                // so a machine whose token had been revoked or removed from the
+                // fleet was told everything was fine while every heartbeat was
+                // answered with 401 and the device never appeared in Live Fleet.
+                // Before settling on the notice, the token is checked against the
+                // server; an unknown token means this is a repair, not a no-op.
+                SubtitleText.Text = "Memeriksa pendaftaran perangkat...";
+                StartProgressAnimation();
+                BeginShimmer();
+                _ = RepairOrConfirmAsync();
                 break;
+
 
             case InstallerMode.Update:
                 SubtitleText.Text = "Updating agent...";
@@ -1949,7 +1959,187 @@ public partial class InstallerWindow : Window
             InfoBrush);
     }
 
-    /// <summary>Clicked build == installed build: ensure the tray agent is running.</summary>
+    /// <summary>
+    /// Decides between "already done" and "repair" from what the server knows.
+    /// </summary>
+    /// <remarks>
+    /// Three states are possible on a machine already running this build:
+    ///
+    /// 1. The token is known to the server -> nothing to do; show the notice.
+    /// 2. The token is unknown (revoked, or the device was removed from the
+    ///    fleet), or the server cannot be reached -> run the install path. It
+    ///    re-registers the device and rewrites config.json, which is what makes
+    ///    this a repair rather than a reinstall: the agent files are already the
+    ///    right version, and only the enrolment is broken.
+    /// 3. No token at all -> same repair path; it registers fresh and shows the
+    ///    ten-field form.
+    ///
+    /// Either way the folder is tidied first. A machine that has been through
+    /// several partial updates ends up with .spawn-budget, _new_* copies and an
+    /// _update_runner.bat that are never read again - leftovers, in a folder the
+    /// user is told is the application.
+    /// </remarks>
+    private async Task RepairOrConfirmAsync()
+    {
+        try
+        {
+            var enrollment = ReadConfigFile();
+            var token = enrollment?.Token ?? string.Empty;
+
+            Report(20, "Membersihkan file sisa...");
+            CleanInstalledFolder();
+
+            Report(45, "Memeriksa token di server...");
+
+            var serverUrl = enrollment?.ServerUrl;
+            var known = false;
+
+            if (!string.IsNullOrWhiteSpace(token) && !string.IsNullOrWhiteSpace(serverUrl))
+            {
+                var hardwareId = ReadRegistryString("DeviceId")
+                    ?? enrollment?.DeviceId
+                    ?? string.Empty;
+
+                known = await Task.Run(() => Api.IsTokenKnown(serverUrl!, token, hardwareId));
+            }
+
+            if (known)
+            {
+                Report(100, "Pendaftaran valid.");
+                SubtitleText.Text = "Sudah terpasang";
+                ShowAlreadyInstalled();
+                EnsureInstalledTrayIsRunning();
+                return;
+            }
+
+            // Repair: the enrolment is broken or absent, the files are fine.
+            AgentLog.Write(
+                "Install: installed build but the token is not recognised by the server; repairing enrolment.");
+
+            _progressTimer.Stop();
+            EndShimmer();
+
+            SubtitleText.Text = string.IsNullOrWhiteSpace(token)
+                ? "Pendaftaran ulang perangkat"
+                : "Token tidak valid, mendaftarkan ulang";
+
+            InstallStepsPanel.Visibility = Visibility.Visible;
+            OverallProgressTrack.Visibility = Visibility.Visible;
+            StatsPanel.Visibility = Visibility.Visible;
+            ProgressCounterText.Visibility = Visibility.Visible;
+            StartProgressAnimation();
+            BeginShimmer();
+            _targetProgress = 0;
+            _displayedProgress = 0;
+            UpdateInstallSteps(0);
+
+            await AutoInstallAsync();
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"RepairOrConfirm failed: {ex}");
+            ShowFailure("Tidak bisa memeriksa pendaftaran perangkat.\n\n" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Deletes files the agent never reads again.
+    /// </summary>
+    /// <remarks>
+    /// Only known leftovers, by exact name and pattern. The install folder also
+    /// holds config.json and agent.log, which are state - deleting those would
+    /// lose the enrolment this repair is trying to keep.
+    /// </remarks>
+    private void CleanInstalledFolder()
+    {
+        try
+        {
+            var removed = 0;
+
+            foreach (var name in new[] { ".spawn-budget", "_update_runner.bat" })
+            {
+                var path = Path.Combine(_installDir, name);
+
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        File.Delete(path);
+                        removed++;
+                    }
+                    catch
+                    {
+                        // In use: harmless, it will be cleared next time.
+                    }
+                }
+            }
+
+            foreach (var pattern in new[] { "_new_TrackerAgent_*", "*.old", "*.tmp" })
+            {
+                foreach (var path in Directory.GetFiles(_installDir, pattern))
+                {
+                    try
+                    {
+                        File.Delete(path);
+                        removed++;
+                    }
+                    catch
+                    {
+                        // Same.
+                    }
+                }
+            }
+
+            // Older builds left beside a locked exe.
+            removed += InstallerService.CleanSiblingBuilds(_installDir);
+
+            if (removed > 0)
+            {
+                AgentLog.Write($"Cleaned {removed} leftover file(s) from the install folder.");
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentLog.Write($"Install folder cleanup failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Reads what the installed config says about the enrolment, or null.
+    /// </summary>
+    /// <remarks>
+    /// Read with JsonDocument rather than the agent's own config type: that type
+    /// is private to App, and coupling the wizard to it would mean a field rename
+    /// in the agent breaks the installer.
+    /// </remarks>
+    private (string? ServerUrl, string? Token, string? DeviceId)? ReadConfigFile()
+    {
+        try
+        {
+            var path = Path.Combine(_installDir, "config.json");
+
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+
+            string? Read(string name) =>
+                doc.RootElement.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+                    ? el.GetString()
+                    : null;
+
+            return (Read("server_url") ?? Read("ServerUrl"),
+                    Read("token") ?? Read("Token"),
+                    Read("device_id") ?? Read("DeviceId"));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private void ShowAlreadyInstalled()
     {
         EnsureInstalledTrayIsRunning();
@@ -2342,6 +2532,9 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
+
+
 
 
 

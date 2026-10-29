@@ -131,6 +131,7 @@ class AgentRegistrationController extends Controller
                 'payload' => null,
                 'status' => 'pending',
             ]);
+
             return [
                 'token' => $token,
                 'device_id' => $row->device_id,
@@ -139,7 +140,7 @@ class AgentRegistrationController extends Controller
             ];
         };
 
-// Check if device already registered
+        // Check if device already registered
         $existing = AgentApiToken::where('hardware_id', $hardwareId)->first()
             ?? AgentApiToken::where('device_id', $deviceId)->first();
         if ($existing) {
@@ -320,6 +321,7 @@ class AgentRegistrationController extends Controller
         }
 
         $matches = Asset::query()->where('serial_number', $serial)->limit(2)->get();
+
         return $matches->count() === 1 ? $matches->first() : null;
     }
 
@@ -346,6 +348,7 @@ class AgentRegistrationController extends Controller
         if ($existing->count() === 1) {
             $asset = $existing->first();
             $this->attachEnrollmentRecords($token, $asset);
+
             return $asset;
         }
         if ($existing->count() > 1) {

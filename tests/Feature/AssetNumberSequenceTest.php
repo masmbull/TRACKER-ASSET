@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\Asset;
 use App\Models\AssetCategory;
 use App\Models\AssetStatus;
-use App\Models\Location;
 use App\Models\Company;
+use App\Models\Location;
 use App\Services\AssetNumberService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -96,7 +96,6 @@ class AssetNumberSequenceTest extends TestCase
         $this->assertMatchesRegularExpression('/^[A-Z0-9]+-[A-Z0-9]+-\d{4}-\d{4,}$/', $number);
     }
 
-
     /** A form that forgets to ask for a number must not save a blank one. */
     public function test_asset_gets_a_number_automatically_when_none_is_given(): void
     {
@@ -123,6 +122,7 @@ class AssetNumberSequenceTest extends TestCase
     {
         $this->assertSame('MSI-LAP-2025-0001', $this->createAsset('MSI-LAP-2025-0001')->asset_id);
     }
+
     private function createAsset(string $assetId): Asset
     {
         $company = Company::firstOrCreate(
@@ -149,7 +149,3 @@ class AssetNumberSequenceTest extends TestCase
         ]);
     }
 }
-
-
-
-

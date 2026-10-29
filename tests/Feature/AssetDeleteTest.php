@@ -185,7 +185,6 @@ class AssetDeleteTest extends TestCase
         $this->assertStringContainsString('Arsipkan', $message);
     }
 
-
     /** No history means nothing blocks it, and the row really goes. */
     public function test_asset_without_history_is_deleted(): void
     {
@@ -198,5 +197,3 @@ class AssetDeleteTest extends TestCase
         $this->assertDatabaseMissing('assets', ['asset_id' => $asset->asset_id]);
     }
 }
-
-
