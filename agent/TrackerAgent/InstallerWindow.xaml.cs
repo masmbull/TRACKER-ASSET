@@ -582,7 +582,11 @@ public partial class InstallerWindow : Window
                 // session 0 and a standard user cannot kill it. Copying over a
                 // locked exe fails no matter how many times it is retried, which
                 // used to surface as the useless "check disk space" message.
-                StopInstalledAgent();
+                //
+                // The guard is stopped first: it is what re-takes the handle a
+                // minute later, and without pausing it the copy below could never
+                // win against a task that restarts the agent it just lost.
+                StopGuardAndSystemAgent();
 
                 // Before copying: drop sibling builds a previous attempt left,
                 // including the ones a loop created. Whatever is still running is
@@ -1104,7 +1108,7 @@ public partial class InstallerWindow : Window
             Report(10, $"Versi terpasang {_installedVersion}; menyiapkan versi {_newVersion}...");
 
             Report(25, "Menghentikan agent versi lama...");
-            StopInstalledAgent();
+            StopGuardAndSystemAgent();
 
             Report(45, "Membersihkan sisa file pembaruan...");
             InstallerService.CleanLeftovers(Path.GetDirectoryName(_installedExe)!);
@@ -1146,6 +1150,7 @@ public partial class InstallerWindow : Window
 
                 Report(75, "Agent lama terkunci oleh service; versi baru dipasang berdampingan...");
                 RestartAgentFrom(versionedExe);
+                ReEnableGuard(versionedExe);
                 Report(100, "Pembaruan selesai.");
                 Thread.Sleep(250);
                 return true;
@@ -1153,6 +1158,7 @@ public partial class InstallerWindow : Window
 
             Report(85, "Menjalankan ulang agent di system tray...");
             RestartAgent();
+            ReEnableGuard(_installedExe);
 
             Report(100, "Pembaruan selesai.");
             Thread.Sleep(250);
@@ -1251,6 +1257,89 @@ public partial class InstallerWindow : Window
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Stops the SYSTEM agent and the guard that would restart it.
+    /// </summary>
+    /// <remarks>
+    /// Killing the process is not enough. The guard task runs every minute as
+    /// SYSTEM and starts the agent again, so the copy that follows immediately
+    /// finds the canonical exe locked once more and falls back to yet another
+    /// versioned sibling. That is how a machine ended up with
+    /// TrackerAgent-1.7.20.exe, -2.exe and a canonical file still on 1.7.17:
+    /// every update ran, none of them replaced the file the guard kept holding.
+    ///
+    /// The task is stopped and disabled, not deleted: if the install fails
+    /// half-way, the machine still has its guard once the install re-enables it.
+    /// Both calls need elevation and are best effort - without it the caller
+    /// falls back to the side-by-side path, which still works.
+    /// </remarks>
+    private static void StopGuardAndSystemAgent()
+    {
+        foreach (var task in new[] { "MitoAuditTrackerGuard", "MitoAuditTrackerService" })
+        {
+            RunHidden("schtasks.exe", $"/End /TN \"{task}\"");
+            RunHidden("schtasks.exe", $"/Change /TN \"{task}\" /DISABLE");
+        }
+
+        // Give the scheduler a moment to actually stop the process it launched.
+        Thread.Sleep(1500);
+
+        StopInstalledAgent();
+    }
+
+    /// <summary>
+    /// Turns the guard back on after an update that disabled it.
+    /// </summary>
+    /// <remarks>
+    /// The update path stops the guard so it can replace a locked exe, and without
+    /// this the machine would end up with the new build running once and no guard
+    /// to bring it back after a crash or a reboot - silently losing protection on
+    /// exactly the machines that were just fixed.
+    /// </remarks>
+    private static void ReEnableGuard(string exePath)
+    {
+        RunHidden("schtasks.exe", "/Change /TN \"MitoAuditTrackerGuard\" /ENABLE");
+
+        if (!InstallCheck.IsSameFile(exePath, InstallCheck.InstalledExe))
+        {
+            // Running from a versioned sibling: point the guard at it, or it will
+            // restore the stale canonical build again.
+            AgentLog.Write($"Guard should target {Path.GetFileName(exePath)}, not the canonical exe.");
+        }
+
+        try
+        {
+            RunHidden("schtasks.exe", "/Run /TN \"MitoAuditTrackerGuard\"");
+        }
+        catch
+        {
+            // Its own schedule will fire on the next minute regardless.
+        }
+    }
+
+    /// <summary>Runs a helper tool with no window, ignoring failures.</summary>
+    private static void RunHidden(string exe, string arguments)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            process?.WaitForExit(15000);
+        }
+        catch
+        {
+            // Missing tool or no rights: the caller handles the fallback.
         }
     }
 

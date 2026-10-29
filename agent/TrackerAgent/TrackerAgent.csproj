@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.20</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.21</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -109,7 +109,16 @@
                     the agent is installed and running. The MITO mark now ships as
                     the cropped, supersampled image, so it is visible at 44px; it
                     was an 800x200 canvas being scaled into 44px and rendered as
-                    an empty tile. -->
+                    an empty tile.
+               1.7.21: an update could never replace the canonical exe on a machine
+                    running the SYSTEM task. The installer killed the agent, but the
+                    guard restarted it within the minute and took the file handle
+                    again, so every attempt fell back to yet another versioned
+                    sibling (TrackerAgent-1.7.20.exe, -2.exe, ...) while
+                    TrackerAgent.exe stayed on the old build - which is why the next
+                    run still described itself as an update. The guard is now
+                    stopped and disabled before the copy and re-enabled after, so
+                    the canonical file is actually replaced. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -150,4 +159,5 @@
   </ItemGroup>
 
 </Project>
+
 
