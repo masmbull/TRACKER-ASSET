@@ -126,7 +126,9 @@
                             {{-- A company entered before this feature existed, or
                                  one that is no longer in master data, must not
                                  silently disappear from its own document. --}}
-                            @php($currentSender = old('sender_entity', $asset->company?->name))
+                            @php
+                                $currentSender = old('sender_entity', $asset->company?->name);
+                            @endphp
                             @if($currentSender && ! $companies->contains('name', $currentSender))
                                 <option value="{{ $currentSender }}" selected>{{ $currentSender }} (tidak ada di master data)</option>
                             @endif

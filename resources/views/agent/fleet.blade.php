@@ -231,7 +231,9 @@
                             @endif
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
-                            @php($elevated = $telemetry?->is_elevated ?? $fp?->is_elevated)
+                            @php
+                                $elevated = $telemetry?->is_elevated ?? $fp?->is_elevated;
+                            @endphp
                             {{-- Elevation is reported on every heartbeat, so the
                                  telemetry row is the live answer. This column used
                                  to read the fingerprint's is_elevated, a column the
