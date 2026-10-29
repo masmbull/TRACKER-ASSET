@@ -1485,17 +1485,80 @@ public partial class InstallerWindow : Window
     /// </remarks>
     private static void StopGuardAndSystemAgent()
     {
-        foreach (var task in new[] { "MitoAuditTrackerGuard", "MitoAuditTrackerService" })
+        // The scheduler calls need elevation. Running them from this non-elevated
+        // wizard failed silently, which is why an update could never replace a file
+        // the SYSTEM task was holding: schtasks said "access denied", the handle was
+        // never released, and the copy fell back to a side-by-side file every time.
+        //
+        // PowerShell is launched elevated once and does the whole stop in one
+        // prompt, so the operator sees a single UAC dialog instead of a command that
+        // quietly does nothing.
+        var script = string.Join("; ", new[]
         {
-            RunHidden("schtasks.exe", $"/End /TN \"{task}\"");
-            RunHidden("schtasks.exe", $"/Change /TN \"{task}\" /DISABLE");
-        }
+            "foreach ($t in 'MitoAuditTrackerGuard','MitoAuditTrackerService') {" +
+            " schtasks /End /TN $t 2>$null | Out-Null;" +
+            " schtasks /Change /TN $t /DISABLE 2>$null | Out-Null }",
+            // End the processes themselves as a backstop: a task that was started
+            // outside the scheduler, or an orphan whose parent already died, keeps
+            // the handle even after the task is ended.
+            "Get-Process TrackerAgent -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
+            "Start-Sleep -Milliseconds 800",
+        });
+
+        var stopped = RunElevated(
+            "powershell.exe",
+            $"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{script}\"");
+
+        AgentLog.Write(stopped
+            ? "Guard and SYSTEM agent stopped (elevated)."
+            : "Guard and SYSTEM agent could not be stopped; falling back to a side-by-side copy.");
 
         // Give the scheduler a moment to actually stop the process it launched.
-        Thread.Sleep(1500);
+        Thread.Sleep(1200);
 
         StopInstalledAgent();
     }
+
+    /// <summary>
+    /// Runs a command elevated, waiting for it, and reports whether it succeeded.
+    /// </summary>
+    /// <remarks>
+    /// A declined prompt raises Win32Exception 1223, which is not a failure worth
+    /// showing: the caller falls back to the side-by-side copy, which works without
+    /// elevation and simply leaves the old file in place.
+    /// </remarks>
+    private static bool RunElevated(string exe, string arguments)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = arguments,
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            if (!process.WaitForExit(45_000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
 
     /// <summary>
     /// Turns the guard back on after an update that disabled it.

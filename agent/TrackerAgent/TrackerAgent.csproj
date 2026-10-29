@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.31</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.32</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -209,7 +209,16 @@
                     of whoever runs setup. The installer now refreshes that copy and
                     deletes and re-registers the guard task through the elevated path
                     it already uses for the SYSTEM task, so a single run repairs a
-                    machine that has been stuck. -->
+                    machine that has been stuck.
+               1.7.32: an update still reported "Agent lama terkunci oleh service" and
+                    copied itself alongside the old build instead of replacing it.
+                    Stopping the guard and the SYSTEM task was done with schtasks from
+                    the non-elevated wizard, so every call was refused, the file handle
+                    was never released, and the copy could only fall back to a
+                    side-by-side file. The stop now runs through one elevated
+                    PowerShell invocation, and it ends stray agent processes as well,
+                    because a task started outside the scheduler - or an orphan whose
+                    parent has died - keeps the handle even after the task is ended. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -250,6 +259,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 
