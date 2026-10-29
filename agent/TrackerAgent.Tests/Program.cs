@@ -589,6 +589,25 @@ internal static class Program
         Check("update success reads the installed version from disk",
             installerCode is not null &&
             installerCode.Contains("ShowUpdateSuccess(installed)", StringComparison.Ordinal));
+
+        // The fix that used to be a manual instruction: the setup now refreshes the
+        // guard's protected copy and re-registers the task itself, so an operator is
+        // never asked to run schtasks and Copy-Item by hand.
+        Check("setup refreshes the guard's protected copy",
+            installerCode is not null &&
+            installerCode.Contains("Protected copy refreshed to", StringComparison.Ordinal));
+
+        Check("setup re-registers the guard task",
+            installerCode is not null &&
+            installerCode.Contains("RefreshGuardTask", StringComparison.Ordinal));
+
+        Check("guard re-registration goes through the elevated path",
+            installerCode is not null &&
+            installerCode.Contains("TryInstallSystemTask(serverUrl, token, exePath)", StringComparison.Ordinal));
+
+        Check("older guard task is deleted before re-registering",
+            installerCode is not null &&
+            installerCode.Contains("/Delete /TN \\\"MitoAuditTrackerGuard\\\"", StringComparison.Ordinal));
     }
 
     /// <summary>A source file from the agent project, or null when not found.</summary>

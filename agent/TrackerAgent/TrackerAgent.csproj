@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.30</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.31</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -199,7 +199,17 @@
                     skipped. Doing it silently was the bug - the operator was enrolled
                     against an asset they had never chosen, and could not tell whether
                     it was their machine or a reused serial. The wizard now names the
-                    matched asset and offers "Gunakan aset ini" or "Lengkapi manual". -->
+                    matched asset and offers "Gunakan aset ini" or "Lengkapi manual".
+               1.7.31: the setup left a job to the operator that it should have done
+                    itself. Machines that had been through the downgrade loop still
+                    carried a guard task from an older build, and the protected copy
+                    it restores was older than the installed agent - so every update
+                    was undone a minute later. The workaround was a manual
+                    schtasks /Delete plus a Copy-Item, which is not something to ask
+                    of whoever runs setup. The installer now refreshes that copy and
+                    deletes and re-registers the guard task through the elevated path
+                    it already uses for the SYSTEM task, so a single run repairs a
+                    machine that has been stuck. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -240,6 +250,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

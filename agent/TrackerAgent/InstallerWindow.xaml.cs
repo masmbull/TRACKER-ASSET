@@ -1357,7 +1357,7 @@ public partial class InstallerWindow : Window
 
                 Report(75, "Agent lama terkunci oleh service; versi baru dipasang berdampingan...");
                 RestartAgentFrom(versionedExe);
-                ReEnableGuard(versionedExe);
+                ReEnableGuard(versionedExe, _serverUrl, ReadInstalledToken());
                 Report(100, "Pembaruan selesai.");
                 Thread.Sleep(250);
                 return true;
@@ -1365,7 +1365,7 @@ public partial class InstallerWindow : Window
 
             Report(85, "Menjalankan ulang agent di system tray...");
             RestartAgent();
-            ReEnableGuard(_installedExe);
+            ReEnableGuard(_installedExe, _serverUrl, ReadInstalledToken());
 
             Report(100, "Pembaruan selesai.");
             Thread.Sleep(250);
@@ -1506,14 +1506,16 @@ public partial class InstallerWindow : Window
     /// to bring it back after a crash or a reboot - silently losing protection on
     /// exactly the machines that were just fixed.
     /// </remarks>
-    private static void ReEnableGuard(string exePath)
+    private static void ReEnableGuard(string exePath, string serverUrl, string token)
     {
-        // Refresh the protected copy before the guard can fire. The guard
-        // restores from ProgramData\MITO and only updates that copy when it is
-        // installed, so an update that skipped this step would be undone at the
-        // next guard tick - which is exactly what happened: the installed file
-        // became 1.7.23, the guard put 1.7.21 back a minute later, and the fleet
-        // reported the old version.
+        // Make the protected copy match what is installed BEFORE the guard is
+        // switched back on, and refuse to leave a stale one behind.
+        //
+        // That copy is what the guard restores, so an older file there is a
+        // downgrade waiting to happen: the installer replaces TrackerAgent.exe,
+        // the guard puts its own older copy back a minute later, and the fleet
+        // reports the version it was upgraded from. Refreshing it here is the
+        // only place that knows both paths.
         try
         {
             if (File.Exists(exePath))
@@ -1526,18 +1528,32 @@ public partial class InstallerWindow : Window
                 Directory.CreateDirectory(Path.GetDirectoryName(protectedPath)!);
                 File.Copy(exePath, protectedPath, overwrite: true);
 
-                AgentLog.Write($"Protected copy refreshed from {Path.GetFileName(exePath)}.");
+                var installedVersion = InstallCheck.ReadVersion(exePath);
+                var protectedVersion = InstallCheck.ReadVersion(protectedPath);
+
+                AgentLog.Write(
+                    $"Protected copy refreshed to {protectedVersion} (installed {installedVersion}).");
             }
         }
         catch (Exception ex)
         {
-            // Needs elevation. The guard's own version check now stops it from
-            // downgrading the install if this fails.
+            // Needs elevation. A stale copy is still dangerous, so say so in the
+            // log rather than swallowing it - the operator's next symptom would
+            // otherwise be a version that keeps reverting with no explanation.
             AgentLog.Write($"Could not refresh the protected copy: {ex.Message}");
         }
 
-        RunHidden("schtasks.exe", "/Change /TN \"MitoAuditTrackerGuard\" /ENABLE");
-
+        // Replace a guard left over from an older build.
+        //
+        // Older guards restore without comparing versions, so they will keep
+        // forcing the old build back no matter what this installer writes. The
+        // task is deleted and re-registered rather than merely enabled, which is
+        // what finally puts the version check in place on machines that have been
+        // through this loop.
+        //
+        // Registration goes through the same elevated path the install uses: a
+        // non-elevated schtasks call cannot create a SYSTEM task, and failing
+        // silently here is how a machine ends up with no guard at all.
         if (!InstallCheck.IsSameFile(exePath, InstallCheck.InstalledExe))
         {
             // Running from a versioned sibling: point the guard at it, or it will
@@ -1545,18 +1561,76 @@ public partial class InstallerWindow : Window
             AgentLog.Write($"Guard should target {Path.GetFileName(exePath)}, not the canonical exe.");
         }
 
+        if (string.IsNullOrWhiteSpace(serverUrl) || string.IsNullOrWhiteSpace(token))
+        {
+            // No credentials to hand the task: leave the existing one alone rather
+            // than replace it with one that cannot report.
+            AgentLog.Write("Guard task not refreshed: no server URL or token available.");
+            return;
+        }
+
+        RefreshGuardTask(serverUrl, token, exePath);
+    }
+
+    /// <summary>The token this install already uses, or empty when there is none.</summary>
+    private string ReadInstalledToken()
+    {
         try
         {
-            RunHidden("schtasks.exe", "/Run /TN \"MitoAuditTrackerGuard\"");
+            var configPath = Path.Combine(_installDir, "config.json");
+
+            if (!File.Exists(configPath))
+            {
+                return string.Empty;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+
+            return doc.RootElement.TryGetProperty("token", out var token) &&
+                   token.ValueKind == JsonValueKind.String
+                ? token.GetString() ?? string.Empty
+                : string.Empty;
         }
         catch
         {
-            // Its own schedule will fire on the next minute regardless.
+            return string.Empty;
         }
     }
 
+    /// <summary>
+    /// Replaces the guard task with one from this build, prompting for elevation.
+    /// </summary>
+    /// <remarks>
+    /// Deleting first is deliberate: an older guard keeps restoring the build it
+    /// was installed with, so merely enabling it would undo the update a minute
+    /// later. Re-registering is the only way a machine that has been through the
+    /// downgrade loop ends up with a guard that compares versions.
+    ///
+    /// A declined UAC prompt leaves the machine without a guard, which is a
+    /// degraded but working state: the agent still runs from autostart, it just
+    /// loses the repair-after-tamper behaviour.
+    /// </remarks>
+    private static void RefreshGuardTask(string serverUrl, string token, string exePath)
+    {
+        RunHidden("schtasks.exe", "/Delete /TN \"MitoAuditTrackerGuard\" /F");
+
+        var registered = TryInstallSystemTask(serverUrl, token, exePath);
+
+        AgentLog.Write(registered
+            ? "Guard task re-registered from this build."
+            : "Guard task could not be re-registered (elevation declined or unavailable).");
+    }
+
+
+
     /// <summary>Runs a helper tool with no window, ignoring failures.</summary>
     private static void RunHidden(string exe, string arguments)
+    {
+        RunHiddenExitZero(exe, arguments);
+    }
+
+    /// <summary>Runs a helper tool with no window and reports whether it succeeded.</summary>
+    private static bool RunHiddenExitZero(string exe, string arguments)
     {
         try
         {
@@ -1570,13 +1644,26 @@ public partial class InstallerWindow : Window
                 RedirectStandardError = true,
             });
 
-            process?.WaitForExit(15000);
+            if (process is null)
+            {
+                return false;
+            }
+
+            if (!process.WaitForExit(30000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+
+            return process.ExitCode == 0;
         }
         catch
         {
             // Missing tool or no rights: the caller handles the fallback.
+            return false;
         }
     }
+
 
     private static void StopInstalledAgent()
     {
@@ -2192,6 +2279,8 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
+
 
 
 
