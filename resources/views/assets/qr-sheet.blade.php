@@ -55,7 +55,7 @@
     </x-card>
     </div>
 
-    <div id="custom-qr-loading" class="fixed inset-0 z-[100001] hidden items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="custom-qr-loading-title" aria-live="polite">
+    <div id="custom-qr-loading" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="custom-qr-loading-title" aria-live="polite">
         <section class="flex w-full max-w-sm flex-col items-center rounded-xl bg-white p-8 text-center shadow-xl dark:bg-gray-900">
             <div class="h-11 w-11 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" aria-hidden="true"></div>
             <h2 id="custom-qr-loading-title" class="mt-5 text-lg font-semibold text-gray-900 dark:text-white">Generating QR code</h2>
@@ -63,7 +63,7 @@
         </section>
     </div>
 
-    <div id="custom-qr-modal" class="fixed inset-0 z-[100000] hidden items-center justify-center bg-gray-950/60 p-4" role="presentation">
+    <div id="custom-qr-modal" class="fixed inset-0 z-[9998] hidden items-center justify-center bg-gray-950/60 p-4" role="presentation">
         <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="custom-qr-modal-title">
             <div class="flex items-start justify-between gap-4">
                 <div>
@@ -372,3 +372,4 @@
     }
 </style>
 @endsection
+

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -354,26 +355,51 @@ public partial class InstallerWindow : Window
             Report(16, "Memeriksa apakah perangkat sudah terdaftar di master aset...");
             var registrationCheck = await Task.Run(() => CheckRegistrationFields(serverUrl, _deviceId, serialNumber));
             _registeredAssetCode = registrationCheck.AssetCode;
-            if (!registrationCheck.SkipFields)
+
+            if (registrationCheck.SkipFields && registrationCheck.AssetCode is { Length: > 0 })
+            {
+                // Never enrol silently against an existing asset.
+                //
+                // Serial-number matching is how a machine that is already in master
+                // data is recognised, and skipping the ten fields is correct for
+                // that case. What was wrong was doing it without saying so: an
+                // operator who had just started a fresh install saw the wizard jump
+                // straight to "Instalasi selesai" with an asset code they had never
+                // chosen, and no token of their own appearing where they expected
+                // it. The asset may also belong to a different machine - a reused
+                // serial, or a row left by an import - and enrolling against it
+                // silently would attach this device to someone else's history.
+                var useExisting = InstallerDialogs.Ask(this, 
+                    "Perangkat ini sudah terdaftar",
+                    $"Serial number perangkat ini cocok dengan aset {registrationCheck.AssetCode} di master data.\n\n" +
+                    "Data aset yang ada akan dipakai dan 10 field tidak perlu diisi.\n\n" +
+                    "Pilih 'Lengkapi manual' jika aset tersebut bukan milik perangkat ini.",
+                    primary: "Gunakan aset ini",
+                    secondary: "Lengkapi manual");
+
+                if (!useExisting)
+                {
+                    // Fall through to the form, even though the server offered to
+                    // skip: the operator is the one who knows whether this machine
+                    // is that machine.
+                    Report(17, "Memuat pilihan data aset...");
+                    var manualLookups = await Task.Run(() => GetRegistrationLookups(serverUrl));
+
+                    if (!await ShowRegistrationFormAsync(manualLookups))
+                    {
+                        return;
+                    }
+                }
+            }
+            else if (!registrationCheck.SkipFields)
             {
                 Report(17, "Memuat pilihan data aset...");
                 var lookups = await Task.Run(() => GetRegistrationLookups(serverUrl));
-                Report(17, "Menunggu pengisian 10 data aset...");
-                EndShimmer();
-                var registrationDialog = new AgentRegistrationWindow(lookups) { Owner = this };
-                if (registrationDialog.ShowDialog() != true || registrationDialog.Fields is null)
+
+                if (!await ShowRegistrationFormAsync(lookups))
                 {
-                    ShowFailure("Pendaftaran dibatalkan. Belum ada data perangkat yang dikirim ke server.");
                     return;
                 }
-
-                _registrationFields = registrationDialog.Fields;
-                BeginShimmer();
-                Report(18, "Data aset lengkap; melanjutkan instalasi...");
-            }
-            else
-            {
-                Report(17, "Perangkat sudah terdaftar. Form data aset dilewati.");
             }
 
             var installed = await Task.Run(() => RunInstall(serverUrl));
@@ -417,6 +443,32 @@ public partial class InstallerWindow : Window
             ? code.GetString() ?? string.Empty
             : string.Empty;
         return (skipFields, assetCode);
+    }
+
+    /// <summary>
+    /// Shows the ten-field form and records the answers, or reports a cancel.
+    /// </summary>
+    /// <returns>True when the operator completed the form.</returns>
+    private async Task<bool> ShowRegistrationFormAsync(RegistrationLookups lookups)
+    {
+        await Task.Yield();
+
+        Report(17, "Menunggu pengisian 10 data aset...");
+        EndShimmer();
+
+        var dialog = new AgentRegistrationWindow(lookups) { Owner = this };
+
+        if (dialog.ShowDialog() != true || dialog.Fields is null)
+        {
+            ShowFailure("Pendaftaran dibatalkan. Belum ada data perangkat yang dikirim ke server.");
+            return false;
+        }
+
+        _registrationFields = dialog.Fields;
+        BeginShimmer();
+        Report(18, "Data aset lengkap; melanjutkan instalasi...");
+
+        return true;
     }
 
     private static RegistrationLookups GetRegistrationLookups(string serverUrl)
@@ -2140,6 +2192,10 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
+
+
+
 
 
 

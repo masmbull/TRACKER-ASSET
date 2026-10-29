@@ -28,7 +28,7 @@
 
     <template x-teleport="body">
         <div x-show="isOpen" x-cloak
-             class="pdf-modal fixed inset-0 z-[100020] flex items-center justify-center p-3 sm:p-6"
+             class="pdf-modal fixed inset-0 z-[9998] flex items-center justify-center p-3 sm:p-6"
              role="dialog" aria-modal="true" aria-label="Document preview">
             <div class="absolute inset-0 bg-gray-950/70 backdrop-blur-sm"
                  x-show="isOpen"
@@ -309,4 +309,5 @@
         };
     </script>
 @endonce
+
 

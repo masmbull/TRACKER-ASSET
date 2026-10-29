@@ -20,7 +20,7 @@
      x-on:keydown.escape.window="open = false"
      x-effect="document.body.style.overflow = open ? 'hidden' : ''">
     <template x-teleport="body">
-         <div x-show="open" x-cloak class="modal-overlay fixed inset-0 z-[100010] overflow-y-auto" style="z-index:100010 !important;">
+         <div x-show="open" x-cloak class="modal-overlay fixed inset-0 z-[9998] overflow-y-auto" style="z-index:9998 !important;">
             <div x-show="open"
                  x-transition:enter="transition ease-[cubic-bezier(0.21,0.9,0.35,1)] duration-200"
                  x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -29,13 +29,13 @@
                  class="modal-backdrop fixed inset-0 bg-gray-950/55 backdrop-blur-md" x-on:click="open = false"></div>
 
             <div class="flex min-h-full items-center justify-center p-4">
-                <div x-show="open" x-cloak style="z-index:100010 !important;"
+                <div x-show="open" x-cloak style="z-index:9998 !important;"
                      x-transition:enter="transition ease-[cubic-bezier(0.22,1.36,0.36,1)] duration-250"
                      x-transition:enter-start="opacity-0 scale-95 translate-y-3" x-transition:enter-end="opacity-100 scale-100 translate-y-0"
                      x-transition:leave="transition ease-in duration-150"
                      x-transition:leave-start="opacity-100 scale-100 translate-y-0" x-transition:leave-end="opacity-0 scale-95 translate-y-2"
                      @class([
-                         'modal-panel modal-dialog relative z-[100010] w-full bg-white rounded-2xl shadow-theme-xl dark:bg-gray-900',
+                         'modal-panel modal-dialog relative z-[9998] w-full bg-white rounded-2xl shadow-theme-xl dark:bg-gray-900',
                          'max-w-sm' => $maxWidth === 'sm',
                          'max-w-md' => $maxWidth === 'md',
                          'max-w-lg' => $maxWidth === 'lg',
@@ -65,3 +65,4 @@
         </div>
     </template>
 </div>
+

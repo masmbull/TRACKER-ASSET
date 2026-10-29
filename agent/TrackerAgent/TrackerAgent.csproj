@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.29</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.30</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -191,7 +191,15 @@
                     was claiming 1.7.28 had been installed while the file was still
                     1.7.21, because the guard had restored its older copy. If the
                     on-disk version is lower than expected the wizard now fails
-                    instead of announcing success. -->
+                    instead of announcing success.
+               1.7.30: a fresh install went straight to "Instalasi selesai" without
+                    ever showing the ten fields. It was not a bug in the wizard: this
+                    machine's serial number already matched an asset in master data,
+                    so the server answered skip_fields and the form was correctly
+                    skipped. Doing it silently was the bug - the operator was enrolled
+                    against an asset they had never chosen, and could not tell whether
+                    it was their machine or a reused serial. The wizard now names the
+                    matched asset and offers "Gunakan aset ini" or "Lengkapi manual". -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -232,6 +240,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

@@ -831,7 +831,7 @@
      x-on:keydown.escape.window="close()">
 
     <template x-teleport="body">
-        <div x-show="open" x-cloak class="fixed inset-0 z-[100020] flex items-center justify-center p-4">
+        <div x-show="open" x-cloak class="fixed inset-0 z-[9998] flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-gray-950/70 backdrop-blur-sm"
                  x-show="open"
                  x-transition:enter="transition duration-200 ease-out"
@@ -992,3 +992,4 @@
     }
 </script>
 @endsection
+
