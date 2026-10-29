@@ -375,7 +375,12 @@
         </div>
     </div>
 
-    <div id="ajax-action-modal" class="process-overlay fixed inset-0 z-[99999] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-md" role="presentation" aria-live="polite" style="z-index:99999 !important;">
+    {{-- Below the topbar, not level with it. The overlay used the same z-index
+         as the header (99999) and came later in the DOM, so it covered the
+         header: the page dimmed, the top bar lost its contents, and all that was
+         left on screen was a rounded empty box under the address bar. A progress
+         overlay reports on an action; it should not erase the navigation. --}}
+    <div id="ajax-action-modal" class="process-overlay fixed inset-0 z-[9998] hidden items-center justify-center bg-gray-950/60 p-4 backdrop-blur-md" role="presentation" aria-live="polite">
         <section class="modal-panel process-dialog animate-scale-in w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-theme-xl dark:border-gray-700 dark:bg-[#182230]" role="dialog" aria-modal="true" aria-labelledby="ajax-action-title" aria-describedby="ajax-action-message">
             <div class="flex items-start gap-4">
                 <div id="ajax-action-icon" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300" aria-hidden="true">

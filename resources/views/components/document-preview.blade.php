@@ -1,4 +1,4 @@
-@props(['document', 'trigger' => null])
+@props(['document', 'trigger' => null, 'autoOpen' => false])
 
 {{--
     Document preview as a modal, not a page with an embedded viewer.
@@ -15,7 +15,8 @@
     not have to be downloaded in full before the first page is visible.
 --}}
 
-<div x-data="pdfPreview(@js(route('documents.preview.data', $document)))"
+<div x-data="pdfPreview(@js(route('documents.preview.data', $document)), @js($autoOpen))"
+     x-init="init()"
      x-on:keydown.arrow-right.window="isOpen && next()"
      x-on:keydown.arrow-left.window="isOpen && prev()"
      x-on:keydown.escape.window="isOpen && close()">
@@ -85,8 +86,8 @@
                     </div>
 
                     <div class="mx-auto flex max-w-[860px] flex-col items-center gap-4">
-                        <template x-for="(page, index) in pages" :key="index">
-                            <canvas :data-page-number="index + 1"
+                        <template x-for="pageNumber in pageNumbers" :key="pageNumber">
+                            <canvas :data-page-number="pageNumber"
                                     class="block max-w-full rounded-sm bg-white shadow-md ring-1 ring-black/5"></canvas>
                         </template>
                     </div>
@@ -129,7 +130,7 @@
             return pdfjsPromise;
         }
 
-        window.pdfPreview = function (dataUrl) {
+        window.pdfPreview = function (dataUrl, autoOpen = false) {
             return {
                 isOpen: false,
                 loading: false,
@@ -141,6 +142,20 @@
                 title: '',
                 downloadUrl: '',
                 _pdf: null,
+
+                init() {
+                    // autoOpen is for the document page, whose whole purpose is to
+                    // show the document. The list uses the default and waits for a
+                    // click.
+                    if (autoOpen) {
+                        this.$nextTick(() => this.open());
+                    }
+                },
+
+                get pageNumbers() {
+                    return Array.from({ length: this.total }, (_, i) => i + 1);
+                },
+
 
                 open() {
                     this.isOpen = true;
@@ -181,14 +196,19 @@
                         this.downloadUrl = meta.download_url ?? dataUrl;
                         this.total = meta.pages ?? 0;
 
-                        // One entry per page keeps x-for stable; null means "not
-                        // rendered yet", so the spinner knows how far it got.
-                        this.pages = Array.from({ length: this.total }, () => null);
-
                         const doc = await pdfjs.getDocument({ url: meta.file_url }).promise;
                         this._pdf = doc;
                         this.total = doc.numPages;
+
+                        // One slot per page: x-for creates a canvas for each, and a
+                        // null slot is the record that it still needs drawing.
                         this.pages = Array.from({ length: doc.numPages }, () => null);
+
+                        // The canvases are created by Alpine on the next frame; the
+                        // render below would otherwise find none and leave the
+                        // viewer as an empty white box.
+                        await this.$nextTick();
+                        await new Promise((r) => requestAnimationFrame(r));
 
                         await this.renderMissing();
                     } catch (e) {
@@ -223,10 +243,10 @@
                             const cssScale = Math.min(1.6, maxWidth / viewport.width);
                             const scaled = page.getViewport({ scale: cssScale * ratio });
 
-                            await this.$nextTick();
+                            const canvas = await this.waitForCanvas(i);
 
-                            const canvas = this.$el.querySelector(`canvas[data-page-number="${i}"]`);
                             if (!canvas) {
+                                console.warn('pdf preview: no canvas for page', i);
                                 continue;
                             }
 
@@ -247,6 +267,24 @@
                         this.loading = false;
                     }
                 },
+
+                /** The page canvas, retrying until Alpine has attached it. */
+                async waitForCanvas(number) {
+                    const selector = `canvas[data-page-number="${number}"]`;
+
+                    for (let attempt = 0; attempt < 40; attempt++) {
+                        const found = this.$el.querySelector(selector);
+
+                        if (found) {
+                            return found;
+                        }
+
+                        await new Promise((resolve) => setTimeout(resolve, 50));
+                    }
+
+                    return null;
+                },
+
 
                 goTo(number) {
                     this.page = Math.min(Math.max(1, number), this.total || 1);
@@ -271,3 +309,4 @@
         };
     </script>
 @endonce
+

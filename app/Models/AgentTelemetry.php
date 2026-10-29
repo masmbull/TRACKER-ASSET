@@ -62,7 +62,37 @@ class AgentTelemetry extends Model
     {
         $mode = $this->payload['agent_mode'] ?? 'unknown';
 
+        // A tray heartbeat always means a tray is running, so it outranks the
+        // daemon's own reports for up to the online window.
+        //
+        // Both processes share one telemetry row, and they heartbeat in turn: the
+        // SYSTEM daemon writes "service", the tray writes "tray", and whichever
+        // landed last decided the fleet status. On a machine with both running -
+        // the normal state, since the tray is meant to stay visible - the page
+        // flickered between "online" and "service active · tray not detected",
+        // and an operator reading it at the wrong second would conclude the tray
+        // had died when it was right there in the taskbar.
+        if ($this->recentTrayReport()) {
+            return 'tray';
+        }
+
         return in_array($mode, ['tray', 'service'], true) ? $mode : 'unknown';
+    }
+
+    /** True when a tray heartbeat arrived within the online window. */
+    public function recentTrayReport(): bool
+    {
+        $at = $this->payload['tray_seen_at'] ?? null;
+
+        if (blank($at)) {
+            return false;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($at)->gt(now()->subMinutes(2));
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**

@@ -161,6 +161,18 @@ class AuditApiController extends Controller
             'agent_mode' => $payload['agent_mode'] ?? ($currentPayload['agent_mode'] ?? 'unknown'),
         ];
 
+        // When a tray last reported, kept until it is genuinely stale.
+        //
+        // The tray and the daemon take turns writing this row, and only
+        // 'agent_mode' was persisted - so the daemon's next heartbeat erased the
+        // evidence that a tray was running, and the fleet page flipped between
+        // "online" and "service active · tray not detected" every minute. The
+        // timestamp survives daemon heartbeats, and AgentTelemetry::agentMode()
+        // treats a recent one as "tray is running" regardless of who wrote last.
+        if (! empty($payload['tray_seen_at'])) {
+            $updates['payload']['tray_seen_at'] = $payload['tray_seen_at'];
+        }
+
         // Disk free is a percentage derived from both halves, so a heartbeat
         // that only sends one of them would otherwise recompute a wrong ratio.
         if ($request->has('disk_free_gb') || $request->has('disk_total_gb')) {
@@ -205,6 +217,7 @@ class AuditApiController extends Controller
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
             'agent_mode' => 'nullable|string|in:tray,service,unknown',
+            'tray_seen_at' => 'nullable|string|max:40',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',
@@ -242,6 +255,7 @@ class AuditApiController extends Controller
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
             'agent_mode' => 'nullable|string|in:scan,tray,service,unknown',
+            'tray_seen_at' => 'nullable|string|max:40',
             'gpu' => 'nullable|string|max:255',
             'ram_config' => 'nullable|string|max:255',
             'wifi_ssid' => 'nullable|string|max:255',
@@ -570,3 +584,4 @@ class AuditApiController extends Controller
         return "MISMATCH on asset {$asset->asset_id} — {$details}. Registered data was NOT overwritten.";
     }
 }
+

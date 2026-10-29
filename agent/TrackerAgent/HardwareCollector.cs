@@ -14,6 +14,20 @@ public static class HardwareCollector
         var data = new Dictionary<string, string>();
         data["agent_mode"] = agentMode;
 
+        // A timestamp, not just the mode string.
+        //
+        // The tray and the SYSTEM daemon share one telemetry row and heartbeat in
+        // turn, so the last writer decided what the fleet page believed: with both
+        // processes running - the normal state - the status flipped between
+        // "online" and "service active · tray not detected" every minute, and an
+        // operator reading it at the wrong moment concluded the tray was gone when
+        // it was sitting in the taskbar. Recording when a tray last reported lets
+        // the server keep saying "tray" for as long as one is genuinely running.
+        if (string.Equals(agentMode, "tray", StringComparison.OrdinalIgnoreCase))
+        {
+            data["tray_seen_at"] = DateTime.UtcNow.ToString("O");
+        }
+
         try { data["hostname"] = Environment.MachineName; } catch { }
 
         try

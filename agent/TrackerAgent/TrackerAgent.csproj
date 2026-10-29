@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.22</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.23</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -127,7 +127,14 @@
                     machine's GUID, which is unique per installation, survives
                     reinstalls and reads the same from the user session and from
                     SYSTEM; it is written to HKLM and ProgramData as well, because
-                    the tray and the daemon each had their own copy and disagreed. -->
+                    the tray and the daemon each had their own copy and disagreed.
+               1.7.23: an elevated script (run_as admin/system) pushed to a machine
+                    that already had the SYSTEM daemon was claimed by the
+                    non-elevated tray, which answered "requesting administrator
+                    approval" and marked the command failed while the daemon sat
+                    idle with the rights to run it. When a fresh daemon marker
+                    exists, the tray now leaves those commands pending for the
+                    daemon instead of claiming them. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -168,6 +175,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

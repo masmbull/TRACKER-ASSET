@@ -4,17 +4,16 @@
 
 @section('content')
 {{--
-    Document detail, opened as the target of a preview click.
+    The document opens as a modal over this page, not as an embedded viewer.
 
-    This page used to be a header with an <iframe> pointed at the download route.
-    The browser's PDF plugin then drew its own grey toolbar - a page counter, a
-    download button, and a filename - across the top, so a document IT had just
-    generated looked like something being downloaded. PDF.js renders into a canvas
-    we own instead: no plugin chrome, the same output in every browser, and the
-    header stays the page's own.
+    An inline viewer was still a page you had to navigate to and leave, and the
+    operator asked for a popup: click the document, read it, close it, stay where
+    you were. The page underneath stays mounted (the header, the buttons), and the
+    PDF renders in the modal's own canvas through PDF.js - so no browser PDF
+    toolbar, which was the original complaint.
 
-    The modal from the documents list uses the same component, so both entry points
-    look identical.
+    The modal opens on load because this route IS the "open the document" target,
+    so arriving here should show the document rather than a button to reveal it.
 --}}
 <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
     <div class="min-w-0">
@@ -29,22 +28,26 @@
             @endif
         </p>
     </div>
+</div>
 
-    <div class="flex flex-wrap items-center gap-2">
+<div class="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
+    <p class="text-theme-sm text-gray-500 dark:text-gray-400">Pratinjau dokumen terbuka di jendela popup.</p>
+
+    <x-document-preview :document="$document" :auto-open="true">
+        <button type="button" class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-semibold text-white transition hover:bg-brand-600 active:scale-[0.98]">
+            Buka Pratinjau
+        </button>
+    </x-document-preview>
+
+    <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
         <a href="{{ route('documents.download', $document) }}"
-           class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-success-600 active:scale-[0.97]">
+           class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-success-600">
             <x-icon name="download" class="h-4 w-4" /> Download PDF
         </a>
-        <button type="button" id="pdf-print"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
-            Print
-        </button>
         <a href="{{ $document->asset_id ? route('assets.show', $document->asset_id) : route('documents.index') }}"
-           class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+           class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
             Back
         </a>
     </div>
 </div>
-
-<x-document-viewer :document="$document" />
 @endsection

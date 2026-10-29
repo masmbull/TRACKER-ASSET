@@ -920,6 +920,23 @@ public static class AgentRunner
 
             if (runAs is "admin" or "system")
             {
+                // Leave it for the SYSTEM daemon instead of failing here.
+                //
+                // The tray and the daemon share one inbox, and the tray polls it
+                // first. Without this check an elevated script was claimed by the
+                // non-elevated tray, which answered "requesting administrator
+                // approval" and marked the command failed - while the daemon that
+                // already had the rights was idle in session 0. The operator saw a
+                // red failure on a machine that was, in fact, admin.
+                //
+                // Returning without acking leaves the command pending, so the
+                // daemon picks it up on its next poll.
+                if (!IsElevated() && IsSystemDaemonAlive())
+                {
+                    Console.WriteLine($"[..] Command #{commandId} needs elevation; leaving it to the SYSTEM daemon.");
+                    return 2;
+                }
+
                 return RunScriptElevated(scriptPath, scriptType, safeDirectory, commandId, timeoutSeconds, url, token);
             }
 
@@ -1142,11 +1159,14 @@ public static class AgentRunner
         Path.Combine(ProtectedDir, "daemon.alive");
 
     /// <summary>
-    /// Touch the daemon marker. Called by the SYSTEM daemon each loop so a user
-    /// tray (which cannot see a SYSTEM process or a cross-session mutex) can tell
-    /// the daemon owns the machine and stay down.
+    /// Records that the SYSTEM daemon is alive right now.
     /// </summary>
-    public static void TouchDaemonMarker()
+    /// <remarks>
+    /// A user-session process cannot see a SYSTEM process across the session
+    /// boundary (no shared mutex, no queryable handle), so this file is the only
+    /// signal a tray can use to know it must not run alongside the daemon.
+    /// </remarks>
+    private static void TouchDaemonMarker()
     {
         try
         {
