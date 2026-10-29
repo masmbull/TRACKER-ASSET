@@ -1393,6 +1393,34 @@ public partial class InstallerWindow : Window
     /// </remarks>
     private static void ReEnableGuard(string exePath)
     {
+        // Refresh the protected copy before the guard can fire. The guard
+        // restores from ProgramData\MITO and only updates that copy when it is
+        // installed, so an update that skipped this step would be undone at the
+        // next guard tick - which is exactly what happened: the installed file
+        // became 1.7.23, the guard put 1.7.21 back a minute later, and the fleet
+        // reported the old version.
+        try
+        {
+            if (File.Exists(exePath))
+            {
+                var protectedPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "MITO",
+                    "TrackerAgent.exe");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(protectedPath)!);
+                File.Copy(exePath, protectedPath, overwrite: true);
+
+                AgentLog.Write($"Protected copy refreshed from {Path.GetFileName(exePath)}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Needs elevation. The guard's own version check now stops it from
+            // downgrading the install if this fails.
+            AgentLog.Write($"Could not refresh the protected copy: {ex.Message}");
+        }
+
         RunHidden("schtasks.exe", "/Change /TN \"MitoAuditTrackerGuard\" /ENABLE");
 
         if (!InstallCheck.IsSameFile(exePath, InstallCheck.InstalledExe))

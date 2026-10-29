@@ -2384,6 +2384,62 @@ public static class AgentRunner
                 return 1;
             }
 
+            // Never restore an older build over a newer one.
+            //
+            // The protected copy is written when the guard is installed, so it
+            // lags every update. Restoring it unconditionally undid each update a
+            // minute after it completed: the installer replaced TrackerAgent.exe
+            // with 1.7.23, the guard saw a file that did not match its copy and put
+            // 1.7.21 back. The machine looked updated and reported the old version
+            // forever - and the newer build sitting next to it was ignored.
+            //
+            // A file that is present and newer is the healthy state, not tampering.
+            if (File.Exists(installedExe))
+            {
+                var currentVersion = ReadFileVersion(installedExe);
+                var protectedVersion = ReadFileVersion(ProtectedExe);
+
+                if (ShouldKeepInstalled(currentVersion, protectedVersion))
+                {
+                    // Refresh the backup so the next restore is a repair, not a
+                    // downgrade.
+                    try
+                    {
+                        File.Copy(installedExe, ProtectedExe, overwrite: true);
+                        Console.WriteLine("[OK] Protected copy updated to match the newer installed build.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[!] Could not refresh the protected copy: {ex.Message}");
+                    }
+
+                    RestoreAutostartBestEffort(installedExe);
+
+                    if (IsRunning(installedExe))
+                    {
+                        Console.WriteLine("[OK] Newer build already running; nothing to restore.");
+                        return 0;
+                    }
+
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = installedExe,
+                            UseShellExecute = true,
+                        });
+
+                        Console.WriteLine($"[OK] Started {Path.GetFileName(installedExe)}.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[!] Could not start {Path.GetFileName(installedExe)}: {ex.Message}");
+                    }
+
+                    return 0;
+                }
+            }
+
             Directory.CreateDirectory(targetDir);
             File.Copy(ProtectedExe, installedExe, overwrite: true);
             Console.WriteLine($"[OK] Restored agent to {installedExe}.");
@@ -2580,10 +2636,30 @@ public static class AgentRunner
         }
     }
 
+    /// <summary>
+    /// Whether the guard must keep the installed build instead of restoring its
+    /// protected copy.
+    /// </summary>
+    /// <remarks>
+    /// True only when the installed file is strictly newer. Equal is false: an
+    /// unchanged file needs no restore and no refresh, and restoring it would only
+    /// churn the file while the agent is running from it (a sharing violation).
+    /// Unknown versions are false so a file whose version cannot be read is
+    /// repaired from the trusted copy - the guard's original job.
+    /// </remarks>
+    internal static bool ShouldKeepInstalled(Version? installed, Version? protectedCopy)
+    {
+        if (installed is null || protectedCopy is null)
+        {
+            return false;
+        }
+
+        return installed > protectedCopy;
+    }
+
     /// <summary>The file version resource, or null when it cannot be read.</summary>
     internal static Version? ReadFileVersion(string path)
-    {
-        try
+    {        try
         {
             if (!File.Exists(path))
             {

@@ -467,6 +467,23 @@ internal static class Program
         Check("device id is a 32-byte base64 value", Convert.FromBase64String(id1).Length == 32);
         Check("device id does not expose the machine guid",
             !id1.Contains("8bbab9dd", StringComparison.OrdinalIgnoreCase));
+
+        // ------------------------------------------------------------------
+        // The guard's anti-downgrade rule. The protected copy in ProgramData is
+        // written when the guard is installed, so it lags every update; restoring
+        // it unconditionally undid each update a minute after it succeeded, and
+        // the fleet kept reporting the old version.
+        // ------------------------------------------------------------------
+        Check("guard keeps a newer installed build",
+            AgentRunner.ShouldKeepInstalled(new Version(1, 7, 23), new Version(1, 7, 21)));
+        Check("guard restores when the installed build is older",
+            !AgentRunner.ShouldKeepInstalled(new Version(1, 7, 21), new Version(1, 7, 23)));
+        Check("guard does not churn an unchanged build",
+            !AgentRunner.ShouldKeepInstalled(new Version(1, 7, 23), new Version(1, 7, 23)));
+        Check("guard repairs a file with no readable version",
+            !AgentRunner.ShouldKeepInstalled(null, new Version(1, 7, 23)));
+        Check("guard repairs when its own copy has no version",
+            !AgentRunner.ShouldKeepInstalled(new Version(1, 7, 23), null));
     }
     private sealed class RecordingHttpServer : IDisposable
     {

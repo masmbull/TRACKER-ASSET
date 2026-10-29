@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.23</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.24</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -134,7 +134,16 @@
                     approval" and marked the command failed while the daemon sat
                     idle with the rights to run it. When a fresh daemon marker
                     exists, the tray now leaves those commands pending for the
-                    daemon instead of claiming them. -->
+                    daemon instead of claiming them.
+               1.7.24: updates were undone a minute after they succeeded. The guard
+                    restores TrackerAgent.exe from its protected copy in ProgramData,
+                    and that copy is written only when the guard is installed - so it
+                    lagged every update. Install 1.7.23, and the guard put 1.7.21
+                    back, leaving the fleet on the old version while the installer
+                    reported success. The guard now compares versions and never
+                    restores an older build over a newer one (it refreshes its copy
+                    instead), and the installer refreshes that copy as part of every
+                    update. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -175,6 +184,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 
