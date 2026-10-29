@@ -130,10 +130,18 @@
                                  it is about. The form below stays the submit target; the
                                  modal only fills its confirm field. --}}
                             @can('forceDelete', $asset)
+                                {{-- A plain onclick, not x-on:click. The Alpine
+                                     version relied on three things being true at
+                                     once - Alpine started, this element inside a
+                                     hydrated tree, and the modal already mounted -
+                                     and when any of them was false the button was
+                                     simply dead with nothing in the console. This
+                                     shows the dialog and focuses the field directly,
+                                     which cannot fail for a missing framework. --}}
                                 <button type="button"
                                         class="text-theme-sm font-medium text-error-600 hover:text-error-700 dark:text-error-400"
                                         title="Hapus aset secara permanen"
-                                        x-on:click="$dispatch('open-modal', 'delete-asset-{{ $asset->id }}')">Delete</button>
+                                        onclick="window.trackerDeleteAsset && window.trackerDeleteAsset('delete-asset-{{ $asset->id }}')">Delete</button>
 
 
                             @endcan
@@ -143,76 +151,90 @@
             @endforeach
         </x-table>
 
+        {{-- One native <dialog> per asset, outside the table.
+
+             These used to be Alpine components driven by a $dispatch from the
+             button. That made the button depend on Alpine having started, the
+             element being inside a hydrated tree, and the modal having already
+             mounted - and when any of those was false the button did nothing and
+             said nothing. A <dialog> is opened by showModal() from a plain onclick,
+             so the only thing that can fail is the browser, and every browser this
+             ships to supports it. --}}
         @foreach($assets as $asset)
             @can('forceDelete', $asset)
-            <x-modal name="delete-asset-{{ $asset->id }}" maxWidth="md">
-                                        <div class="p-6" x-data="{ typed: '' }">
-                                            <div class="flex items-start gap-4">
-                                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400">
-                                                    <x-icon name="trash" class="h-5 w-5" />
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">Hapus aset permanen</h3>
-                                                    <p class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">
-                                                        <span class="font-mono font-semibold">{{ $asset->asset_id }}</span>
-                                                        @if($asset->brand || $asset->model)
-                                                            · {{ trim($asset->brand.' '.$asset->model) }}
-                                                        @endif
-                                                    </p>
-                                                </div>
-                                            </div>
+                <dialog id="delete-asset-{{ $asset->id }}"
+                        class="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-0 text-left shadow-xl backdrop:bg-gray-950/60 dark:border-gray-700 dark:bg-gray-900">
+                    <form method="POST" action="{{ route('assets.force-destroy', $asset) }}" class="p-6">
+                        @csrf
+                        @method('DELETE')
 
-                                            <div class="mt-5 rounded-lg border border-error-200 bg-error-50 px-4 py-3 dark:border-error-500/30 dark:bg-error-500/10">
-                                                <p class="text-theme-xs text-error-700 dark:text-error-300">
-                                                    Tindakan ini <span class="font-semibold">tidak bisa dibatalkan</span>.
-                                                    Riwayat audit, transfer, perbaikan dan dokumen aset ini ikut terhapus.
-                                                    Untuk sekadar menonaktifkan, gunakan Arsipkan.
-                                                </p>
-                                            </div>
+                        <div class="flex items-start gap-4">
+                            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-error-50 text-error-600 dark:bg-error-500/10 dark:text-error-400">
+                                <x-icon name="trash" class="h-5 w-5" />
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="text-base font-semibold text-gray-900 dark:text-white">Hapus aset permanen</h3>
+                                <p class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">
+                                    <span class="font-mono font-semibold">{{ $asset->asset_id }}</span>
+                                    @if($asset->brand || $asset->model)
+                                        · {{ trim($asset->brand.' '.$asset->model) }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
 
-                                            <label class="mt-5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Ketik <span class="font-mono">{{ $asset->asset_id }}</span> untuk konfirmasi
-                                            </label>
-                                            <input type="text" x-model="typed" autocomplete="off" spellcheck="false"
-                                                   class="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-theme-sm text-gray-900 transition focus:border-error-500 focus:ring-2 focus:ring-error-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                                   placeholder="{{ $asset->asset_id }}">
+                        <div class="mt-5 rounded-lg border border-error-200 bg-error-50 px-4 py-3 dark:border-error-500/30 dark:bg-error-500/10">
+                            <p class="text-theme-xs text-error-700 dark:text-error-300">
+                                Tindakan ini <span class="font-semibold">tidak bisa dibatalkan</span>.
+                                Riwayat audit, transfer, perbaikan dan dokumen aset ini ikut terhapus.
+                                Untuk sekadar menonaktifkan, gunakan Arsipkan.
+                            </p>
+                        </div>
 
-                                            <div class="mt-6 flex justify-end gap-2">
-                                                <button type="button" @click="$dispatch('close-modal', 'delete-asset-{{ $asset->id }}')"
-                                                        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                                                    Batal
-                                                </button>
-                                                <button type="button"
-                                                        :disabled="typed.trim() !== @js($asset->asset_id)"
-                                                        @click="
-                                                            const form = document.getElementById('delete-asset-form-{{ $asset->id }}');
-                                                            form.confirm_asset_id.value = typed.trim();
-                                                            form.submit();
-                                                        "
-                                                        class="rounded-lg bg-error-600 px-4 py-2 text-theme-sm font-semibold text-white transition hover:bg-error-700 disabled:cursor-not-allowed disabled:opacity-40">
-                                                    Hapus permanen
-                                                </button>
-                                            </div>
-                                        </div>
-            </x-modal>
-            @endcan
-        @endforeach
-        @foreach($assets as $asset)
-            @can('forceDelete', $asset)
-                                    <form id="delete-asset-form-{{ $asset->id }}" method="POST"
-                                          action="{{ route('assets.force-destroy', $asset) }}" class="hidden">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input type="hidden" name="confirm_asset_id" value="">
-                                    </form>
+                        <label class="mt-5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300" for="confirm-{{ $asset->id }}">
+                            Ketik <span class="font-mono">{{ $asset->asset_id }}</span> untuk konfirmasi
+                        </label>
+                        <input id="confirm-{{ $asset->id }}" type="text" name="confirm_asset_id"
+                               autocomplete="off" spellcheck="false" required
+                               data-expect="{{ $asset->asset_id }}"
+                               oninput="this.closest('form').querySelector('button[data-confirm]').disabled = this.value.trim() !== this.dataset.expect"
+                               class="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-theme-sm text-gray-900 transition focus:border-error-500 focus:ring-2 focus:ring-error-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                               placeholder="{{ $asset->asset_id }}">
 
+                        <div class="mt-6 flex justify-end gap-2">
+                            <button type="button"
+                                    onclick="this.closest('dialog').close()"
+                                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                                Batal
+                            </button>
+                            <button type="submit" disabled data-confirm
+                                    class="rounded-lg bg-error-600 px-4 py-2 text-theme-sm font-semibold text-white transition hover:bg-error-700 disabled:cursor-not-allowed disabled:opacity-40">
+                                Hapus permanen
+                            </button>
+                        </div>
+                    </form>
+                </dialog>
             @endcan
         @endforeach
 
-        {{-- The delete modals live outside the table. A <div> inside a <tr> is
-             invalid markup: the browser relocates it out of the table, so the
-             button dispatching open-modal and the modal listening for it end up in
-             different subtrees and the click does nothing at all. --}}
+        <script>
+            // A named function rather than an Alpine expression, so the button does
+            // not depend on any framework having loaded.
+            window.trackerDeleteAsset = function (id) {
+                var dialog = document.getElementById(id);
+
+                if (!dialog) {
+                    console.error('Delete dialog not found:', id);
+                    return;
+                }
+
+                dialog.showModal();
+
+                var field = dialog.querySelector('input[name="confirm_asset_id"]');
+                field.value = '';
+                field.focus();
+            };
+        </script>
 
 
         @if($assets->hasPages())
