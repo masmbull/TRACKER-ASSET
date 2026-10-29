@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.24</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.25</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -143,7 +143,15 @@
                     reported success. The guard now compares versions and never
                     restores an older build over a newer one (it refreshes its copy
                     instead), and the installer refreshes that copy as part of every
-                    update. -->
+                    update.
+               1.7.25: the first-install registration form looked nothing like the
+                    installer that opened it. It was built in C# with its own dark
+                    palette (#182230 / #101825) and stock WPF combo boxes: an
+                    Aero-era square arrow, a system-coloured popup, no hover, no
+                    focus ring. It now lives in XAML on the same light surface as
+                    setup and the status window, with a styled dropdown whose
+                    chevron rotates and whose list slides and fades in. Seven
+                    checks keep the dark palette from coming back. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -184,6 +192,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

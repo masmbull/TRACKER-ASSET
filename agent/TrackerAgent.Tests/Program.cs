@@ -484,6 +484,73 @@ internal static class Program
             !AgentRunner.ShouldKeepInstalled(null, new Version(1, 7, 23)));
         Check("guard repairs when its own copy has no version",
             !AgentRunner.ShouldKeepInstalled(new Version(1, 7, 23), null));
+
+        // ------------------------------------------------------------------
+        // The registration form must look like the installer that opens it.
+        // It used to be built in C# with its own dark palette, which is why it
+        // read as a different application. Checking the XAML source keeps that
+        // honest without starting a window: a dark colour reappearing in that
+        // file is the exact regression.
+        // ------------------------------------------------------------------
+        var registrationXaml = SourceOf("AgentRegistrationWindow.xaml");
+
+        Check("registration form exists as XAML", registrationXaml is not null);
+
+        if (registrationXaml is not null)
+        {
+            // Only real colour values count. The file mentions the old palette in
+            // a comment explaining why it was replaced, and a substring check over
+            // the whole document cannot tell a comment from a brush.
+            var colourValues = System.Text.RegularExpressions.Regex
+                .Matches(registrationXaml, "=\\s*\"#([0-9A-Fa-f]{6})\"")
+                .Select(m => m.Groups[1].Value.ToUpperInvariant())
+                .ToList();
+
+            Check("registration form has no dark surface palette",
+                !colourValues.Contains("182230") && !colourValues.Contains("101825"));
+
+            Check("registration form uses the shared light surface",
+                colourValues.Contains("F3F4F6"));
+
+            Check("registration form shows the MITO mark",
+                registrationXaml.Contains("mito-logo-white.png", StringComparison.OrdinalIgnoreCase));
+
+            Check("registration form styles its dropdowns",
+                registrationXaml.Contains("SelectStyle", StringComparison.OrdinalIgnoreCase));
+
+            Check("dropdown list animates open",
+                registrationXaml.Contains("PopupAnimation", StringComparison.OrdinalIgnoreCase));
+        }
+
+        var registrationCode = SourceOf("AgentRegistrationWindow.cs");
+
+        Check("registration window builds no colours in C#",
+            registrationCode is not null &&
+            !registrationCode.Contains("new SolidColorBrush(Color.FromRgb(0x18", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A source file from the agent project, or null when not found.</summary>
+    /// <remarks>
+    /// Located by walking up from the test binary, so the check works from any
+    /// working directory the runner happens to use.
+    /// </remarks>
+    private static string? SourceOf(string fileName)
+    {
+        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+
+        while (dir is not null)
+        {
+            var candidate = System.IO.Path.Combine(dir.FullName, "agent", "TrackerAgent", fileName);
+
+            if (System.IO.File.Exists(candidate))
+            {
+                return System.IO.File.ReadAllText(candidate);
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
     }
     private sealed class RecordingHttpServer : IDisposable
     {
