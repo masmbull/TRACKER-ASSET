@@ -527,6 +527,32 @@ internal static class Program
         Check("registration window builds no colours in C#",
             registrationCode is not null &&
             !registrationCode.Contains("new SolidColorBrush(Color.FromRgb(0x18", StringComparison.OrdinalIgnoreCase));
+
+        // The form was a StackPanel in its first rebuild, which stacked all ten
+        // fields into one column and pushed the last ones below the fold: the
+        // code asked for rows and columns that had nowhere to go.
+        Check("registration form is a two-column grid",
+            registrationXaml is not null &&
+            registrationXaml.Contains("<Grid x:Name=\"FormPanel\"", StringComparison.Ordinal));
+
+        Check("registration form grid declares three columns",
+            registrationXaml is not null &&
+            System.Text.RegularExpressions.Regex.Matches(
+                registrationXaml, "x:Name=\"FormPanel\"(?s).*?</Grid>").Count == 1);
+
+        // Text boxes need an explicit height and centred content, or the year the
+        // operator types is clipped by the template's own padding.
+        Check("text fields have an explicit height",
+            registrationXaml is not null &&
+            registrationXaml.Contains("<Setter Property=\"Height\" Value=\"42\"/>", StringComparison.Ordinal));
+
+        Check("text fields centre their content vertically",
+            registrationXaml is not null &&
+            registrationXaml.Contains("Property=\"VerticalContentAlignment\" Value=\"Center\"", StringComparison.Ordinal));
+
+        Check("registration form animates in",
+            registrationCode is not null &&
+            registrationCode.Contains("AnimateIn", StringComparison.Ordinal));
     }
 
     /// <summary>A source file from the agent project, or null when not found.</summary>

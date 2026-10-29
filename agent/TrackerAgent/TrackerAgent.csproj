@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.25</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.26</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -151,7 +151,16 @@
                     focus ring. It now lives in XAML on the same light surface as
                     setup and the status window, with a styled dropdown whose
                     chevron rotates and whose list slides and fades in. Seven
-                    checks keep the dark palette from coming back. -->
+                    checks keep the dark palette from coming back.
+               1.7.26: the registration form's own rebuild stacked all its fields in
+                    one column - FormPanel was a StackPanel, so the rows and columns
+                    it asked for had nowhere to go - and pushed the last fields past
+                    the fold. Text boxes had no height and no centred content, so the
+                    year the operator typed was clipped to a sliver. The fields are
+                    now a two-column grid with an icon and a numbered label each, the
+                    asset code sits in its own amber bar instead of a disabled field,
+                    placeholders appear inside empty boxes, and the form fades and
+                    lifts in. Five more checks pin the layout. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -192,6 +201,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

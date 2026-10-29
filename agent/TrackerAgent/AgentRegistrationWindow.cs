@@ -6,8 +6,11 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ComboBox = System.Windows.Controls.ComboBox;
 using Color = System.Windows.Media.Color;
+using FontFamily = System.Windows.Media.FontFamily;
+using Orientation = System.Windows.Controls.Orientation;
 using TextBox = System.Windows.Controls.TextBox;
 
 namespace TrackerAgent;
@@ -53,8 +56,7 @@ public sealed partial class AgentRegistrationWindow : Window
     private TextBox _purchaseYear = null!;
     private TextBox _vendor = null!;
     private TextBox _purchasePrice = null!;
-    private TextBlock _assetCodePreview = null!;
-
+    
     public AgentRegistrationFields? Fields { get; private set; }
 
     public AgentRegistrationWindow(RegistrationLookups lookups)
@@ -71,41 +73,44 @@ public sealed partial class AgentRegistrationWindow : Window
     /// Lays out the ten fields in two columns, in the order the promotion form
     /// uses so an operator moving between the two does not re-learn it.
     /// </summary>
+    /// <remarks>
+    /// FormPanel is a two-column Grid, not a StackPanel. It was a StackPanel when
+    /// this form was first rebuilt, which silently stacked every field into one
+    /// column and pushed the last few below the fold - the layout asked for
+    /// row/column but had nowhere to put them.
+    /// </remarks>
     private void BuildForm()
     {
-        _assetCodePreview = new TextBlock
+        var fields = new (string Label, string Icon, Func<UIElement> Build)[]
         {
-            Text = "Pilih perusahaan, kategori, dan tahun pembelian",
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xB4, 0x23, 0x18)),
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
+            ("Perusahaan *", "\uE8C9", () => MakeSelect("company_id", "Pilih perusahaan", _lookups.Companies)),
+            ("Kategori *", "\uE8EC", () => MakeSelect("category_id", "Pilih kategori", _lookups.Categories)),
+            ("Lokasi *", "\uE707", () => MakeSelect("location_id", "Pilih lokasi", _lookups.Locations)),
+            ("Status aset *", "\uE9D5", () => MakeSelect("asset_status_id", "Pilih status", _lookups.Statuses)),
+            ("Pemakai", "\uE77B", () => MakeSelect("current_user_id", "Belum ditentukan", _lookups.Users, optional: true)),
+            ("IT PIC", "\uE779", () => MakeSelect("admin_it_pic", "Pilih IT PIC (opsional)", _lookups.Users, optional: true)),
+            ("Tahun pembelian *", "\uE787", () => _purchaseYear = MakeTextBox(
+                DateTime.Now.Year.ToString(CultureInfo.InvariantCulture),
+                placeholder: "Contoh: 2026", icon: "\uE787", maxLength: 4)),
+            ("Vendor", "\uE719", () => _vendor = MakeTextBox(placeholder: "Nama vendor (opsional)", icon: "\uE719")),
+            ("Harga pembelian", "\uE8C7", () => _purchasePrice = MakeTextBox(placeholder: "0", icon: "\uE8C7")),
         };
 
-        AddField(0, "1 · Kode aset (dibuat otomatis)", MakePreview(_assetCodePreview));
+        // Each field is two cells wide in a two-column grid, so the pairs are laid
+        // out row by row: 1-2, 3-4, and so on.
+        for (var i = 0; i < fields.Length; i++)
+        {
+            var row = i / 2;
+            var column = i % 2;
 
-        AddField(1, "2 · Perusahaan *", MakeSelect("company_id", "Pilih perusahaan", _lookups.Companies));
+            while (FormPanel.RowDefinitions.Count <= row)
+            {
+                FormPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            }
 
-        AddField(2, "3 · Kategori *", MakeSelect("category_id", "Pilih kategori", _lookups.Categories));
-
-        AddField(3, "4 · Lokasi *", MakeSelect("location_id", "Pilih lokasi", _lookups.Locations));
-
-        AddField(4, "5 · Status aset *", MakeSelect("asset_status_id", "Pilih status", _lookups.Statuses));
-
-        AddField(5, "6 · Pemakai", MakeSelect("current_user_id", "Belum ditentukan", _lookups.Users, optional: true));
-
-        AddField(6, "7 · IT PIC", MakeSelect("admin_it_pic", "Pilih IT PIC (opsional)", _lookups.Users, optional: true));
-
-        _purchaseYear = MakeTextBox(DateTime.Now.Year.ToString(CultureInfo.InvariantCulture));
-        _purchaseYear.MaxLength = 4;
-        AddField(7, "8 · Tahun pembelian *", _purchaseYear);
-
-        _vendor = MakeTextBox();
-        AddField(8, "9 · Vendor", _vendor);
-
-        _purchasePrice = MakeTextBox();
-        AddField(9, "10 · Harga pembelian", _purchasePrice);
+            var index = i + 1;
+            AddField(row, column * 2, $"{index} · {fields[i].Label}", fields[i].Icon, fields[i].Build());
+        }
 
         foreach (var key in new[] { "company_id", "category_id" })
         {
@@ -113,42 +118,62 @@ public sealed partial class AgentRegistrationWindow : Window
         }
 
         _purchaseYear.TextChanged += (_, _) => UpdateCodePreview();
+
+        AnimateIn();
+    }
+
+    /// <summary>Fades and lifts the form in, so the window does not just appear.</summary>
+    private void AnimateIn()
+    {
+        var translate = new TranslateTransform(0, 8);
+
+        FormPanel.RenderTransform = translate;
+        FormPanel.Opacity = 0;
+
+        var duration = TimeSpan.FromMilliseconds(220);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        FormPanel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, duration) { EasingFunction = ease });
+        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, duration) { EasingFunction = ease });
     }
 
     /// <summary>One label + control pair, placed in the two-column grid.</summary>
-    private void AddField(int index, string label, UIElement control)
+    private void AddField(int row, int column, string label, string iconGlyph, UIElement control)
     {
-        var row = index / 2;
-        var column = index % 2;
+        var field = new StackPanel { Margin = new Thickness(0, 0, 0, 16) };
 
-        var field = new StackPanel
+        // Label row: a numbered chip, a small glyph, then the text - the same
+        // pattern the setup wizard uses for its checklist, so the two read as one
+        // product.
+        var labelRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 7) };
+
+        labelRow.Children.Add(new TextBlock
         {
-            Margin = new Thickness(column == 0 ? 0 : 9, 0, column == 0 ? 9 : 0, 14),
-        };
+            Text = iconGlyph,
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 12,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x98, 0xA2, 0xB3)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 7, 0),
+        });
 
-        field.Children.Add(new TextBlock
+        labelRow.Children.Add(new TextBlock
         {
             Text = label,
             FontSize = 11.5,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x70, 0x85)),
-            Margin = new Thickness(0, 0, 0, 6),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0x40, 0x54)),
+            VerticalAlignment = VerticalAlignment.Center,
         });
 
+        field.Children.Add(labelRow);
         field.Children.Add(control);
+
+        Grid.SetRow(field, row);
+        Grid.SetColumn(field, column);
 
         FormPanel.Children.Add(field);
     }
-
-    private static Border MakePreview(TextBlock text) => new()
-    {
-        Padding = new Thickness(11, 10, 11, 10),
-        CornerRadius = new CornerRadius(6),
-        BorderThickness = new Thickness(1),
-        BorderBrush = new SolidColorBrush(Color.FromRgb(0xE4, 0xE7, 0xEC)),
-        Background = new SolidColorBrush(Color.FromRgb(0xF9, 0xFA, 0xFB)),
-        Child = text,
-    };
 
     private ComboBox MakeSelect(
         string key,
@@ -159,6 +184,9 @@ public sealed partial class AgentRegistrationWindow : Window
         var combo = new ComboBox
         {
             Style = (Style)FindResource("SelectStyle"),
+            // The template reads Tag as the leading glyph, so the icon arrives
+            // without a second column of markup in the form.
+            Tag = optional ? "\uE7B8" : "\uE73E",
         };
 
         combo.Items.Add(new ComboBoxItem
@@ -180,11 +208,26 @@ public sealed partial class AgentRegistrationWindow : Window
         return combo;
     }
 
-    private TextBox MakeTextBox(string value = "") => new()
+    private TextBox MakeTextBox(string value = "", string placeholder = "", string icon = "", int maxLength = 0)
     {
-        Text = value,
-        Style = (Style)FindResource("FieldTextStyle"),
-    };
+        var box = new TextBox
+        {
+            Text = value,
+            Style = (Style)FindResource("FieldTextStyle"),
+            // The template draws both of these: Tag is the leading glyph, ToolTip
+            // becomes the placeholder shown only while the box is empty.
+            Tag = icon,
+            ToolTip = placeholder,
+        };
+
+        if (maxLength > 0)
+        {
+            box.MaxLength = maxLength;
+        }
+
+        return box;
+    }
+
 
     private void UpdateCodePreview()
     {
@@ -194,11 +237,11 @@ public sealed partial class AgentRegistrationWindow : Window
 
         if (company is null || category is null || year.Length != 4 || !int.TryParse(year, out _))
         {
-            _assetCodePreview.Text = "Pilih perusahaan, kategori, dan tahun pembelian";
+            AssetCodeText.Text = "Pilih perusahaan, kategori, dan tahun pembelian";
             return;
         }
 
-        _assetCodePreview.Text =
+        AssetCodeText.Text =
             $"{company.Code}-{CategoryCode(category.Name)}-{year}-####  ·  nomor final dibuat server";
     }
 
@@ -307,6 +350,8 @@ public sealed partial class AgentRegistrationWindow : Window
     private static string? NullIfBlank(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+
+
 
 
 
