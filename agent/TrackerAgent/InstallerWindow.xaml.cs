@@ -646,6 +646,16 @@ public partial class InstallerWindow : Window
             try
             {
                 RustDeskInstaller.TryInstall(stage => Dispatcher.Invoke(() => SetStepDetail(stage)));
+
+                // Nothing launches the client here on purpose. An unconfigured
+                // RustDesk shows its own window on the user's desktop - its id, a
+                // banner asking to install the service, and "Not ready. Please check
+                // your connection" - and that is precisely what a silent install must
+                // not put on screen. The server sends the rendezvous address, key and
+                // password with registration, and the agent applies them before the
+                // service is started, so the first time RustDesk runs it already
+                // points at our server.
+                RustDeskProvisioner.SilenceDesktopClient();
             }
             catch (Exception ex)
             {

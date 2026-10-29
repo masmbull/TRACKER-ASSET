@@ -273,13 +273,25 @@ public static class HardwareCollector
     /// Asks RustDesk for its own id (<c>RustDesk.exe --get-id</c>).
     /// </summary>
     /// <remarks>
-    /// This is the only source that works on a service-only install with no
-    /// config file yet. Bounded hard: a hung RustDesk must not stall the
-    /// heartbeat, so the process is killed after a few seconds and a null is
-    /// returned - the fleet page then shows no Remote button rather than lying.
+    /// Last resort, and deliberately conservative. On a RustDesk that has never
+    /// been configured, <c>--get-id</c> does not print an id and exit: it starts
+    /// the desktop client, which puts a window on the logged-in user's screen
+    /// showing their id and a banner asking to install the service. That is exactly
+    /// what must not happen on a silent install, so the binary is only asked when a
+    /// config already exists - a configured client answers and exits.
+    ///
+    /// Bounded hard as well: a hung RustDesk must not stall the heartbeat, so the
+    /// process is killed after a few seconds and a null is returned.
     /// </remarks>
     static string? QueryRustDeskId()
     {
+        // No config anywhere means an unconfigured client, which would open a
+        // window instead of answering.
+        if (!RustDeskConfigPaths().Any(File.Exists))
+        {
+            return null;
+        }
+
         foreach (var exe in RustDeskExecutables())
         {
             try

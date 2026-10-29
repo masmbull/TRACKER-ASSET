@@ -124,15 +124,18 @@ internal static class RustDeskProvisioner
 
         SetKey(lines, "rendezvous_server", server ?? DefaultRendezvous, beforeSection: true);
 
+        // Both of these are top-level keys in RustDesk's config, not options.
+        //
+        // "password" was previously written inside [options], where RustDesk does
+        // not read it: the client started, showed "One-time password: Generating..."
+        // and rejected every remote login. "key" belongs beside "rendezvous_server"
+        // for the same reason - it is connection setup, not a UI preference.
         if (!string.IsNullOrWhiteSpace(publicKey))
         {
-            SetKey(lines, "key", publicKey, beforeSection: false);
+            SetKey(lines, "key", publicKey, beforeSection: true);
         }
 
-        // The password RustDesk checks is a long-lived one, kept out of the
-        // [options] section the UI edits, so a password change from the web is
-        // not overwritten the next time the client saves its own options.
-        SetKey(lines, "password", password, beforeSection: false);
+        SetKey(lines, "password", password, beforeSection: true);
 
         var text = string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
 
@@ -217,6 +220,76 @@ internal static class RustDeskProvisioner
     /// written. Best effort: without elevation the write may still have reached
     /// the user profile, and the client picks it up on its next start.
     /// </summary>
+    /// <summary>
+    /// Closes the RustDesk desktop window and stops it from starting with Windows.
+    /// </summary>
+    /// <remarks>
+    /// The client puts a window on the logged-in user's desktop - its own id, a
+    /// banner offering to install the service, and "Not ready. Please check your
+    /// connection" - and it is registered to run at every logon by default. On a
+    /// managed laptop that is both noise and a standing invitation to press buttons
+    /// that break remote access, so the interactive client is removed from the
+    /// logon list while the service, which is what actually answers remote
+    /// sessions, is left running.
+    ///
+    /// Best effort: a process in another user's session cannot always be ended from
+    /// here, and a missing Run value is already the desired state.
+    /// </remarks>
+    internal static void SilenceDesktopClient()
+    {
+        try
+        {
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("rustdesk"))
+            {
+                try
+                {
+                    // The service usually runs as a second process with the same
+                    // name; only the interactive one has a visible window.
+                    if (process.MainWindowHandle != IntPtr.Zero || process.SessionId != 0)
+                    {
+                        process.Kill(entireProcessTree: false);
+                    }
+                }
+                catch
+                {
+                    // Another user's session, or already gone.
+                }
+            }
+        }
+        catch
+        {
+            // Enumeration failed: nothing to do.
+        }
+
+        RemoveClientAutostart();
+    }
+
+    /// <summary>Removes RustDesk's per-user and per-machine logon entries.</summary>
+    private static void RemoveClientAutostart()
+    {
+        foreach (var (root, view) in new[]
+                 {
+                     (Microsoft.Win32.Registry.CurrentUser, Microsoft.Win32.RegistryView.Default),
+                     (Microsoft.Win32.Registry.LocalMachine, Microsoft.Win32.RegistryView.Registry64),
+                 })
+        {
+            try
+            {
+                using var key = root.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true);
+
+                if (key?.GetValue("RustDesk") is not null)
+                {
+                    key.DeleteValue("RustDesk", throwOnMissingValue: false);
+                }
+            }
+            catch
+            {
+                // No rights (HKLM without elevation) or no key.
+            }
+        }
+    }
+
     internal static bool TryRestartService(out string message)
     {
         try

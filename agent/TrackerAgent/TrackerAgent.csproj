@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.27</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.28</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -168,7 +168,19 @@
                     takes digits only, regroups them as rupiah (15.000.000) with an
                     Rp prefix, and is parsed from those digits rather than the
                     formatted string - reading the dots as a decimal point under a
-                    different locale would have stored a price 1000x wrong. -->
+                    different locale would have stored a price 1000x wrong.
+               1.7.28: RustDesk was not silent after all. On an unconfigured client
+                    the get-id switch does not print an id and exit - it starts the
+                    desktop client, which puts a window on the user's screen showing
+                    their id, a banner asking to install the service and "Not ready.
+                    Please check your connection". The binary is now only asked when a
+                    config already exists, the client is removed from the logon list,
+                    and the server sends the rendezvous server, key and password with
+                    registration so the agent configures RustDesk before anything
+                    starts it. The password and key were also being written inside
+                    the options section, where RustDesk never reads them - they are
+                    top-level keys, which is why the client kept showing "One-time
+                    password: Generating". -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -209,6 +221,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 
