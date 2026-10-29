@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.19</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.20</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -100,7 +100,16 @@
                     again; only an older build is refused, which is the case that
                     actually caused the loop. Setup now also deletes stale
                     versioned builds (TrackerAgent-1.7.17-3.exe and friends) before
-                    copying, skipping only the one a running process holds open. -->
+                    copying, skipping only the one a running process holds open.
+               1.7.20: "Already Installed" showed the full checklist at 0% with
+                    every step on "Menunggu", which read as a frozen install: the
+                    steps are never scheduled on that path, because it only
+                    verifies what is already present. The checklist, bar and
+                    counter are hidden there and the window states plainly that
+                    the agent is installed and running. The MITO mark now ships as
+                    the cropped, supersampled image, so it is visible at 44px; it
+                    was an 800x200 canvas being scaled into 44px and rendered as
+                    an empty tile. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>
@@ -141,3 +150,4 @@
   </ItemGroup>
 
 </Project>
+

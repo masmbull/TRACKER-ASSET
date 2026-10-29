@@ -1447,17 +1447,35 @@ public partial class InstallerWindow : Window
     private void ShowAlreadyInstalled()
     {
         EnsureInstalledTrayIsRunning();
+
+        // The install is not going to run, so the checklist must not be shown at
+        // all.
+        //
+        // Leaving it visible with every step on "Menunggu" and the bar at 0% is
+        // what made a finished, already-installed machine look frozen mid-setup -
+        // the user waits for steps that are never scheduled, because this path
+        // only verifies what is already there. The checklist is for a run in
+        // progress; here there is nothing in progress.
+        InstallStepsPanel.Visibility = Visibility.Collapsed;
+        OverallProgressTrack.Visibility = Visibility.Collapsed;
+        StatsPanel.Visibility = Visibility.Collapsed;
+        ProgressCounterText.Visibility = Visibility.Collapsed;
+
+        SubtitleText.Text = "Sudah terpasang";
+        InstallHeadingText.Text = "TrackerAgent sudah terpasang";
+        DescriptionText.Text = "Tidak ada yang perlu dipasang. Agent sudah berjalan di komputer ini.";
+
         ResultPanel.Visibility = Visibility.Visible;
         RetryButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Visible;
 
         SetResult(
-            GlyphInfo,
-            "Already Installed",
-            $"Version {_installedVersion} is installed on this machine.\n\n" +
+            GlyphOk,
+            "Sudah terpasang dan berjalan",
+            $"Versi {_installedVersion} sudah terpasang di komputer ini.\n\n" +
             $"{_installedExe}\n\n" +
-            "The tray agent has been started or was already running. To update, download and run a newer version.",
-            InfoBrush);
+            "Agent berjalan di system tray. Untuk memperbarui, unduh installer versi baru dari server.",
+            SuccessBrush);
     }
 
     private void EnsureInstalledTrayIsRunning()
@@ -1801,3 +1819,4 @@ public partial class InstallerWindow : Window
         }
     }
 }
+
