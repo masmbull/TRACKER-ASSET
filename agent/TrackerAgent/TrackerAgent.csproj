@@ -23,7 +23,7 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.18</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.19</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
@@ -92,7 +92,15 @@
                     setup. Nothing now starts a binary that is not strictly newer
                     than the running installer, restart uses the file this run
                     actually wrote, and the guard gets two restarts an hour so a
-                    crashing build stops instead of multiplying. -->
+                    crashing build stops instead of multiplying.
+               1.7.19: 1.7.18 refused to start anything that was not STRICTLY newer
+                    than the installer, so the build setup had just written -
+                    the same version - was never launched. The agent installed,
+                    exited, and no tray icon ever appeared. Equal is allowed
+                    again; only an older build is refused, which is the case that
+                    actually caused the loop. Setup now also deletes stale
+                    versioned builds (TrackerAgent-1.7.17-3.exe and friends) before
+                    copying, skipping only the one a running process holds open. -->
     <Company>MITO Group</Company>
     <Product>TRACKER-ASSET Audit Agent</Product>
     <Description>MITO Group Audit Agent Installer</Description>

@@ -81,6 +81,64 @@ public static class InstallerService
         return killedAny;
     }
 
+    /// <summary>
+    /// Deletes versioned sibling builds (<c>TrackerAgent-1.7.17-3.exe</c>) that are
+    /// no longer running.
+    /// </summary>
+    /// <param name="installDir">The install folder.</param>
+    /// <param name="keep">A path that must survive, or null.</param>
+    /// <returns>How many files were removed.</returns>
+    /// <remarks>
+    /// These accumulate when the canonical exe is locked: every update attempt
+    /// leaves one behind, and a loop leaves a dozen. They are dead weight - the
+    /// agent only ever runs the newest - but they cannot simply be deleted, because
+    /// the one currently running is exactly the file Windows will not release.
+    ///
+    /// So each candidate is probed with an exclusive open first. A file that opens
+    /// exclusively is not in use and can go; a file that is denied is the running
+    /// one and is skipped without an error. That is the difference between tidying
+    /// up and truncating the agent that is reporting to the server.
+    /// </remarks>
+    public static int CleanSiblingBuilds(string installDir, string? keep = null)
+    {
+        var removed = 0;
+
+        try
+        {
+            foreach (var file in Directory.GetFiles(installDir, "TrackerAgent-*.exe", SearchOption.TopDirectoryOnly))
+            {
+                if (keep is not null && string.Equals(file, keep, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using (new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
+                    }
+
+                    File.Delete(file);
+                    removed++;
+                }
+                catch (IOException)
+                {
+                    // Held open by a running agent: leave it alone.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Not ours to remove; the install still works.
+                }
+            }
+        }
+        catch
+        {
+            // Best effort: leftovers are untidy, not a reason to fail setup.
+        }
+
+        return removed;
+    }
+
     /// <summary>Remove stale artifacts left by a previous partial update.</summary>
     public static void CleanLeftovers(string installDir)
     {

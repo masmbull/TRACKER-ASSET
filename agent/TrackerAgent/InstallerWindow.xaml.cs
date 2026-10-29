@@ -584,6 +584,16 @@ public partial class InstallerWindow : Window
                 // used to surface as the useless "check disk space" message.
                 StopInstalledAgent();
 
+                // Before copying: drop sibling builds a previous attempt left,
+                // including the ones a loop created. Whatever is still running is
+                // skipped by the exclusive-open probe.
+                var stale = InstallerService.CleanSiblingBuilds(_installDir);
+
+                if (stale > 0)
+                {
+                    AgentLog.Write($"Removed {stale} stale agent build(s) before installing.");
+                }
+
                 if (!TryCopyInstalledExe(sourceExe, destExe))
                 {
                     // The clean way out is a side-by-side install: a versioned
@@ -1006,14 +1016,20 @@ public partial class InstallerWindow : Window
     }
 
     /// <summary>
-    /// The rule on its own, with the versions supplied: strictly newer only.
+    /// The rule on its own, with the versions supplied: the target may not be
+    /// older than the running installer.
     /// </summary>
     /// <remarks>
     /// Split from the file check so it is testable without building executables
     /// with embedded version resources, which is the only part of this that needs
-    /// a real binary. Equal is refused as firmly as older: running the build that
-    /// is already installed cannot make progress and, in a loop, is the difference
-    /// between one restart and an endless one.
+    /// a real binary.
+    ///
+    /// Equal is ALLOWED. The first version of this rule required strictly newer,
+    /// and that broke every fresh install: setup writes 1.7.18 to the canonical
+    /// path and then starts it, so the target was equal to the installer, was
+    /// refused, and the agent never came up - no tray icon, no reports, nothing on
+    /// screen to explain it. What actually has to be blocked is the old build that
+    /// caused the loop, and that is strictly older.
     /// </remarks>
     internal static bool SpawnAllowedForVersions(Version? target, Version? installerVersion)
     {
@@ -1023,7 +1039,7 @@ public partial class InstallerWindow : Window
             return false;
         }
 
-        return target > installerVersion;
+        return target >= installerVersion;
     }
 
     private static string? ReadRegistryString(string name)
@@ -1092,6 +1108,16 @@ public partial class InstallerWindow : Window
 
             Report(45, "Membersihkan sisa file pembaruan...");
             InstallerService.CleanLeftovers(Path.GetDirectoryName(_installedExe)!);
+
+            // Siblings from earlier side-by-side installs. The agent has just been
+            // stopped above, so the ones that are not running can go now instead of
+            // piling up a new file on every update.
+            var removed = InstallerService.CleanSiblingBuilds(Path.GetDirectoryName(_installedExe)!);
+
+            if (removed > 0)
+            {
+                AgentLog.Write($"Removed {removed} stale agent build(s) before updating.");
+            }
 
             Report(55, $"Menyalin versi {_newVersion}...");
 

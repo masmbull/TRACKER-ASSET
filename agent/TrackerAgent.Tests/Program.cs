@@ -425,8 +425,12 @@ internal static class Program
         // The exact case that looped: target 1.7.15, installer 1.7.17.
         Check("spawn refuses an older build",
             !InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 15), new Version(1, 7, 17)));
-        Check("spawn refuses the same build",
-            !InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 17), new Version(1, 7, 17)));
+
+        // ...and the case that broke every fresh install: setup writes the SAME
+        // version to the canonical path and then starts it. Refusing equal meant
+        // the agent never started, so there was no tray icon at all.
+        Check("spawn allows the build this installer just wrote",
+            InstallerWindow.SpawnAllowedForVersions(new Version(1, 7, 17), new Version(1, 7, 17)));
         Check("spawn refuses a build with no version resource",
             !InstallerWindow.SpawnAllowedForVersions(null, new Version(1, 7, 17)));
         Check("spawn allows a newer build",
