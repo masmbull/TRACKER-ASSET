@@ -429,7 +429,11 @@
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
                                 @endif
                                 @if($device->rustdesk_id)
-                                    <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" target="_blank" rel="noopener" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
+                                    <a href="rustdesk://{{ $device->rustdesk_id }}?password={{ $device->rustdesk_password }}"
+                                       target="_blank" rel="noopener"
+                                       class="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-theme-xs font-semibold leading-none whitespace-nowrap transition duration-150 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25">
+                                        <x-icon name="remote" class="h-3.5 w-3.5 shrink-0" /> Remote
+                                    </a>
                                 @endif
                                 <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                             </div>
