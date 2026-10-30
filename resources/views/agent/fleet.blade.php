@@ -338,9 +338,12 @@
                                          agent is elevated: without either, the
                                          session would fail after the click. --}}
                                     @if(filled($device->rustdesk_id))
-                                        <x-row-action variant="info" icon="remote"
-                                                      onclick="window.dispatchEvent(new CustomEvent('open-remote', { detail: { id: {{ $device->id }} } }))"
-                                                      title="Buka sesi remote RustDesk">Remote</x-row-action>
+                                        <button type="button"
+                                                onclick="window.dispatchEvent(new CustomEvent('open-remote', { detail: { id: {{ $device->id }} } }))"
+                                                class="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-theme-xs font-semibold leading-none whitespace-nowrap transition duration-150 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
+                                                title="Buka sesi remote RustDesk">
+                                            <x-icon name="remote" class="h-3.5 w-3.5 shrink-0" /> Remote
+                                        </button>
                                     @endif
                                     <x-row-action icon="power" @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
                                     <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
