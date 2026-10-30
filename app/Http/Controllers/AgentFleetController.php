@@ -1416,7 +1416,7 @@ class AgentFleetController extends Controller
             'ok' => true,
             'id' => $token->rustdesk_id,
             'password' => $password,
-            'uri' => 'rustdesk://'.$token->rustdesk_id,
+            'uri' => 'rustdesk://'.$token->rustdesk_id.'?password='.urlencode($password),
             'command_id' => $command->getKey(),
             'device' => $token->name,
         ]);
