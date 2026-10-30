@@ -357,7 +357,8 @@
                                          device is actually behind: offering it on a
                                          current device invites a pointless restart. --}}
                                     @if($device->isOutdated() === true)
-                                        <x-row-action variant="warning" icon="refresh" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</x-row-action>
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/10 dark:text-warning-300" title="Versi baru tersedia">Update tersedia</span>
+<x-row-action variant="warning" icon="refresh" @click="$dispatch('open-modal', 'confirm-update-agent-{{ $device->id }}')">Update</x-row-action>
                                     @endif
                                     {{-- Promote to admin. Only shown when the agent
                                          has reported it is a standard user: asking an
