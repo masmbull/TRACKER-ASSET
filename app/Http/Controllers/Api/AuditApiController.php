@@ -325,6 +325,11 @@ class AuditApiController extends Controller
         // snapshot feeds the Live Fleet view.
         $this->recordTelemetry($asset, $payload);
 
+        // A full scan carries the same device-level identifiers as a heartbeat,
+        // so store them on the token too instead of waiting for the next ping.
+        $this->rememberMacAddress($request, $payload);
+        $this->rememberRustdeskId($request, $payload);
+
         return response()->json([
             'asset' => $asset->asset_id,
             'result' => $result['result'],
