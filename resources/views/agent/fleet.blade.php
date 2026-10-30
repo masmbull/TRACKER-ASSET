@@ -339,7 +339,7 @@
                                          session would fail after the click. --}}
                                     @if(filled($device->rustdesk_id))
                                         <x-row-action variant="info" icon="remote"
-                                                      x-on:click.prevent="$dispatch('open-remote', { id: {{ $device->id }} })"
+                                                      onclick="window.dispatchEvent(new CustomEvent('open-remote', { detail: { id: {{ $device->id }} } }))"
                                                       title="Buka sesi remote RustDesk">Remote</x-row-action>
                                     @endif
                                     <x-row-action icon="power" @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
