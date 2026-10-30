@@ -337,7 +337,7 @@
                                          Enabled only when the id is known and the
                                          agent is elevated: without either, the
                                          session would fail after the click. --}}
-                                    @if($remoteReady)
+                                    @if(filled($device->rustdesk_id))
                                         <x-row-action variant="info" icon="remote"
                                                       x-on:click.prevent="$dispatch('open-remote', { id: {{ $device->id }} })"
                                                       title="Buka sesi remote RustDesk">Remote</x-row-action>
@@ -426,7 +426,7 @@
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
                                 @endif
                                 @if($device->rustdesk_id)
-                                    <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
+                                    <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" target="_blank" rel="noopener" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
                                 @endif
                                 <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                             </div>
