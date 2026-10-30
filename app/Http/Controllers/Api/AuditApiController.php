@@ -156,9 +156,14 @@ class AuditApiController extends Controller
         // built from.
         $currentPayload = $current->payload ?? [];
 
+        $incomingMode = $payload['agent_mode'] ?? null;
+        if ($incomingMode === null || $incomingMode === 'scan') {
+            $incomingMode = $currentPayload['agent_mode'] ?? 'unknown';
+        }
+
         $updates['payload'] = [
             ...$currentPayload,
-            'agent_mode' => $payload['agent_mode'] ?? ($currentPayload['agent_mode'] ?? 'unknown'),
+            'agent_mode' => $incomingMode,
         ];
 
         // When a tray last reported, kept until it is genuinely stale.
@@ -519,6 +524,23 @@ class AuditApiController extends Controller
         $tokenId = request()->attributes->get('agent_token_id');
         $token = $tokenId ? AgentApiToken::find($tokenId) : null;
 
+        $key = $token
+            ? ['agent_token_id' => $token->id]
+            : ['device_id' => $payload['device_id'] ?? $payload['hostname'] ?? 'unknown'];
+
+        $current = AgentTelemetry::where($key)->first();
+
+        $currentPayload = $current?->payload ?? [];
+        $mergedPayload = array_merge($currentPayload, $payload);
+        if (empty($payload['tray_seen_at']) && ! empty($currentPayload['tray_seen_at'])) {
+            $mergedPayload['tray_seen_at'] = $currentPayload['tray_seen_at'];
+        }
+        $incomingMode = $payload['agent_mode'] ?? null;
+        if ($incomingMode === null || $incomingMode === 'scan') {
+            $incomingMode = $currentPayload['agent_mode'] ?? 'unknown';
+        }
+        $mergedPayload['agent_mode'] = $incomingMode;
+
         $diskFree = $this->numericOrNull($payload['disk_free_gb'] ?? null);
         $diskTotal = $this->numericOrNull($payload['disk_total_gb'] ?? null);
 
@@ -527,7 +549,7 @@ class AuditApiController extends Controller
             'device_id' => $payload['device_id'] ?? $token?->device_id,
             'hostname' => $payload['hostname'] ?? null,
             'logged_in_user' => $payload['logged_in_user'] ?? null,
-            'is_elevated' => array_key_exists('is_elevated', $payload) ? (bool) $payload['is_elevated'] : null,
+            'is_elevated' => array_key_exists('is_elevated', $payload) ? (bool) $payload['is_elevated'] : $current?->is_elevated,
             'os' => $payload['os'] ?? null,
             'ip_address' => $payload['ip_address'] ?? null,
             'battery_percent' => $this->intOrNull($payload['battery_percent'] ?? null),
@@ -544,13 +566,9 @@ class AuditApiController extends Controller
             'network_adapter' => $payload['network_adapter'] ?? null,
             'network_speed' => $payload['network_speed'] ?? null,
             'uptime_hours' => $this->numericOrNull($payload['uptime_hours'] ?? null),
-            'payload' => $payload,
+            'payload' => $mergedPayload,
             'reported_at' => now(),
         ];
-
-        $key = $token
-            ? ['agent_token_id' => $token->id]
-            : ['device_id' => $payload['device_id'] ?? $payload['hostname'] ?? 'unknown'];
 
         AgentTelemetry::updateOrCreate($key, $attributes);
     }
