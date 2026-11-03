@@ -27,6 +27,7 @@
             } catch (e) {}
         })();
     </script>
+    @stack('styles')
 </head>
 <body
     data-mito-logo="{{ asset('images/mito-icon.png') }}"
@@ -932,6 +933,7 @@
             });
         })();
     </script>
+    @stack('scripts')
 
 </body>
 </html>
