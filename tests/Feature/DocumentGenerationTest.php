@@ -209,7 +209,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertSessionHas('success');
 
         // Sequential, duplicate-proof numbering.
-        $this->assertSame('FAT/IT/'.now()->format('Y').'/00001', $document->document_number);
+        $this->assertSame('FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
         $this->assertSame('FAT', $document->document_type);
         $this->assertSame('final', $document->status);
         $this->assertSame('pdf', $document->file_type);
@@ -246,7 +246,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertRedirect(route('documents.preview', Document::latest('id')->firstOrFail()));
 
         $this->assertSame(
-            'FAT/IT/'.now()->format('Y').'/00002',
+            'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0002',
             Document::latest('id')->firstOrFail()->document_number
         );
     }
@@ -289,7 +289,7 @@ class DocumentGenerationTest extends TestCase
         $document = Document::firstOrFail();
 
         $response->assertRedirect(route('documents.preview', $document));
-        $this->assertSame('BAST/IT/'.now()->format('Y').'/00001', $document->document_number);
+        $this->assertSame('BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
         $this->assertSame([], $document->payload['checklist']);
     }
 

@@ -21,7 +21,7 @@ class DocumentNumberService
             throw new \InvalidArgumentException("Unknown document type for numbering: {$type}");
         }
 
-        $pattern = str_replace('{year}', now()->format('Y'), $format);
+        $pattern = str_replace(['{year}', '{month}'], [now()->format('Y'), now()->format('m')], $format);
 
         preg_match('/\{seq:(\d+)\}/', $pattern, $m);
         $width = (int) $m[1];
