@@ -2,6 +2,10 @@
 
 @section('title', 'Add Document')
 
+@push('styles')
+<link href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" rel="stylesheet" />
+@endpush
+
 @section('content')
 <div class="mx-auto max-w-5xl space-y-6">
     <x-page-header :title="'Add Document - ' . $asset->asset_id" subtitle="Create a new document record for this asset and attach the related template metadata.">
@@ -93,4 +97,17 @@
         </div>
     </form>
 </div>
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        flatpickr('input[type="date"]', {
+            dateFormat: 'Y-m-d',
+            defaultDate: new Date().toISOString().split('T')[0],
+        });
+    });
+</script>
+@endpush
+
 @endsection

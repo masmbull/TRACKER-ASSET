@@ -14,11 +14,11 @@ return [
     | The unique index on documents.document_number is the final safety net.
     */
     'numbering' => [
-        'FAT' => 'FAT/IT/{year}/{seq:5}',
-        'BAST' => 'BAST/IT/{year}/{seq:5}',
-        'TRANSFER' => 'AST/TRF/{year}/{seq:5}',
-        'RETURN' => 'AST/RET/{year}/{seq:5}',
-        'ASSIGNMENT' => 'AST/ASG/{year}/{seq:5}',
+        'FAT' => 'FAT/IT-{month}-{year}/{seq:4}',
+        'BAST' => 'BAST/IT-{month}-{year}/{seq:4}',
+        'TRANSFER' => 'AST/TRF-{month}-{year}/{seq:4}',
+        'RETURN' => 'AST/RET-{month}-{year}/{seq:4}',
+        'ASSIGNMENT' => 'AST/ASG-{month}-{year}/{seq:4}',
     ],
 
     /*

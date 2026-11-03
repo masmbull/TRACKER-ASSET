@@ -2,6 +2,10 @@
 
 @section('title', 'Generate Document')
 
+@push('styles')
+<link href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" rel="stylesheet" />
+@endpush
+
 @section('content')
 <div class="mx-auto max-w-6xl space-y-6">
     <x-page-header title="Generate Document" :subtitle="$asset->asset_id . ' · ' . ($asset->brand . ' ' . $asset->model)">
@@ -34,11 +38,6 @@
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Document Date</label>
                     <input type="date" name="document_date" value="{{ old('document_date', now()->toDateString()) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                </div>
-
-                <div>
-                    <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Nomor Surat (optional)</label>
-                    <input type="text" name="nomor_surat" value="{{ old('nomor_surat') }}" placeholder="Contoh: Lamp/001/IT/2026" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                 </div>
             </div>
 
@@ -332,4 +331,17 @@
         </form>
     </x-card>
 </div>
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        flatpickr('input[type="date"]', {
+            dateFormat: 'Y-m-d',
+            defaultDate: new Date().toISOString().split('T')[0],
+        });
+    });
+</script>
+@endpush
+
 @endsection

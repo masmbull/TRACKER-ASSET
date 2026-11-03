@@ -38,31 +38,31 @@ class DocumentNumberingTest extends TestCase
         ]);
     }
 
-    public function test_first_number_starts_at_00001(): void
+    public function test_first_number_starts_at_0001(): void
     {
-        $this->assertSame('FAT/IT/'.now()->format('Y').'/00001', $this->numbers->next('FAT'));
+        $this->assertSame('FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $this->numbers->next('FAT'));
     }
 
     public function test_numbers_increment_within_type(): void
     {
-        $this->makeDoc('FAT', 'FAT/IT/'.now()->format('Y').'/00001');
-        $this->makeDoc('FAT', 'FAT/IT/'.now()->format('Y').'/00002');
+        $this->makeDoc('FAT', 'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001');
+        $this->makeDoc('FAT', 'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0002');
 
-        $this->assertSame('FAT/IT/'.now()->format('Y').'/00003', $this->numbers->next('FAT'));
+        $this->assertSame('FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0003', $this->numbers->next('FAT'));
     }
 
     public function test_types_have_independent_sequences(): void
     {
-        $this->makeDoc('FAT', 'FAT/IT/'.now()->format('Y').'/00001');
+        $this->makeDoc('FAT', 'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001');
 
-        $this->assertSame('BAST/IT/'.now()->format('Y').'/00001', $this->numbers->next('BAST'));
+        $this->assertSame('BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $this->numbers->next('BAST'));
     }
 
     public function test_sequence_continues_from_preexisting_numbers(): void
     {
-        $this->makeDoc('BAST', 'BAST/IT/'.now()->format('Y').'/00042');
+        $this->makeDoc('BAST', 'BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0042');
 
-        $this->assertSame('BAST/IT/'.now()->format('Y').'/00043', $this->numbers->next('BAST'));
+        $this->assertSame('BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0043', $this->numbers->next('BAST'));
     }
 
     public function test_unknown_type_throws(): void
