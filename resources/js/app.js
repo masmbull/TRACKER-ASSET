@@ -230,20 +230,78 @@ document.addEventListener('submit', (event) => {
         return;
     }
 
-    showProcessModal();
-    const submit = form.querySelector('button[type="submit"]');
-    if (!submit || submit.disabled || form.dataset.noBusy !== undefined || form.matches('[data-modal-action]')) {
+    if (form.dataset.noBusy !== undefined) {
         return;
     }
-    submit.disabled = true;
-    submit.setAttribute('aria-busy', 'true');
-    if (!submit.querySelector('.btn-spinner')) {
-        const spinner = document.createElement('span');
-        spinner.className = 'btn-spinner';
-        spinner.setAttribute('aria-hidden', 'true');
-        submit.prepend(spinner);
+
+    if (form.dataset.processing === 'true') {
+        event.preventDefault();
+        return;
     }
-    submit.classList.add('opacity-80');
+
+    const submit = event.submitter instanceof HTMLButtonElement
+        ? event.submitter
+        : form.querySelector('button[type="submit"]');
+
+    if (submit?.disabled) {
+        return;
+    }
+
+    form.dataset.processing = 'true';
+    showProcessModal();
+
+    if (submit) {
+        submit.disabled = true;
+        submit.setAttribute('aria-busy', 'true');
+        if (!submit.querySelector('.btn-spinner')) {
+            const spinner = document.createElement('span');
+            spinner.className = 'btn-spinner';
+            spinner.setAttribute('aria-hidden', 'true');
+            submit.prepend(spinner);
+        }
+        submit.classList.add('opacity-80');
+    }
+});
+
+// Show navigation feedback for regular links as well as GET form submissions.
+// Ignore links that do not start a same-tab page navigation (menus, downloads,
+// new tabs, modified clicks, and external destinations).
+document.addEventListener('click', (event) => {
+    if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        !(event.target instanceof Element)
+    ) {
+        return;
+    }
+
+    const link = event.target.closest('a[href]');
+    if (!link || link.hasAttribute('download') || link.dataset.noProgress !== undefined) {
+        return;
+    }
+
+    if (link.target && link.target.toLowerCase() !== '_self') {
+        return;
+    }
+
+    const destination = new URL(link.href, window.location.href);
+    if (destination.origin !== window.location.origin) {
+        return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    if (
+        destination.pathname === currentUrl.pathname &&
+        destination.search === currentUrl.search
+    ) {
+        return;
+    }
+
+    markBusy();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -256,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
             timer = window.setTimeout(() => {
                 const form = input.closest('form');
                 if (form && (form.method || 'get').toLowerCase() === 'get') {
-                    markBusy();
                     form.requestSubmit();
                 }
             }, 450);
@@ -264,7 +321,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-window.addEventListener('pageshow', () => { markIdle(); hideProcessModal(); });
+window.addEventListener('pageshow', () => {
+    busyCount = 0;
+    const bar = progressBar();
+    bar?.classList.remove('is-busy');
+    bar?.removeAttribute('aria-valuetext');
+    hideProcessModal();
+
+    document.querySelectorAll('form[data-processing="true"]').forEach((form) => {
+        delete form.dataset.processing;
+        form.querySelectorAll('button[aria-busy="true"]').forEach((button) => {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+            button.classList.remove('opacity-80');
+            button.querySelector('.btn-spinner')?.remove();
+        });
+    });
+});
 
 // --- Soft live regions: update in place, never full-reload -------------------
 // Commands and services used `setTimeout(location.reload)`, which flashed the

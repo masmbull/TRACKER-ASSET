@@ -29,14 +29,11 @@
 
 <section class="dashboard-hero mb-5" aria-label="Inventory overview">
     <div class="dashboard-hero-copy">
-        <span class="dashboard-eyebrow"><span class="dashboard-live-dot"></span> IT ASSET OPERATIONS</span>
-        <h2>Asset operations<br class="hidden sm:block"> at a glance.</h2>
-        <p>Inventory, assignments, and fleet health in one place.</p>
+        <span class="dashboard-eyebrow"><span class="dashboard-live-dot"></span> LIVE INVENTORY SNAPSHOT</span>
+        <h2>Know what you own.<br class="hidden sm:block">See what needs attention.</h2>
+        <p>Track assignments, asset health, and fleet activity from one workspace.</p>
         <div class="mt-5 flex flex-wrap gap-2">
             <a href="{{ route('assets.index') }}" class="dashboard-hero-link">Explore inventory <x-icon name="arrow-right" class="h-4 w-4" /></a>
-            @can('create', App\Models\Asset::class)
-                <a href="{{ route('assets.create') }}" class="dashboard-hero-link dashboard-hero-link-secondary"><x-icon name="plus" class="h-4 w-4" /> Add an asset</a>
-            @endcan
         </div>
     </div>
     <div class="dashboard-hero-figure" aria-hidden="true">
@@ -48,6 +45,14 @@
         <span class="dashboard-hero-spark dashboard-hero-spark-two"></span>
     </div>
 </section>
+
+<div class="dashboard-section-heading">
+    <div>
+        <p class="dashboard-section-kicker">REGISTER</p>
+        <h2>Asset overview</h2>
+    </div>
+    <span>Current status across your inventory</span>
+</div>
 
 <div class="dashboard-stat-grid stagger grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
     @foreach($stats as $stat)
@@ -91,25 +96,35 @@
     </x-card>
 </div>
 
-<x-card class="mt-6" x-data="{ expanded: true }">
-    <div class="flex items-center justify-between mb-4" x-show="expanded">
-        <button @click="expanded = !expanded" class="flex items-center gap-2">
-            <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Warnings</h3>
-            @php $totalWarnings = array_sum($warnings); @endphp
+@php $totalWarnings = array_sum($warnings); @endphp
+<x-card class="dashboard-warnings mt-6" x-data="{ expanded: true }">
+    <button type="button"
+            class="dashboard-warnings-toggle flex w-full items-center justify-between gap-4 text-left"
+            @click="expanded = !expanded"
+            :aria-expanded="expanded.toString()"
+            aria-controls="dashboard-warning-list">
+        <span class="flex min-w-0 items-center gap-3">
+            <span class="dashboard-warnings-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                <x-icon name="warning" class="h-5 w-5" />
+            </span>
+            <span class="min-w-0">
+                <span class="block text-theme-sm font-semibold text-gray-800 dark:text-white/90">Warnings</span>
+                <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
+                    {{ $totalWarnings > 0 ? $totalWarnings . ' items need review' : 'No inventory issues detected' }}
+                </span>
+            </span>
+        </span>
+        <span class="flex shrink-0 items-center gap-3">
             @if($totalWarnings > 0)
                 <x-badge variant="warning" dot>{{ $totalWarnings }}</x-badge>
+            @else
+                <x-badge variant="success" dot>Clear</x-badge>
             @endif
-            <x-icon name="chevron-down" class="h-5 w-5 text-gray-400 transition-transform" ::class="expanded ? 'rotate-180' : ''" />
-        </button>
-    </div>
-    <button @click="expanded = !expanded" x-show="!expanded" class="flex items-center gap-2 mb-4">
-        <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Warnings</h3>
-        @if($totalWarnings > 0)
-            <x-badge variant="warning" dot>{{ $totalWarnings }}</x-badge>
-        @endif
+            <x-icon name="chevron-down" class="h-5 w-5 text-gray-400 transition-transform duration-200" ::class="expanded ? 'rotate-180' : ''" />
+        </span>
     </button>
 
-    <div x-show="expanded" x-collapse x-cloak>
+    <div id="dashboard-warning-list" class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800" x-show="expanded" x-collapse x-cloak>
         @php
             $warningLabels = [
                 'warranty_expiring' => ['Warranty Expiring (60d)', 'warning'],
@@ -122,11 +137,11 @@
                 'audit_stale' => ['Audit Stale (>6mo)', 'warning'],
             ];
         @endphp
-        <div class="stagger grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="stagger dashboard-warning-grid grid grid-cols-2 gap-3 md:grid-cols-4">
             @foreach($warningLabels as $key => $meta)
-                <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-center">
+                <div class="dashboard-warning-item rounded-xl border border-gray-200 p-3 text-center dark:border-gray-800">
                     <p class="text-theme-xs text-gray-500 dark:text-gray-400">{{ $meta[0] }}</p>
-                    <p class="text-xl font-bold text-gray-800 dark:text-white/90 mt-1">{{ $warnings[$key] ?? 0 }}</p>
+                    <p class="mt-1 text-xl font-bold text-gray-800 dark:text-white/90">{{ number_format($warnings[$key] ?? 0) }}</p>
                 </div>
             @endforeach
         </div>

@@ -336,10 +336,11 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        flatpickr('input[type="date"]', {
-            dateFormat: 'Y-m-d',
-            defaultDate: new Date().toISOString().split('T')[0],
-        });
+        if (typeof window.flatpickr === 'function') {
+            window.flatpickr('input[type="date"]', {
+                dateFormat: 'Y-m-d',
+            });
+        }
     });
 </script>
 @endpush

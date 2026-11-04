@@ -51,6 +51,27 @@ class DocumentGenerationTest extends TestCase
             ->assertSee('<option value="BAST" selected>', false);
     }
 
+    public function test_document_date_fields_use_date_pickers_without_forcing_optional_dates(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)
+            ->get(route('documents.generate', $this->asset))
+            ->assertOk()
+            ->assertSee('type="date" name="document_date"', false)
+            ->assertSee('type="date" name="handover_date"', false)
+            ->assertSee('type="date" name="received_date" value=""', false)
+            ->assertSee('window.flatpickr(', false)
+            ->assertDontSee('defaultDate:', false);
+
+        $this->actingAs($support)
+            ->get(route('documents.create', $this->asset))
+            ->assertOk()
+            ->assertSee('type="date" name="generated_date"', false)
+            ->assertSee('window.flatpickr(', false)
+            ->assertDontSee('defaultDate:', false);
+    }
+
     /**
      * Only the FAT has an acceptance checklist. Rendering the FAT list under a
      * "Checklist FAT" heading on a TRANSFER claims the document does not back up,
