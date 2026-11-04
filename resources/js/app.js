@@ -230,7 +230,7 @@ document.addEventListener('submit', (event) => {
         return;
     }
 
-    if (form.dataset.noBusy !== undefined) {
+    if (form.dataset.noBusy !== undefined || form.matches('[data-modal-action]')) {
         return;
     }
 
