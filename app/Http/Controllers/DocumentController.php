@@ -30,11 +30,10 @@ class DocumentController extends Controller
      */
     public function index(Request $request)
     {
-        // A document is visible exactly when its asset is - that is how preview()
-        // and download() already decide it. Reusing the asset policy keeps the
-        // list and the documents in it from disagreeing, and avoids inventing a
-        // second role matrix that would drift from the first.
+        // Asset-linked documents follow the asset policy. Standalone documents
+        // use the same viewAny boundary as the register itself.
         $this->authorize('viewAny', Asset::class);
+        $canGenerate = $request->user()->can('create', Asset::class);
 
         $type = $request->query('type');
         $search = trim((string) $request->query('q', ''));
@@ -62,6 +61,49 @@ class DocumentController extends Controller
             'type' => $type,
             'search' => $search,
             'totalDocuments' => $totalDocuments,
+            'canGenerate' => $canGenerate,
+            'assets' => $canGenerate
+                ? Asset::query()->orderBy('asset_id')->get(['id', 'asset_id', 'brand', 'model'])
+                : collect(),
+        ]);
+    }
+
+    public function createFromIndex(Request $request)
+    {
+        $this->authorize('create', Asset::class);
+
+        $validated = $request->validate([
+            'asset_id' => ['required', 'string', Rule::exists('assets', 'asset_id')],
+        ]);
+
+        $asset = Asset::query()->where('asset_id', $validated['asset_id'])->firstOrFail();
+        $this->authorize('generateDocument', $asset);
+
+        return redirect()->route('documents.generate', $asset);
+    }
+
+    public function generateBlank()
+    {
+        $this->authorize('create', Asset::class);
+
+        $types = (array) config('documents.types', []);
+        $selectedType = 'FAT';
+
+        return view('documents.generate', [
+            'asset' => null,
+            'transfers' => collect(),
+            'senderUser' => null,
+            'senderName' => null,
+            'senderDepartment' => null,
+            'senderEmail' => null,
+            'types' => $types,
+            'selectedType' => $selectedType,
+            'selectedTemplateId' => null,
+            'checklist' => (array) config('documents.checklists.'.$selectedType, []),
+            'kelengkapan' => (array) config('documents.kelengkapan.'.$selectedType, []),
+            'copy' => $this->copyFor($selectedType),
+            'companies' => Company::orderBy('name')->get(['id', 'name']),
+            'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
         ]);
     }
 
@@ -153,7 +195,43 @@ class DocumentController extends Controller
     {
         $this->authorize('generateDocument', $asset);
 
-        $validated = $request->validate([
+        $validated = $this->validateGenerationInput($request);
+
+        if (! $this->templateMatchesDocumentType($validated)) {
+            return back()->withInput()->withErrors([
+                'template_id' => 'Choose an active template that matches the selected document type.',
+            ]);
+        }
+
+        $document = $documents->generate($asset, $validated['document_type'], $validated, $request->user());
+
+        return redirect()
+            ->route('documents.preview', $document)
+            ->with('success', "Document {$document->document_number} generated.");
+    }
+
+    public function storeBlank(Request $request, DocumentGenerationService $documents)
+    {
+        $this->authorize('create', Asset::class);
+
+        $validated = $this->validateGenerationInput($request, allowTransfer: false);
+
+        if (! $this->templateMatchesDocumentType($validated)) {
+            return back()->withInput()->withErrors([
+                'template_id' => 'Choose an active template that matches the selected document type.',
+            ]);
+        }
+
+        $document = $documents->generate(null, $validated['document_type'], $validated, $request->user());
+
+        return redirect()
+            ->route('documents.preview', $document)
+            ->with('success', "Document {$document->document_number} generated.");
+    }
+
+    private function validateGenerationInput(Request $request, bool $allowTransfer = true): array
+    {
+        $rules = [
             'document_type' => ['required', Rule::in((array) config('documents.types', []))],
             'template_id' => 'nullable|exists:document_templates,id',
             'transfer_id' => 'nullable|exists:asset_transfers,id',
@@ -180,6 +258,7 @@ class DocumentController extends Controller
             'asset_processor' => 'nullable|string|max:150',
             'asset_ram' => 'nullable|string|max:80',
             'asset_storage' => 'nullable|string|max:80',
+            'asset_os_version' => 'nullable|string|max:255',
             'asset_storage_type' => 'nullable|string|max:50',
             'asset_storage_capacity' => 'nullable|string|max:50',
             'asset_accessories' => 'nullable|string|max:255',
@@ -194,22 +273,35 @@ class DocumentController extends Controller
             'checklist' => 'nullable|array',
             'checklist.*' => 'nullable|in:pass,fail,na',
             'notes' => 'nullable|string',
-        ]);
+        ];
 
-        if (! empty($validated['template_id'])) {
-            $template = DocumentTemplate::query()->findOrFail($validated['template_id']);
-            if (! $template->is_active || $template->document_type !== $validated['document_type']) {
-                return back()->withInput()->withErrors([
-                    'template_id' => 'Choose an active template that matches the selected document type.',
-                ]);
-            }
+        if (! $allowTransfer) {
+            $rules['transfer_id'] = 'prohibited';
         }
 
-        $document = $documents->generate($asset, $validated['document_type'], $validated, $request->user());
+        return $request->validate($rules);
+    }
 
-        return redirect()
-            ->route('documents.preview', $document)
-            ->with('success', "Document {$document->document_number} generated.");
+    private function templateMatchesDocumentType(array $validated): bool
+    {
+        if (empty($validated['template_id'])) {
+            return true;
+        }
+
+        $template = DocumentTemplate::query()->findOrFail($validated['template_id']);
+
+        return $template->is_active && $template->document_type === $validated['document_type'];
+    }
+
+    private function authorizeDocumentView(Document $document): void
+    {
+        if ($document->asset_id === null) {
+            $this->authorize('viewAny', Asset::class);
+
+            return;
+        }
+
+        $this->authorize('view', $document->asset()->firstOrFail());
     }
 
     /**
@@ -217,7 +309,7 @@ class DocumentController extends Controller
      */
     public function preview(Document $document)
     {
-        $this->authorize('view', $document->asset()->firstOrFail());
+        $this->authorizeDocumentView($document);
 
         $document->load(['asset', 'transfer', 'generator']);
 
@@ -233,7 +325,7 @@ class DocumentController extends Controller
      */
     public function previewData(Document $document)
     {
-        $this->authorize('view', $document->asset()->firstOrFail());
+        $this->authorizeDocumentView($document);
 
         abort_unless($document->file_path && Storage::exists($document->file_path), 404);
 
@@ -251,7 +343,7 @@ class DocumentController extends Controller
      */
     public function download(Request $request, Document $document)
     {
-        $this->authorize('view', $document->asset()->firstOrFail());
+        $this->authorizeDocumentView($document);
 
         abort_unless($document->file_path && Storage::exists($document->file_path), 404);
 

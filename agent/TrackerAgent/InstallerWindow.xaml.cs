@@ -237,7 +237,6 @@ public partial class InstallerWindow : Window
 
     private Storyboard? _shimmerStoryboard;
 
-    /// <summary>Thread-safe progress report (called from the worker thread).</summary>
     /// <summary>
     /// Updates the status line without moving the progress bar, for a step that
     /// reports several sub-stages (copying an embedded installer, waiting for it).
@@ -247,15 +246,16 @@ public partial class InstallerWindow : Window
         StatusText.Text = detail;
     }
 
+    /// <summary>Thread-safe progress report (called from the worker thread).</summary>
     private void Report(int percent, string message)
     {
         Dispatcher.BeginInvoke(() =>
         {
             _targetProgress = Math.Clamp(percent, 0, 100);
             StatusText.Text = message;
-        UpdateInstallSteps(_targetProgress);
-    });
-}
+            UpdateInstallSteps(_targetProgress);
+        });
+    }
 
     /// <summary>Reflect the actual reported install phase in the visible checklist.</summary>
     private void UpdateInstallSteps(int percent, bool failed = false)
@@ -729,36 +729,7 @@ public partial class InstallerWindow : Window
                 _resolvedExePath = destExe;
             }
 
-            // Dependencies go in before the device registers, so the first
-            // heartbeat can already report the RustDesk id and the fleet page has
-            // a Remote button from the very first second.
-            //
-            // It runs under the generic "dependencies" heading on purpose: setup is
-            // an IT-managed install, and a step that names every third-party
-            // product only invites the person at the laptop to wonder what else is
-            // being put on it. The detail line says enough for IT to know.
             Report(44, "Memasang dependensi agent...");
-
-            try
-            {
-                RustDeskInstaller.TryInstall(stage => Dispatcher.Invoke(() => SetStepDetail(stage)));
-
-                // Nothing launches the client here on purpose. An unconfigured
-                // RustDesk shows its own window on the user's desktop - its id, a
-                // banner asking to install the service, and "Not ready. Please check
-                // your connection" - and that is precisely what a silent install must
-                // not put on screen. The server sends the rendezvous address, key and
-                // password with registration, and the agent applies them before the
-                // service is started, so the first time RustDesk runs it already
-                // points at our server.
-                RustDeskProvisioner.SilenceDesktopClient();
-            }
-            catch (Exception ex)
-            {
-                // A dependency is not worth failing the whole install over: the
-                // machine still reports inventory, which is the main job.
-                Debug.WriteLine($"RustDesk dependency skipped: {ex}");
-            }
 
             Report(46, "Membuat identitas perangkat...");
             var existingId = ReadRegistryString("DeviceId");
@@ -1009,14 +980,15 @@ public partial class InstallerWindow : Window
     {
         var elevated = TryInstallSystemTask(serverUrl, token, exePath);
 
+        // The SYSTEM task runs the daemon; the tray still needs its own per-user
+        // autostart so a logged-in user gets an icon and an "online" report after
+        // every reboot. Register it in both cases - never only when not elevated.
+        RegisterAutostart(exePath);
+
         if (elevated)
         {
             return;
         }
-
-        // Not elevated: keep the agent running and reporting. The SYSTEM task can
-        // be added later by reinstalling elevated, without touching the agent.
-        RegisterAutostart(exePath);
     }
 
     /// <summary>
@@ -2178,8 +2150,6 @@ public partial class InstallerWindow : Window
     {
         RegisterAutostart(_installedExe);
 
-        var trayIsRunning = false;
-
         try
         {
             using var searcher = new ManagementObjectSearcher(
@@ -2198,21 +2168,23 @@ public partial class InstallerWindow : Window
 
                 if (commandLine.Contains("--daemon", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (process["ProcessId"] is uint processId && processId != 0)
-                    {
-                        try
-                        {
-                            using var daemon = Process.GetProcessById((int)processId);
-                            daemon.Kill(entireProcessTree: true);
-                            daemon.WaitForExit(3000);
-                        }
-                        catch { }
-                    }
-
                     continue;
                 }
 
-                trayIsRunning = true;
+                // Kill any existing tray process from the old build so the new
+                // one can take over. A hidden tray has no window handle, so the
+                // MainWindowHandle check below would miss it and leave a stale
+                // process holding the single-instance mutex.
+                if (process["ProcessId"] is uint processId && processId != 0)
+                {
+                    try
+                    {
+                        using var stale = Process.GetProcessById((int)processId);
+                        stale.Kill(entireProcessTree: false);
+                        stale.WaitForExit(3000);
+                    }
+                    catch { }
+                }
             }
         }
         catch (Exception ex)
@@ -2220,16 +2192,11 @@ public partial class InstallerWindow : Window
             Debug.WriteLine($"Could not inspect running agent processes: {ex.Message}");
         }
 
-        if (!trayIsRunning)
-        {
-            Debug.WriteLine("[INSTALL] No tray running, starting detached tray...");
-            StartDetached(_installedExe, string.Empty);
-            Debug.WriteLine("[INSTALL] StartDetached called");
-        }
-        else
-        {
-            Debug.WriteLine("[INSTALL] Tray already running from installed exe");
-        }
+        // Always (re)start the tray after an update so the new build's process
+        // is the one reporting, instead of an old binary left running in memory.
+        Debug.WriteLine("[INSTALL] Starting tray with the newly installed build...");
+        StartDetached(_installedExe, string.Empty);
+        Debug.WriteLine("[INSTALL] StartDetached called");
     }
 
     /// <summary>Swap finished: report the version jump, then auto-close.</summary>

@@ -704,85 +704,6 @@ public static class AgentRunner
         }
     }
 
-    /// <summary>
-    /// Applies a RustDesk server, key and one-time password pushed by the server.
-    /// </summary>
-    /// <remarks>
-    /// Deliberately a typed command rather than a PowerShell script: the payload
-    /// carries a credential, and the generic script path writes the body to a file
-    /// on disk and may echo it into the command result. Here the password only
-    /// ever travels from the request into RustDesk's config file.
-    /// </remarks>
-    internal static bool RunRustDeskCommand(string url, string token, long commandId, JsonElement command)
-    {
-        try
-        {
-            if (!command.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
-            {
-                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
-                {
-                    ["message"] = "RustDesk payload was empty.",
-                });
-                return false;
-            }
-
-            string? Read(string name) =>
-                payload.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
-                    ? el.GetString()
-                    : null;
-
-            var server = Read("server");
-            var key = Read("key");
-            var password = Read("password");
-
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
-                {
-                    ["message"] = "RustDesk password was missing from the payload.",
-                });
-                return false;
-            }
-
-            var exe = RustDeskProvisioner.FindExecutable();
-
-            if (exe is null)
-            {
-                Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
-                {
-                    ["message"] = "RustDesk is not installed on this machine.",
-                });
-                return false;
-            }
-
-            Api.ReportProgress(url, token, commandId, 40, "Menulis konfigurasi RustDesk...");
-            var written = RustDeskProvisioner.Apply(server, key, password);
-
-            Api.ReportProgress(url, token, commandId, 75, "Menjalankan ulang layanan RustDesk...");
-            RustDeskProvisioner.TryRestartService(out var serviceMessage);
-
-            // The id is read back after the restart so the server learns the id of
-            // the service that is actually listening, not whatever was cached.
-            var id = HardwareCollector.ResolveRustDeskIdForReporting();
-
-            Api.Ack(url, token, commandId, "done", new Dictionary<string, string>
-            {
-                ["message"] = $"RustDesk configured in {written} profile(s). {serviceMessage}",
-                ["rustdesk_id"] = id ?? "",
-            });
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Api.Ack(url, token, commandId, "failed", new Dictionary<string, string>
-            {
-                ["message"] = "RustDesk configuration failed: " + ex.Message,
-            });
-            return false;
-        }
-    }
-
     internal static int RunScriptCommand(string url, string token, long commandId, JsonElement command)
     {
         try
@@ -1200,6 +1121,111 @@ public static class AgentRunner
         }
     }
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint WTSGetActiveConsoleSessionId();
+
+    [System.Runtime.InteropServices.DllImport("wtsapi32.dll", SetLastError = true)]
+    private static extern bool WTSQueryUserToken(uint sessionId, out IntPtr phToken);
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool CreateProcessAsUser(IntPtr hToken, string? lpApplicationName, string lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string? lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private struct STARTUPINFO
+    {
+        public int cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public int dwX;
+        public int dwY;
+        public int dwXSize;
+        public int dwYSize;
+        public int dwXCountChars;
+        public int dwYCountChars;
+        public int dwFillAttribute;
+        public int dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public int dwProcessId;
+        public int dwThreadId;
+    }
+
+    /// <summary>
+    /// Starts a tray process in the active user session when none is running,
+    /// so a service-only machine still reports "online" with a visible icon.
+    /// </summary>
+    private static void TryLaunchTrayInActiveSession()
+    {
+        try
+        {
+            // If any non-daemon TrackerAgent is already running, a tray exists.
+            foreach (var proc in Process.GetProcessesByName("TrackerAgent"))
+            {
+                try
+                {
+                    using var mgmt = new System.Management.ManagementObjectSearcher(
+                        $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {proc.Id}");
+                    foreach (var o in mgmt.Get())
+                    {
+                        var cmd = o["CommandLine"]?.ToString() ?? string.Empty;
+                        if (!cmd.Contains("--daemon", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return;
+                        }
+                    }
+                }
+                catch { }
+                finally { proc.Dispose(); }
+            }
+
+            var sessionId = WTSGetActiveConsoleSessionId();
+            if (sessionId == 0xFFFFFFFF || sessionId == 0)
+            {
+                return;
+            }
+
+            if (!WTSQueryUserToken(sessionId, out var token))
+            {
+                return;
+            }
+
+            var exe = SelfBinaryPath();
+            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+            {
+                CloseHandle(token);
+                return;
+            }
+
+            var si = new STARTUPINFO { cb = System.Runtime.InteropServices.Marshal.SizeOf<STARTUPINFO>(), lpDesktop = "winsta0\\default" };
+            if (CreateProcessAsUser(token, exe, string.Empty, IntPtr.Zero, IntPtr.Zero, false, 0x00000020, IntPtr.Zero, Path.GetDirectoryName(exe), ref si, out var pi))
+            {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+
+            CloseHandle(token);
+        }
+        catch
+        {
+            // Best effort only.
+        }
+    }
+
     /// <summary>
     /// Whether a UAC request from this process is still worth showing: not
     /// elevated already, and an installed binary to relaunch.
@@ -1525,6 +1551,13 @@ public static class AgentRunner
                 {
                     SendHeartbeat(url, token, assetId);
 
+                    // Keep a tray visible in the logged-in user's session even on a
+                    // service-only machine, so Live Fleet reads "online" instead of
+                    // "service active · tray not detected" and the operator has an
+                    // icon to click. Best effort: no active session means nobody is
+                    // logged in yet, and the tray autostart covers the next logon.
+                    TryLaunchTrayInActiveSession();
+
                     // Mark this daemon alive so a user-session tray stands down.
                     // A SYSTEM process and a user process cannot see each other's
                     // session-local mutex, so this file is the only signal that
@@ -1670,13 +1703,6 @@ public static class AgentRunner
                             Api.ReportProgress(url, token, id, 10, "Preparing script...");
                             var scriptExitCode = RunScriptCommand(url, token, id, cmd);
                             Console.WriteLine($"[OK] Command #{id} script -> {(scriptExitCode == 0 ? "done" : "failed")}");
-                        }
-                        else if (command == "rustdesk")
-                        {
-                            Console.WriteLine($"[*] Command #{id} rustdesk received. Applying configuration...");
-                            Api.ReportProgress(url, token, id, 10, "Menerapkan konfigurasi RustDesk...");
-                            var rustDeskOk = RunRustDeskCommand(url, token, id, cmd);
-                            Console.WriteLine($"[OK] Command #{id} rustdesk -> {(rustDeskOk ? "done" : "failed")}");
                         }
                         else if (command == "power")
                         {

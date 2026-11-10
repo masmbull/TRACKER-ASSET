@@ -6,11 +6,55 @@
 <x-page-header title="Documents" subtitle="Every generated FAT, BAST and handover record across all assets.">
     <x-slot:actions>
         <div class="flex flex-wrap gap-2">
+            @if($canGenerate)
+                <button type="button" @click="$dispatch('open-modal', 'create-document-modal')" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-medium text-white transition hover:bg-brand-600">
+                    Create Document
+                </button>
+            @endif
             <x-button variant="secondary" size="sm" :href="route('templates.index')">Templates</x-button>
             <span class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 text-theme-xs font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ number_format($totalDocuments) }} created</span>
         </div>
     </x-slot:actions>
 </x-page-header>
+
+@if($canGenerate)
+    <x-modal id="create-document-modal" title="Create document" maxWidth="lg">
+        <div class="grid gap-4 md:grid-cols-2">
+            <section class="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                <div>
+                    <h2 class="text-theme-sm font-semibold text-gray-800 dark:text-white">Blank document</h2>
+                    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Enter asset, recipient, and handover details manually.</p>
+                </div>
+                <a href="{{ route('documents.generate.blank') }}" class="mt-auto inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-medium text-white transition hover:bg-brand-600">
+                    Create blank document
+                </a>
+            </section>
+
+            <section class="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                <div>
+                    <h2 class="text-theme-sm font-semibold text-gray-800 dark:text-white">Use an existing asset</h2>
+                    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Asset details will be prefilled from the register.</p>
+                </div>
+                @if($assets->isNotEmpty())
+                    <form method="GET" action="{{ route('documents.create-new') }}" class="mt-auto space-y-3">
+                        <div>
+                            <label for="document-asset" class="mb-1.5 block text-theme-xs font-medium text-gray-700 dark:text-gray-300">Asset</label>
+                            <select id="document-asset" name="asset_id" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                                <option value="">Select an asset</option>
+                                @foreach($assets as $assetOption)
+                                    <option value="{{ $assetOption->asset_id }}">{{ $assetOption->asset_id }} · {{ trim(($assetOption->brand ?? '').' '.($assetOption->model ?? '')) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <x-button type="submit" variant="primary">Continue</x-button>
+                    </form>
+                @else
+                    <p class="mt-auto text-theme-xs text-gray-500 dark:text-gray-400">No assets are available yet.</p>
+                @endif
+            </section>
+        </div>
+    </x-modal>
+@endif
 
 {{--
     The Documents tab on an asset answers "what does this one asset have?".
@@ -97,15 +141,13 @@
             {{ $documents->links() }}
         </div>
     @else
-        {{-- A generated document always belongs to an asset, so an empty list
-             means the register has not had one produced yet. Saying "No documents
-             found." would read as a broken filter. --}}
+        {{-- An empty list means no documents match the current filters. --}}
         <div class="py-8 text-center">
             <p class="text-theme-sm text-gray-400">
                 {{ ($search !== '' || $type) ? 'No documents match this filter.' : 'No documents yet.' }}
             </p>
             @unless($search !== '' || $type)
-                <p class="mt-1 text-theme-xs text-gray-400">Use a template to start a document, or open an asset and choose its Documents tab. Generated records will remain listed here.</p>
+                <p class="mt-1 text-theme-xs text-gray-400">Create a blank document or open an asset and choose its Documents tab. Generated records will remain listed here.</p>
             @endunless
         </div>
     @endif

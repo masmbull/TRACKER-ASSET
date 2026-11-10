@@ -57,7 +57,10 @@
 </style>
 </head>
 <body>
-@php($logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/mito-logo-pdf.png'))))
+@php
+    $logoPath = $document['company_logo'] ?? null;
+    $logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path($logoPath ?? 'images/mito-logo-pdf.png')));
+@endphp
 <div class="letterhead">
     <table>
         <tr>

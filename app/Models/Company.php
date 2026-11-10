@@ -11,7 +11,7 @@ class Company extends Model
 {
     use HasFactory, NormalizesName;
 
-    protected $fillable = ['name', 'code', 'address', 'status'];
+    protected $fillable = ['name', 'code', 'address', 'status', 'logo'];
 
     public function assets(): HasMany
     {

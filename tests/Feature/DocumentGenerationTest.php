@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\Location;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -36,6 +37,127 @@ class DocumentGenerationTest extends TestCase
         $this->asset = Asset::factory()->create();
     }
 
+    public function test_documents_page_offers_blank_and_existing_asset_choices(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)
+            ->get(route('documents.index'))
+            ->assertOk()
+            ->assertSee('Create blank document')
+            ->assertSee($this->asset->asset_id);
+    }
+
+    public function test_existing_asset_selection_redirects_to_the_prefilled_form(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)
+            ->get(route('documents.create-new', ['asset_id' => $this->asset->asset_id]))
+            ->assertRedirect(route('documents.generate', $this->asset));
+    }
+
+    public function test_existing_asset_selection_rejects_an_unknown_asset_id(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->from(route('documents.index'))
+            ->actingAs($support)
+            ->get(route('documents.create-new', ['asset_id' => 'UNKNOWN-ASSET']))
+            ->assertRedirect(route('documents.index'))
+            ->assertSessionHasErrors('asset_id');
+    }
+
+    public function test_blank_document_form_accepts_manual_asset_details_and_creates_unlinked_pdf(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)
+            ->get(route('documents.generate.blank'))
+            ->assertOk()
+            ->assertSee('Dokumen kosong')
+            ->assertSee('name="asset_os_version"', false)
+            ->assertSee('name="asset_storage_type"', false)
+            ->assertSee('enctype="multipart/form-data"', false);
+
+        $response = $this->actingAs($support)->post(route('documents.generate.blank.store'), [
+            'document_type' => 'FAT',
+            'sender_entity' => 'Test Co',
+            'signatory_menyerahkan' => 'Andi',
+            'receiver_entity' => 'Test Co',
+            'signatory_menerima' => 'Budi',
+            'asset_type' => 'Laptop',
+            'asset_brand_model' => 'Dell Latitude',
+            'asset_serial_number' => 'SN-001',
+            'asset_tag' => 'MANUAL-001',
+            'asset_processor' => 'Intel Core i5',
+            'asset_ram' => '16 GB',
+            'asset_storage' => '512 GB SSD',
+            'asset_storage_type' => 'NVMe',
+            'asset_storage_capacity' => '512 GB',
+            'asset_os_version' => 'Windows 11 Pro',
+        ]);
+
+        $document = Document::firstOrFail();
+
+        $response->assertRedirect(route('documents.preview', $document));
+        $this->assertNull($document->asset_id);
+        $this->assertSame('MANUAL-001', $document->payload['asset']['tag']);
+        $this->assertSame('Windows 11 Pro', $document->payload['asset']['os_version']);
+        $this->assertSame('NVMe', $document->payload['asset']['storage_type_detail']);
+        $this->assertSame('Andi', $document->payload['parties']['sender']['name']);
+        $this->assertModelExists($document);
+        Storage::assertExists($document->file_path);
+
+        $this->actingAs($support)
+            ->get(route('documents.preview', $document))
+            ->assertOk()
+            ->assertSee($document->title);
+
+        $this->actingAs($support)
+            ->get(route('documents.preview.data', $document))
+            ->assertOk()
+            ->assertJsonPath('title', $document->title);
+
+        $this->actingAs($support)
+            ->get(route('documents.download', $document))
+            ->assertOk();
+    }
+
+    public function test_uploaded_signature_is_stored_with_the_generated_document(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+        $signature = UploadedFile::fake()->createWithContent(
+            'signature.png',
+            file_get_contents(public_path('images/mito-logo-pdf.png'))
+        );
+
+        $this->actingAs($support)
+            ->post(route('documents.generate.store', $this->asset), [
+                'document_type' => 'FAT',
+                'signatory_image' => $signature,
+            ])
+            ->assertRedirect();
+
+        $document = Document::firstOrFail();
+
+        $this->assertIsString($document->signature_image);
+        $this->assertSame($document->signature_image, $document->payload['signature_image']);
+        Storage::disk('local')->assertExists($document->signature_image);
+        Storage::disk('local')->assertExists($document->file_path);
+    }
+
+    public function test_viewer_cannot_generate_a_blank_document(): void
+    {
+        $viewer = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($viewer)
+            ->post(route('documents.generate.blank.store'), ['document_type' => 'FAT'])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('documents', 0);
+    }
+
     /**
      * The document type is in the URL because the form is not the same form for
      * every type. It used to be ignored, so linking straight to a BAST produced a
@@ -48,7 +170,11 @@ class DocumentGenerationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']))
             ->assertOk()
-            ->assertSee('<option value="BAST" selected>', false);
+            ->assertSee('value="BAST" data-handover-label="Tanggal Pengembalian"', false)
+            ->assertSee('data-kelengkapan-type="BAST"', false)
+            ->assertSee('data-checklist-type="FAT" hidden', false)
+            ->assertSee('id="handover-date-label"', false)
+            ->assertSee('Tanggal Pengembalian');
     }
 
     public function test_document_date_fields_use_date_pickers_without_forcing_optional_dates(): void

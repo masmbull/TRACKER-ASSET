@@ -44,6 +44,17 @@ class AuditApiController extends Controller
 
         $payload = $request->validate($this->telemetryValidationRules());
 
+        // The device's MAC, kept on the token rather than only in the telemetry
+        // row.
+        //
+        // Wake on LAN addresses the NIC, and a NIC is asleep exactly when the
+        // telemetry row is stale - so the reading that makes a machine
+        // wakeable has to outlive the heartbeat that carried it. The agent
+        // already sends its MAC on every heartbeat (the collector reads it for
+        // the audit), but the field had no validation rule, so Laravel dropped
+        // it from the payload and it never reached the database at all.
+        $this->rememberMacAddress($request, $payload);
+
         $telemetry = AgentTelemetry::where('agent_token_id', $request->attributes->get('agent_token_id'))->first();
 
         if (! $telemetry) {
@@ -58,18 +69,6 @@ class AuditApiController extends Controller
 
         $telemetry->fill($this->telemetryDelta($request, $payload, $telemetry));
         $telemetry->save();
-
-        // The device's MAC, kept on the token rather than only in the telemetry
-        // row.
-        //
-        // Wake on LAN addresses the NIC, and a NIC is asleep exactly when the
-        // telemetry row is stale - so the reading that makes a machine
-        // wakeable has to outlive the heartbeat that carried it. The agent
-        // already sends its MAC on every heartbeat (the collector reads it for
-        // the audit), but the field had no validation rule, so Laravel dropped
-        // it from the payload and it never reached the database at all.
-        $this->rememberMacAddress($request, $payload);
-        $this->rememberRustdeskId($request, $payload);
 
         return response()->json([
             'ok' => true,
@@ -99,23 +98,6 @@ class AuditApiController extends Controller
         }
 
         $token->mac_address = $reported;
-        $token->save();
-    }
-
-    private function rememberRustdeskId(Request $request, array $payload): void
-    {
-        $reported = trim((string) ($payload['rustdesk_id'] ?? ''));
-        if ($reported === '') {
-            return;
-        }
-
-        $token = AgentApiToken::find($request->attributes->get('agent_token_id'));
-        if (! $token || $token->rustdesk_id === $reported) {
-            return;
-        }
-
-        $token->rustdesk_id = $reported;
-        $token->rustdesk_reported_at = now();
         $token->save();
     }
 
@@ -218,7 +200,6 @@ class AuditApiController extends Controller
             // and the only thing that makes a sleeping laptop wakeable over
             // the network - see rememberMacAddress().
             'mac_address' => 'nullable|string|max:255',
-            'rustdesk_id' => 'nullable|string|max:64',
             'logged_in_user' => 'nullable|string|max:255',
             'is_elevated' => 'nullable|boolean',
             'agent_mode' => 'nullable|string|in:tray,service,unknown',
@@ -248,7 +229,6 @@ class AuditApiController extends Controller
             'serial_number' => 'nullable|string|max:255',
             'hostname' => 'nullable|string|max:255',
             'mac_address' => 'nullable|string|max:255',
-            'rustdesk_id' => 'nullable|string|max:64',
             'brand' => 'nullable|string|max:255',
             'model' => 'nullable|string|max:255',
             'processor' => 'nullable|string|max:255',
@@ -325,10 +305,7 @@ class AuditApiController extends Controller
         // snapshot feeds the Live Fleet view.
         $this->recordTelemetry($asset, $payload);
 
-        // A full scan carries the same device-level identifiers as a heartbeat,
-        // so store them on the token too instead of waiting for the next ping.
         $this->rememberMacAddress($request, $payload);
-        $this->rememberRustdeskId($request, $payload);
 
         return response()->json([
             'asset' => $asset->asset_id,

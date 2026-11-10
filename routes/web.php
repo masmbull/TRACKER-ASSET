@@ -107,6 +107,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/assets/{asset}/documents/generate', [DocumentController::class, 'generate'])->name('documents.generate');
     Route::post('/assets/{asset}/documents/generate', [DocumentController::class, 'storeGenerated'])->name('documents.generate.store');
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
+    Route::get('/documents/create', [DocumentController::class, 'createFromIndex'])->name('documents.create-new');
+    Route::get('/documents/create/blank', [DocumentController::class, 'generateBlank'])->name('documents.generate.blank');
+    Route::post('/documents/create/blank', [DocumentController::class, 'storeBlank'])->name('documents.generate.blank.store');
     Route::get('/documents/{document}', [DocumentController::class, 'preview'])->name('documents.preview');
     Route::get('/documents/{document}/preview-data', [DocumentController::class, 'previewData'])->name('documents.preview.data');
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
@@ -171,12 +174,6 @@ Route::post('/agent/{token}/delete', [AgentFleetController::class, 'destroy'])->
         // A .rdp file the browser hands to the operator. It only reads, so it
         // is a GET - the browser downloads it and Windows opens it.
         Route::get('/agent/{token}/rdp', [AgentFleetController::class, 'remoteDesktop'])->name('agent.rdp');
-
-        // Starts a remote session. POST, not GET: it mints a new password and
-        // rotates the one on the device, so a link that a browser or a proxy
-        // might prefetch must not be able to trigger it.
-        Route::post('/agent/{token}/remote', [AgentFleetController::class, 'remote'])->name('agent.remote');
-        Route::post('/agent/{token}/remote/rotate', [AgentFleetController::class, 'rotateRemotePassword'])->name('agent.remote.rotate');
 
         // Polled by the progress modal while an action runs. Declared before the
         // token-scoped routes for the same reason as the others: "commands" must
@@ -249,4 +246,3 @@ Route::post('/agent/{token}/delete', [AgentFleetController::class, 'destroy'])->
         Route::get('/ike-bast/inspection/{session}/print', [IkeBastInspectionController::class, 'print'])->name('ike-bast.inspection.print');
     });
 });
-
