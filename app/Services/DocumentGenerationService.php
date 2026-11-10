@@ -8,6 +8,7 @@ use App\Models\AssetTransfer;
 use App\Models\Document;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,8 +18,8 @@ use Illuminate\Support\Str;
 /**
  * Generates FAT/BAST/etc. documents from asset and transfer data (PRD §32–§35).
  *
- * No manual copy/paste: every field is populated from the register. The payload
- * is persisted so the document can be re-rendered at any time.
+ * Register-backed and manually entered fields are persisted so a document can
+ * be reproduced from the saved payload.
  */
 class DocumentGenerationService
 {
@@ -27,17 +28,17 @@ class DocumentGenerationService
     /**
      * Create the document record plus its PDF, atomically.
      */
-    public function generate(Asset $asset, string $type, array $input, ?User $actor = null): Document
+    public function generate(?Asset $asset, string $type, array $input, ?User $actor = null): Document
     {
         $type = Str::upper(trim($type));
 
         abort_unless(in_array($type, (array) config('documents.types', []), true), 422, "Unsupported document type: {$type}");
 
-        $asset->loadMissing(['company', 'category', 'location', 'status', 'currentUser']);
+        $asset?->loadMissing(['company', 'category', 'location', 'status', 'currentUser']);
 
         $transfer = null;
 
-        if (! empty($input['transfer_id'])) {
+        if ($asset && ! empty($input['transfer_id'])) {
             $transfer = $asset->transfers()->find((int) $input['transfer_id']);
         }
 
@@ -48,16 +49,25 @@ class DocumentGenerationService
             $fileName = Str::slug($number).'.pdf';
             $relativePath = trim((string) config('documents.storage_path', 'documents'), '/').'/'.$fileName;
 
-            Storage::put($relativePath, $this->renderPdf($type, $payload, $number, $input));
-
             $signaturePath = null;
-            if (! empty($input['signatory_image']) && $input['signatory_image'] instanceof UploadedFile) {
-                $sigName = 'signatures/'.Str::slug($number).'-'.Str::random(8).'.'.$input['signatory_image']->extension();
-                $signaturePath = Storage::put($sigName, $input['signatory_image']);
+            $signatureImageData = null;
+            if (($input['signatory_image'] ?? null) instanceof UploadedFile) {
+                $signatureImage = $input['signatory_image'];
+                $signaturePath = 'signatures/'.Str::slug($number).'-'.Str::random(8).'.'.$signatureImage->extension();
+
+                if (! Storage::put($signaturePath, $signatureImage)) {
+                    throw new \RuntimeException('Unable to store the uploaded signature image.');
+                }
+
+                $signatureImageData = 'data:'.$signatureImage->getMimeType().';base64,'.base64_encode($signatureImage->get());
+            }
+
+            if (! Storage::put($relativePath, $this->renderPdf($type, $payload, $number, $signatureImageData))) {
+                throw new \RuntimeException('Unable to store the generated document.');
             }
 
             $document = Document::create([
-                'asset_id' => $asset->id,
+                'asset_id' => $asset?->id,
                 'transfer_id' => $transfer?->id,
                 'document_type' => $type,
                 'document_number' => $number,
@@ -79,7 +89,10 @@ class DocumentGenerationService
                 'entity_type' => 'documents',
                 'entity_id' => $document->id,
                 'entity_identifier' => $document->document_number,
-                'new_value' => json_encode(['type' => $type, 'asset' => $asset->asset_id]),
+                'new_value' => json_encode([
+                    'type' => $type,
+                    'asset' => $asset?->asset_id ?? ($input['asset_tag'] ?? null),
+                ]),
                 'source' => 'Document',
             ]);
 
@@ -88,9 +101,9 @@ class DocumentGenerationService
     }
 
     /**
-     * Everything the document needs, populated from the register (PRD §32).
+     * Everything the document needs, filled from the register or form input.
      */
-    public function buildPayload(Asset $asset, string $type, array $input, ?AssetTransfer $transfer): array
+    public function buildPayload(?Asset $asset, string $type, array $input, ?AssetTransfer $transfer): array
     {
         // Dates are rendered in Indonesian on the face of the document. The paper
         // form writes "14 September 2026"; the PDF used to print the raw ISO
@@ -101,39 +114,39 @@ class DocumentGenerationService
 
         return [
             'type' => $type,
-            'title' => $this->titleFor($type, $asset),
+            'title' => $this->titleFor($type, $asset, $input),
             'template_id' => $input['template_id'] ?? null,
             'date' => $input['document_date'] ?? now()->toDateString(),
             'date_long' => $this->longDate($input['document_date'] ?? now()->toDateString()),
             'asset' => [
-                'asset_id' => $asset->asset_id,
-                'category' => $asset->category?->name,
-                'brand' => $asset->brand,
-                'model' => $asset->model,
-                'serial_number' => $asset->serial_number,
-                'hostname' => $asset->hostname,
-                'processor' => $asset->processor,
-                'ram' => $asset->ram,
-                'storage' => $asset->storage,
-                'storage_type' => $asset->storage_type,
-                'storage_capacity' => $asset->storage_capacity,
-                'os_version' => $asset->os_version,
-                'status' => $asset->status?->name,
-                'type' => $input['asset_type'] ?? $asset->category?->name,
-                'brand_model' => $input['asset_brand_model'] ?? trim(($asset->brand ?? '').' '.($asset->model ?? '')),
-                'serial' => $input['asset_serial_number'] ?? $asset->serial_number,
-                'tag' => $input['asset_tag'] ?? $asset->asset_id,
-                'processor_detail' => $input['asset_processor'] ?? $asset->processor,
-                'ram_detail' => $input['asset_ram'] ?? $asset->ram,
-                'storage_detail' => $input['asset_storage'] ?? $asset->storage,
-                'storage_type_detail' => $input['asset_storage_type'] ?? $asset->storage_type,
-                'storage_capacity_detail' => $input['asset_storage_capacity'] ?? $asset->storage_capacity,
+                'asset_id' => $input['asset_tag'] ?? $asset?->asset_id,
+                'category' => $asset?->category?->name,
+                'brand' => $asset?->brand,
+                'model' => $asset?->model,
+                'serial_number' => $asset?->serial_number,
+                'hostname' => $asset?->hostname,
+                'processor' => $asset?->processor,
+                'ram' => $asset?->ram,
+                'storage' => $asset?->storage,
+                'storage_type' => $input['asset_storage_type'] ?? $asset?->storage_type,
+                'storage_capacity' => $input['asset_storage_capacity'] ?? $asset?->storage_capacity,
+                'os_version' => $input['asset_os_version'] ?? $asset?->os_version,
+                'status' => $asset?->status?->name,
+                'type' => $input['asset_type'] ?? $asset?->category?->name,
+                'brand_model' => $input['asset_brand_model'] ?? trim(($asset?->brand ?? '').' '.($asset?->model ?? '')),
+                'serial' => $input['asset_serial_number'] ?? $asset?->serial_number,
+                'tag' => $input['asset_tag'] ?? $asset?->asset_id,
+                'processor_detail' => $input['asset_processor'] ?? $asset?->processor,
+                'ram_detail' => $input['asset_ram'] ?? $asset?->ram,
+                'storage_detail' => $input['asset_storage'] ?? $asset?->storage,
+                'storage_type_detail' => $input['asset_storage_type'] ?? $asset?->storage_type,
+                'storage_capacity_detail' => $input['asset_storage_capacity'] ?? $asset?->storage_capacity,
                 'accessories' => $input['asset_accessories'] ?? null,
             ],
-            'company' => $asset->company?->name,
-            'company_logo' => $asset->company?->logo,
-            'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
-            'current_user' => $asset->currentUser?->name,
+            'company' => $asset?->company?->name,
+            'company_logo' => $asset?->company?->logo,
+            'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset?->location?->name,
+            'current_user' => $asset?->currentUser?->name,
             'parties' => $this->partiesForPayload($asset, $input, $transfer, $type),
             'transfer' => $transfer ? [
                 'number' => $transfer->transfer_number,
@@ -172,7 +185,6 @@ class DocumentGenerationService
             'kelengkapan' => $this->kelengkapanFor($type, $input),
             'notes' => $input['notes'] ?? null,
             'statement' => $input['statement'] ?? $this->statementFor($type),
-            'signature_image' => $input['signatory_image'] ?? null,
         ];
     }
 
@@ -248,8 +260,12 @@ class DocumentGenerationService
      *
      * @return array{sender: ?User, receiver: ?User}
      */
-    public function partiesFor(Asset $asset, string $type, ?AssetTransfer $transfer = null): array
+    public function partiesFor(?Asset $asset, string $type, ?AssetTransfer $transfer = null): array
     {
+        if (! $asset) {
+            return ['sender' => null, 'receiver' => null];
+        }
+
         $itPic = $asset->adminItPic;
 
         // Read from the assignment history, not from assets.current_user_id. The two
@@ -278,7 +294,7 @@ class DocumentGenerationService
         ];
     }
 
-    private function partiesForPayload(Asset $asset, array $input, ?AssetTransfer $transfer, string $type): array
+    private function partiesForPayload(?Asset $asset, array $input, ?AssetTransfer $transfer, string $type): array
     {
         ['sender' => $senderUser, 'receiver' => $receiverUser] = $this->partiesFor($asset, $type, $transfer);
 
@@ -296,7 +312,7 @@ class DocumentGenerationService
                 // signed by people and a proxy has to be able to say so.
                 'name' => $input['signatory_menyerahkan'] ?? $senderUser?->name,
                 'employee_id' => $input['sender_employee_id'] ?? $senderUser?->employee_id,
-                'entity' => $input['sender_entity'] ?? $asset->company?->name,
+                'entity' => $input['sender_entity'] ?? $asset?->company?->name,
                 'division' => $input['sender_division'] ?? $senderUser?->department,
                 'email' => $input['sender_email'] ?? $senderUser?->email,
                 'phone' => $input['sender_phone'] ?? null,
@@ -309,8 +325,8 @@ class DocumentGenerationService
                 // better guess than a blank on a signed document. Location is a
                 // separate field now that "Company / Jakarta" is no longer mashed
                 // into one string.
-                'entity' => $input['receiver_entity'] ?? $transfer?->toLocation?->name ?? $asset->company?->name,
-                'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset->location?->name,
+                'entity' => $input['receiver_entity'] ?? $transfer?->toLocation?->name ?? $asset?->company?->name,
+                'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset?->location?->name,
                 'division' => $input['receiver_division'] ?? $division,
                 'email' => $input['receiver_email'] ?? $receiverUser?->email,
                 'phone' => $input['receiver_phone'] ?? null,
@@ -318,10 +334,13 @@ class DocumentGenerationService
         ];
     }
 
-    private function renderPdf(string $type, array $payload, string $number, array $input): string
+    private function renderPdf(string $type, array $payload, string $number, ?string $signatureImageData): string
     {
         return Pdf::loadView($this->viewFor($type), [
-            'document' => $payload + ['number' => $number],
+            'document' => $payload + [
+                'number' => $number,
+                'signature_image_data' => $signatureImageData,
+            ],
         ])->setPaper('a4')->output();
     }
 
@@ -334,11 +353,12 @@ class DocumentGenerationService
         };
     }
 
-    private function titleFor(string $type, Asset $asset): string
+    private function titleFor(string $type, ?Asset $asset, array $input): string
     {
         $label = config('documents.labels.'.$type, $type);
+        $assetTag = $input['asset_tag'] ?? $asset?->asset_id;
 
-        return "{$label} — {$asset->asset_id}";
+        return filled($assetTag) ? "{$label} — {$assetTag}" : $label;
     }
 
     /**

@@ -103,30 +103,6 @@
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
 
-                        // Remote readiness, from what actually decides it.
-                        //
-                        // Computed once per device here because two places use it:
-                        // the Remote column and the Remote action. It used to show
-                        // Windows RDP, which has nothing to do with our remote
-                        // access - RustDesk dials its own rendezvous server on 21116
-                        // and never touches RDP. A device reading "RDP Off" could be
-                        // perfectly reachable, and one reading "RDP On" could have no
-                        // RustDesk id at all.
-                        //
-                        // Three facts decide it: the agent has an id (RustDesk is
-                        // installed and registered), it is elevated (the client can
-                        // accept a session), and it has reported recently.
-                        $remoteId = $device->rustdesk_id;
-                        $remoteElevated = ($telemetry?->is_elevated ?? $fp?->is_elevated) === true;
-                        $remoteOnline = $telemetry?->reported_at !== null
-                            && $telemetry->reported_at->gt(now()->subMinutes(3));
-
-                        $remoteReady = filled($remoteId) && $remoteElevated && $remoteOnline;
-                        $remoteReason = ! filled($remoteId)
-                            ? 'RustDesk belum melaporkan ID'
-                            : (! $remoteElevated
-                                ? 'Agent belum elevated'
-                                : (! $remoteOnline ? 'Perangkat offline' : 'Siap'));
                     @endphp
                     <tr class="border-b border-gray-100 bg-white/60 hover:bg-gray-50 dark:border-gray-800 dark:bg-[#1d2939]/50 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
                         <td class="py-3 px-3">
@@ -246,15 +222,8 @@
                                 <span class="text-gray-400">—</span>
                             @endif
                         </td>
-                        <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-remote title="{{ $remoteReason }}">
-                            @if($remoteReady)
-                                <span class="inline-flex items-center gap-1 font-medium text-success-600 dark:text-success-400"><x-icon name="remote" class="h-3.5 w-3.5" /> Remote Ready</span>
-                            @elseif(filled($remoteId))
-                                <span class="font-medium text-warning-600 dark:text-warning-400">Remote Idle</span>
-                                <span class="block text-theme-xs text-gray-400">{{ $remoteReason }}</span>
-                            @else
-                                <span class="text-gray-400" title="RustDesk belum terpasang atau belum mendaftar">Remote —</span>
-                            @endif
+                        <td class="py-3 px-3 text-theme-sm text-gray-500 dark:text-gray-400">
+                            —
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
                             @php
@@ -327,23 +296,6 @@
                                             @csrf
                                             <x-row-action type="submit" icon="wake" title="Send Wake on LAN magic packet">Wake</x-row-action>
                                         </form>
-                                    @endif
-                                    {{-- One Remote button. RDP and the .rdp
-                                         download were two doors to the same room,
-                                         and neither worked on a machine with RDP
-                                         off or behind a NAT. RustDesk works in
-                                         both cases, and it is what the installer
-                                         provisions, so it is the only door left.
-                                         Enabled only when the id is known and the
-                                         agent is elevated: without either, the
-                                         session would fail after the click. --}}
-                                    @if(filled($device->rustdesk_id))
-                                        <button type="button"
-                                                onclick="window.dispatchEvent(new CustomEvent('open-remote', { detail: { id: {{ $device->id }} } }))"
-                                                class="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-theme-xs font-semibold leading-none whitespace-nowrap transition duration-150 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
-                                                title="Buka sesi remote RustDesk">
-                                            <x-icon name="remote" class="h-3.5 w-3.5 shrink-0" /> Remote
-                                        </button>
                                     @endif
                                     <x-row-action icon="power" @click="$dispatch('open-modal', 'power-agent-{{ $device->id }}')">Power</x-row-action>
                                     <form method="POST" action="{{ route('agent.scan', $device) }}" data-modal-action class="inline-flex">
@@ -428,13 +380,6 @@
                                     <x-badge variant="warning" :dot="true">uninstall queued</x-badge>
                                 @else
                                     <x-row-action variant="danger" icon="trash" @click="$dispatch('open-modal', 'uninstall-agent-{{ $device->id }}')">Uninstall</x-row-action>
-                                @endif
-                                @if($device->rustdesk_id)
-                                    <a href="rustdesk://{{ $device->rustdesk_id }}?password={{ $device->rustdesk_password }}"
-                                       target="_blank" rel="noopener"
-                                       class="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-theme-xs font-semibold leading-none whitespace-nowrap transition duration-150 ease-out hover:-translate-y-px hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25">
-                                        <x-icon name="remote" class="h-3.5 w-3.5 shrink-0" /> Remote
-                                    </a>
                                 @endif
                                 <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                             </div>
@@ -736,9 +681,6 @@
                         <x-badge variant="error" :dot="true">revoked</x-badge>
                     </td>
                     <td class="py-3 px-4">
-                        @if($device->rustdesk_id)
-                            <x-row-action variant="info" icon="remote" href="rustdesk://{{ $device->rustdesk_id }}" title="Remote via RustDesk (self-hosted)">Remote</x-row-action>
-                        @endif
                         <x-row-action variant="danger" icon="trash" @click.stop="$dispatch('open-modal', 'delete-agent-{{ $device->id }}')">Delete</x-row-action>
                     </td>
                 </tr>
@@ -850,181 +792,6 @@
     @endif
 @endforeach
 
-{{--
-    Remote session launcher.
-
-    One modal for the whole page rather than one per row: the session is a single
-    global action, and duplicating the markup N times would put N copies of the
-    polling script in the document.
-
-    The flow is deliberately short - click Remote, a password is issued, RustDesk
-    opens with everything filled in. The operator never types or copies anything.
---}}
-<div x-data="remoteSession()"
-     x-on:open-remote.window="start($event.detail.id)"
-     x-on:keydown.escape.window="close()">
-
-    <template x-teleport="body">
-        <div x-show="open" x-cloak class="fixed inset-0 z-[9998] flex items-center justify-center p-4">
-            <div class="absolute inset-0 bg-gray-950/70 backdrop-blur-sm"
-                 x-show="open"
-                 x-transition:enter="transition duration-200 ease-out"
-                 x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-                 x-transition:leave="transition duration-150 ease-in"
-                 x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-                 @click="close()"></div>
-
-            <div class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10 dark:bg-gray-900 dark:ring-white/10"
-                 x-show="open"
-                 x-transition:enter="transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                 x-transition:enter-start="opacity-0 translate-y-4 scale-[0.97]"
-                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                 x-transition:leave="transition duration-200 ease-in"
-                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                 x-transition:leave-end="opacity-0 translate-y-2 scale-[0.98]">
-
-                <div class="flex items-start gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
-                        <x-icon name="remote" class="h-5 w-5" />
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="text-base font-semibold text-gray-900 dark:text-white">Sesi Remote</h3>
-                        <p class="mt-0.5 truncate text-theme-xs text-gray-500 dark:text-gray-400" x-text="device"></p>
-                    </div>
-                </div>
-
-                <div class="px-6 py-5">
-                    <div x-show="stage === 'working'" class="flex items-center gap-3">
-                        <div class="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-brand-500"></div>
-                        <p class="text-theme-sm text-gray-600 dark:text-gray-300" x-text="step"></p>
-                    </div>
-
-                    <p x-show="stage === 'error'" class="text-theme-sm text-error-600 dark:text-error-400" x-text="message"></p>
-
-                    <div x-show="stage === 'ready'" class="space-y-3">
-                        <p class="text-theme-sm text-gray-600 dark:text-gray-300">
-                            RustDesk akan terbuka dan langsung terhubung. Jika browser menanyakan izin
-                            membuka aplikasi, pilih <strong>Buka</strong>.
-                        </p>
-                        <a :href="uri" class="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-semibold text-white transition hover:bg-brand-600 active:scale-[0.99]">
-                            <x-icon name="remote" class="h-4 w-4" /> Buka Remote Desktop
-                        </a>
-                        <p class="text-center text-theme-xs text-gray-400">
-                            ID <span class="font-mono" x-text="id"></span> · password baru dibuat untuk sesi ini
-                        </p>
-                    </div>
-                </div>
-
-                <div class="flex justify-end border-t border-gray-100 px-6 py-4 dark:border-gray-800">
-                    <button type="button" @click="close()"
-                            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                        Tutup
-                    </button>
-                </div>
-            </div>
-        </div>
-    </template>
-</div>
-
-<script>
-    function remoteSession() {
-        return {
-            open: false,
-            stage: 'working',
-            step: '',
-            message: '',
-            device: '',
-            id: '',
-            uri: '',
-
-            async start(deviceId) {
-                this.open = true;
-                this.stage = 'working';
-                this.step = 'Menyiapkan sesi...';
-                this.message = '';
-                document.body.style.overflow = 'hidden';
-
-                try {
-                    const response = await fetch(`/agent/${deviceId}/remote`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-                            Accept: 'application/json',
-                        },
-                        credentials: 'same-origin',
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok || !data.ok) {
-                        this.stage = 'error';
-                        this.message = data.message ?? `Gagal memulai sesi (HTTP ${response.status}).`;
-                        return;
-                    }
-
-                    this.device = data.device;
-                    this.id = data.id;
-                    this.uri = data.uri;
-                    this.stage = 'ready';
-
-                    // The command has to reach the device before the password is
-                    // valid there. Watch it instead of guessing a sleep: the
-                    // operator sees exactly when the machine is ready.
-                    this.step = 'Menunggu perangkat menerapkan password...';
-                    this.watch(data.command_id);
-                } catch (e) {
-                    this.stage = 'error';
-                    this.message = 'Tidak bisa menghubungi server.';
-                    console.error(e);
-                }
-            },
-
-            async watch(commandId) {
-                for (let attempt = 0; attempt < 40; attempt++) {
-                    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-                    try {
-                        const response = await fetch(`/agent/commands/${commandId}/status`, {
-                            headers: { Accept: 'application/json' },
-                            credentials: 'same-origin',
-                        });
-
-                        if (!response.ok) {
-                            continue;
-                        }
-
-                        const data = await response.json();
-
-                        if (data.done) {
-                            this.step = 'Siap.';
-                            // Opened from the click's own stack, so the browser
-                            // still treats it as user-initiated and does not block
-                            // the protocol handler.
-                            window.location.href = this.uri;
-                            return;
-                        }
-
-                        if (data.failed) {
-                            this.stage = 'error';
-                            this.message = data.message ?? 'Perangkat gagal menerapkan password.';
-                            return;
-                        }
-                    } catch (e) {
-                        // Transient: keep polling until the loop runs out.
-                    }
-                }
-
-                this.stage = 'error';
-                this.message = 'Perangkat tidak merespons. Pastikan laptop menyala dan agent berjalan.';
-            },
-
-            close() {
-                this.open = false;
-                document.body.style.overflow = '';
-            },
-        };
-    }
-</script>
 @endsection
 
 

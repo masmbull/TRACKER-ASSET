@@ -1,8 +1,16 @@
 # Document workflow — templates, PDFs, and tracking
 
-TRACKER-ASSET creates asset-aware FAT, BAST, TRANSFER, RETURN, and ASSIGNMENT documents.
-The generated document record is persistent and discoverable; it is not just a PDF in a
-temporary browser tab.
+TRACKER-ASSET creates FAT, BAST, TRANSFER, RETURN, and ASSIGNMENT documents. Documents
+can be linked to an asset or created with manually entered details. Each generated record
+is persistent and discoverable; it is not just a PDF in a temporary browser tab.
+
+## Create from the Documents page
+
+1. Open **Documents** and choose **Create Document**.
+2. Select **Blank document** to enter asset, recipient, and handover details manually, or
+   choose an existing asset to prefill the form from the register.
+3. Review the document type, optional template, parties, dates, and asset details.
+4. Submit to generate, save, and preview the PDF.
 
 ## Create from an asset
 

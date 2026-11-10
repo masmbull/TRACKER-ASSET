@@ -52,10 +52,8 @@ class AssetNumberService
 
         $number = DB::transaction(function () use ($lockKey, $prefix) {
             // Postgres is the production driver; SQLite is only used by the test
-            // suite. The lock is a Postgres feature, and the identifier is
-            // dialect-specific too, so both are guarded rather than assumed -
-            // crashing the whole registration flow on a test database would make
-            // this untestable, which is how the sequencing bug survived.
+            // suite. The lock is a Postgres feature, but the identifier query is
+            // portable so sequence selection behaves the same on both engines.
             $isPostgres = DB::connection()->getDriverName() === 'pgsql';
 
             if ($isPostgres) {
@@ -63,18 +61,9 @@ class AssetNumberService
             }
 
             $query = Asset::query()->where('asset_id', 'like', $prefix.'%');
-
-            if ($isPostgres) {
-                $last = $query
-                    ->orderByRaw('CAST(SUBSTRING(asset_id FROM ?) AS INTEGER) DESC', [strlen($prefix) + 1])
-                    ->value('asset_id');
-            } else {
-                // SQLite has no SUBSTRING(... FROM n); SUBSTR is equivalent and
-                // sorts numerically once cast.
-                $last = $query
-                    ->orderByRaw('CAST(SUBSTR(asset_id, ?) AS INTEGER) DESC', [strlen($prefix) + 1])
-                    ->value('asset_id');
-            }
+            $last = $query
+                ->orderByRaw('CAST(SUBSTR(asset_id, ?) AS INTEGER) DESC', [strlen($prefix) + 1])
+                ->value('asset_id');
 
             $next = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
 

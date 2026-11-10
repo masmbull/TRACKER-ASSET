@@ -572,13 +572,6 @@ public partial class App : System.Windows.Application
                             AgentRunner.SelfRemove();
                             return;
                         }
-                        else if (command == "rustdesk")
-                        {
-                            AgentLog.Write($"RustDesk command #{id} received. Applying configuration...");
-                            Api.ReportProgress(config.ServerUrl, config.Token, id, 10, "Menerapkan konfigurasi RustDesk...");
-                            var rustDeskOk = AgentRunner.RunRustDeskCommand(config.ServerUrl, config.Token, id, cmd);
-                            AgentLog.Write($"RustDesk command #{id} -> {(rustDeskOk ? "done" : "failed")}.");
-                        }
                         else if (command == "script")
                         {
                             AgentLog.Write($"Script command #{id} received. Executing...");

@@ -147,36 +147,67 @@
     <tr><td class="statement">{{ $document['statement'] ?? ($copy['statement'] ?? '-') }}</td></tr>
 </table>
 
-{{-- Signatures. F. Persetujuan on a transfer form, the closing block on a BAST. --}}
-<table class="sign">
+ {{-- Signatures. 3 kolom x 2 baris, sesuai layout referensi. Setiap sel:
+     judul (bold, rata tengah), posisi, area tanda tangan (garis putus-putus),
+     nama dan tanggal di bawah. Field existing saja — sel tanpa field kosong. --}}
+<style>
+    .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
+    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px; }
+    .sign-grid td { border: 1px solid #9ca3af; height: 78px; vertical-align: top; padding: 4px; }
+    .sign-cell-pos { text-align: center; font-size: 7px; color: #475569; margin-bottom: 3px; }
+    .sign-cell-dashed { border-bottom: 1px dashed #6b7280; margin: 5px 0; height: 1px; }
+    .sign-cell-name { font-size: 7.5px; font-weight: bold; margin-bottom: 1px; }
+    .sign-cell-date { font-size: 7px; color: #475569; }
+    .sign-cell-image { display: block; height: 32px; max-width: 100%; margin: 2px auto; }
+</style>
+<table class="sign-grid">
+    <tr>
+        <th>Dibuat Oleh</th>
+        <th>Diperiksa Oleh</th>
+        <th>Diperiksa dan Diterima Oleh</th>
+    </tr>
     <tr>
         <td>
-            <table class="sign-box">
-                <tr><th colspan="2">{{ $isBast ? 'PENERIMA ASET' : 'PENERIMA' }}</th></tr>
-                <tr><td class="label">Nama</td><td>{{ $blank($sign['menerima'] ?? ($receiver['name'] ?? null)) }}</td></tr>
-                @if($sign['signature_image'] ?? null && str_starts_with($sign['signature_image'], 'http'))
-                    <tr><td class="label">Tanda Tangan</td><td><img src="{{ $sign['signature_image'] }}" style="max-width: 120px; max-height: 40px;"></td></tr>
-                @elseif($sign['signature_image'] ?? null)
-                    <tr><td class="label">Tanda Tangan</td><td><img src="data:image/{{ pathinfo($sign['signature_image'], PATHINFO_EXTENSION), JSON_UNESCAPED_URL }};base64,{{ base64_encode(file_get_contents(storage_path($sign['signature_image'])))" style="max-width: 120px; max-height: 40px;"></td></tr>
-                @else
-                    <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
-                @endif
-                <tr><td class="label">Tanggal</td><td>{{ $blank($document['signature_date'] ?? null) }}</td></tr>
-            </table>
+            <div class="sign-cell-pos">Penerima Aset</div>
+            <div class="sign-cell-dashed"></div>
+            <div class="sign-cell-name">{{ $blank($sign['menerima'] ?? null) }}</div>
+            <div class="sign-cell-date">{{ $blank($sign['menerima_date'] ?? null) }}</div>
         </td>
         <td>
-            <table class="sign-box">
-                <tr><th colspan="2">{{ $isBast ? 'PENYERAH ASET (IT)' : 'PENYERAH' }}</th></tr>
-                <tr><td class="label">Nama</td><td>{{ $blank($sign['menyerahkan'] ?? ($sender['name'] ?? null)) }}</td></tr>
-                @if($sign['signature_image'] ?? null && str_starts_with($sign['signature_image'], 'http'))
-                    <tr><td class="label">Tanda Tangan</td><td><img src="{{ $sign['signature_image'] }}" style="max-width: 120px; max-height: 40px;"></td></tr>
-                @elseif($sign['signature_image'] ?? null)
-                    <tr><td class="label">Tanda Tangan</td><td><img src="data:image/{{ pathinfo($sign['signature_image'], PATHINFO_EXTENSION), JSON_UNESCAPED_URL }};base64,{{ base64_encode(file_get_contents(storage_path($sign['signature_image'])))" style="max-width: 120px; max-height: 40px;"></td></tr>
-                @else
-                    <tr><td class="label">Tanda Tangan</td><td class="sign-row"></td></tr>
-                @endif
-                <tr><td class="label">Tanggal</td><td>{{ $blank($document['signature_date'] ?? null) }}</td></tr>
-            </table>
+            <div class="sign-cell-pos"></div>
+            <div class="sign-cell-dashed"></div>
+            <div class="sign-cell-name"></div>
+            <div class="sign-cell-date"></div>
+        </td>
+        <td>
+            <div class="sign-cell-pos">Penyerah</div>
+            @if(!empty($document['signature_image_data']))
+                <img class="sign-cell-image" src="{{ $document['signature_image_data'] }}" alt="">
+            @else
+            <div class="sign-cell-dashed"></div>
+            @endif
+            <div class="sign-cell-name">{{ $blank($sign['menyerahkan'] ?? null) }}</div>
+            <div class="sign-cell-date">{{ $blank($sign['menyerahkan_date'] ?? null) }}</div>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <div class="sign-cell-pos"></div>
+            <div class="sign-cell-dashed"></div>
+            <div class="sign-cell-name"></div>
+            <div class="sign-cell-date"></div>
+        </td>
+        <td>
+            <div class="sign-cell-pos"></div>
+            <div class="sign-cell-dashed"></div>
+            <div class="sign-cell-name"></div>
+            <div class="sign-cell-date"></div>
+        </td>
+        <td>
+            <div class="sign-cell-pos">Penyerah Aset (IT)</div>
+            <div class="sign-cell-dashed"></div>
+            <div class="sign-cell-name">{{ $blank($sign['it'] ?? null) }}</div>
+            <div class="sign-cell-date">{{ $blank($sign['it_date'] ?? null) }}</div>
         </td>
     </tr>
 </table>

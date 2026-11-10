@@ -209,15 +209,6 @@ class AgentRegistrationController extends Controller
             'token_hash' => $tokenHash,
             'token_plain' => $token,
             'is_active' => true,
-            // Issued now, at enrolment, so the agent can configure RustDesk the
-            // moment it is installed.
-            //
-            // Without this the client started unconfigured: it put its own window
-            // on the user's desktop showing an id, a banner offering to install the
-            // service and "Not ready. Please check your connection" - the opposite
-            // of a silent install - and no remote session was possible until an
-            // admin happened to press Remote, which is what pushed a password.
-            'rustdesk_password' => AgentApiToken::generateRustDeskPassword(),
         ]);
 
         // Queue a scan immediately, so a freshly enrolled device appears in the
@@ -244,15 +235,6 @@ class AgentRegistrationController extends Controller
             // from then on. The agent's own random id stays in hardware_id and
             // is never shown to anyone.
             'device_id' => $assignedDeviceId,
-            // Everything RustDesk needs to come up already pointed at us. Sent
-            // with enrolment rather than only on the first Remote click, because
-            // the install is unattended: by the time an admin presses Remote the
-            // client must already be configured.
-            'rustdesk' => [
-                'server' => config('services.rustdesk.rendezvous'),
-                'key' => config('services.rustdesk.public_key'),
-                'password' => $agentToken->rustdesk_password,
-            ],
             'message' => 'Device registered successfully',
         ]);
     }

@@ -26,6 +26,7 @@ passwords, API tokens, private keys, or live configuration values.
 | [`import-workflow.md`](import-workflow.md) | Spreadsheet staging, mapping, validation, and import |
 | [`ike-bast-inspection.md`](ike-bast-inspection.md) | IKE BAST receiving inspection |
 | [`m365-directory.md`](m365-directory.md) | Optional Entra and Microsoft Graph directory integration |
+| [`data-safety.md`](data-safety.md) | Sensitive-data boundaries, safe test data, and Git/CI guards |
 
 ## Data and operations references
 

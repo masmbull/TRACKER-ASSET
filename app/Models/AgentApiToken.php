@@ -12,7 +12,6 @@ class AgentApiToken extends Model
     protected $fillable = [
         'name', 'token_hash', 'token_plain', 'abilities', 'last_used_at', 'expires_at', 'is_active',
         'device_id', 'platform', 'agent_version', 'last_seen_at', 'hardware_id', 'mac_address',
-        'rustdesk_id', 'rustdesk_password', 'rustdesk_reported_at',
     ];
 
     protected function casts(): array
@@ -23,43 +22,8 @@ class AgentApiToken extends Model
             'expires_at' => 'datetime',
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
-            'rustdesk_reported_at' => 'datetime',
             'token_plain' => 'encrypted',
-            // Encrypted at rest with APP_KEY, not hashed: unlike a login password
-            // this one has to be handed back to an operator for RustDesk to use
-            // it. Hashes are one-way and would make remote access impossible.
-            'rustdesk_password' => 'encrypted',
         ];
-    }
-
-    /**
-     * RustDesk settings the device should apply, or null when remote is not set up.
-     */
-    public function rustDeskConfig(): ?array
-    {
-        if (blank($this->rustdesk_id) || blank($this->rustdesk_password)) {
-            return null;
-        }
-
-        return [
-            'server' => config('services.rustdesk.rendezvous'),
-            'key' => config('services.rustdesk.public_key'),
-            'password' => $this->rustdesk_password,
-            'id' => $this->rustdesk_id,
-        ];
-    }
-
-    /**
-     * A password that is long, random and safe to put inside a RustDesk.toml
-     * single-quoted value and a URL.
-     *
-     * No quotes, backslashes or whitespace: the config writer escapes quotes but a
-     * password that needs escaping is a password that can break the file, and this
-     * value only ever has to survive a keyboard-free copy-paste.
-     */
-    public static function generateRustDeskPassword(): string
-    {
-        return \Illuminate\Support\Str::random(24);
     }
 
     /**

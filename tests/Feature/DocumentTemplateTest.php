@@ -96,11 +96,16 @@ class DocumentTemplateTest extends TestCase
         $support = User::factory()->create(['role' => 'support']);
         $template = DocumentTemplate::where('document_type', 'BAST')->firstOrFail();
 
-        $this->actingAs($support)
+        $response = $this->actingAs($support)
             ->get(route('documents.generate', [$this->asset, 'template_id' => $template->id]))
-            ->assertOk()
-            ->assertSee('name="template_id"', false)
-            ->assertSee('value="'.$template->id.'" selected', false)
+            ->assertOk();
+
+        $this->assertMatchesRegularExpression(
+            '/<option\b(?=[^>]*\bvalue="'.preg_quote((string) $template->id, '/').'")(?=[^>]*\bselected\b)[^>]*>/s',
+            $response->getContent(),
+        );
+        $response->assertSee('name="template_id"', false)
+            ->assertSee('data-document-type="BAST"', false)
             ->assertSee('BAST');
 
         $response = $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [

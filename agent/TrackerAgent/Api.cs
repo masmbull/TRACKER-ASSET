@@ -497,62 +497,11 @@ private sealed record PrinterEntry(
                 return null;
             }
 
-            // Apply Remote desktop settings the moment the device is enrolled.
-            //
-            // The server issues these at registration, and this is the first point
-            // at which the agent has them. Configuring here means RustDesk is
-            // already pointed at our server and holds its password before anybody
-            // presses Remote - so an unattended install never opens the client's
-            // unconfigured window, with its "Not ready. Please check your
-            // connection" banner, on the user's desktop.
-            TryApplyRustDeskConfig(doc.RootElement);
-
             return issued;
         }
         catch
         {
             return null;
-        }
-    }
-
-    /// <summary>
-    /// Writes the RustDesk settings from a registration response, if present.
-    /// </summary>
-    /// <remarks>
-    /// Never throws: remote desktop is not worth failing enrolment over, and an
-    /// agent that registered but could not touch RustDesk still reports inventory.
-    /// </remarks>
-    private static void TryApplyRustDeskConfig(JsonElement root)
-    {
-        try
-        {
-            if (!root.TryGetProperty("rustdesk", out var settings) ||
-                settings.ValueKind != JsonValueKind.Object)
-            {
-                return;
-            }
-
-            string? Read(string name) =>
-                settings.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
-                    ? el.GetString()
-                    : null;
-
-            var password = Read("password");
-
-            if (string.IsNullOrWhiteSpace(password) || !RustDeskInstaller.IsInstalled())
-            {
-                return;
-            }
-
-            RustDeskProvisioner.Apply(Read("server"), Read("key"), password);
-            RustDeskProvisioner.SilenceDesktopClient();
-            RustDeskProvisioner.TryRestartService(out var message);
-
-            AgentLog.Write($"RustDesk configured at enrolment. {message}");
-        }
-        catch (Exception ex)
-        {
-            AgentLog.Write($"RustDesk configuration at enrolment failed: {ex.Message}");
         }
     }
 
