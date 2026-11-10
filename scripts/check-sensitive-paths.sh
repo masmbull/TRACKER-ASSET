@@ -20,6 +20,13 @@ while IFS= read -r -d '' path; do
         "IT Assets.xlsx"|*.sqlite|*.sqlite3|*.db|*.dump|*.sql|*.sql.gz|*.bak|*.pem|*.key|*.p12|*.pfx|*.kdbx|*.log)
             blocked+=("$path")
             ;;
+        # The RustDesk setup script carried the self-hosted server key and the
+        # default password. It is served from public/downloads/, so the key was
+        # downloadable by anyone who could reach the app - it must never be
+        # tracked again, by any name.
+        public/downloads/rustdesk-setup.bat|public/downloads/*rustdesk*)
+            blocked+=("$path")
+            ;;
     esac
 done < <(git ls-files --cached -z)
 

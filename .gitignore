@@ -70,3 +70,9 @@ cookie.jar
 # Dev scratch: curl session cookie jar + local screenshot captures.
 cookies.txt
 dashboard-mobile*.png
+# RustDesk setup script. It carried the self-hosted server key and the default
+# password, and public/downloads/ is served straight by the web server - so the
+# key was downloadable by anyone who could reach the app. It does not belong in
+# the repository at all. Whoever still needs it keeps a local copy with a
+# rotated key; scripts/check-sensitive-paths.sh blocks the path from coming back.
+public/downloads/rustdesk-setup.bat
