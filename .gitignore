@@ -53,9 +53,15 @@ agent/TrackerAgent.Tests/obj/
 agent/TrackerAgent.exe
 # Dev scratch, never shipped. delete_tokens.php wipes agent_api_tokens with no
 # WHERE clause -- keep it off the repo so nobody runs it against prod.
+# check_cmds.php and delete_laptop.php are the same kind of one-off: they print
+# token names and hard-code one machine's hostname, and belong on a workstation.
 anti-slop/
 opencode.json
 delete_tokens.php
+check_cmds.php
+delete_laptop.php
+# Pint's config cache, written to the repo root when Pint runs locally.
+.pint-tmp/
 # Single-file publish output: ~160 MB per build, never committed.
 agent/publish/
 server.php

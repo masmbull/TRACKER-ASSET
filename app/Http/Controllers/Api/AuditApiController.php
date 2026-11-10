@@ -285,7 +285,7 @@ class AuditApiController extends Controller
             'result' => $result['result'],
             'mismatches' => $result['mismatches'],
             'status' => 'submitted',
-            'notes' => 'Submitted by audit agent (' . $request->attributes->get('agent_token_name') . ').',
+            'notes' => 'Submitted by audit agent ('.$request->attributes->get('agent_token_name').').',
         ]);
 
         ActivityLog::create([

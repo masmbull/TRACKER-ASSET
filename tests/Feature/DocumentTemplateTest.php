@@ -101,7 +101,7 @@ class DocumentTemplateTest extends TestCase
             ->assertOk();
 
         $this->assertMatchesRegularExpression(
-            '/<option\b(?=[^>]*\bvalue="' . preg_quote((string) $template->id, '/') . '")(?=[^>]*\bselected\b)[^>]*>/s',
+            '/<option\b(?=[^>]*\bvalue="'.preg_quote((string) $template->id, '/').'")(?=[^>]*\bselected\b)[^>]*>/s',
             $response->getContent(),
         );
         $response->assertSee('name="template_id"', false)
@@ -253,7 +253,7 @@ class DocumentTemplateTest extends TestCase
                 'asset_id' => $asset->id,
                 'document_type' => $type,
                 'document_number' => "X/{$type}/2026/00001",
-                'title' => $type . ' record',
+                'title' => $type.' record',
                 'file_path' => 'documents/test.pdf',
                 'file_type' => 'pdf',
                 'generated_date' => $date,
@@ -322,7 +322,7 @@ class DocumentTemplateTest extends TestCase
 
         // Each field's label and raw key must be visible — that pairing is the
         // whole point of the page; the index page only ever showed a number.
-        $response->assertSee($fieldCount . ' fields ·');
+        $response->assertSee($fieldCount.' fields ·');
         foreach (array_slice($template->template_content, 0, 10, true) as $key => $definition) {
             $response->assertSee($key);
             $response->assertSee($definition['label']);

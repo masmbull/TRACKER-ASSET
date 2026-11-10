@@ -60,14 +60,14 @@ class AssetNumberService
                 DB::select('SELECT pg_advisory_xact_lock(?, ?)', [self::LOCK_NAMESPACE, $lockKey]);
             }
 
-            $query = Asset::query()->where('asset_id', 'like', $prefix . '%');
+            $query = Asset::query()->where('asset_id', 'like', $prefix.'%');
             $last = $query
                 ->orderByRaw('CAST(SUBSTR(asset_id, ?) AS INTEGER) DESC', [strlen($prefix) + 1])
                 ->value('asset_id');
 
             $next = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
 
-            return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+            return $prefix.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
         }, 3);
 
         return $number;
@@ -117,7 +117,7 @@ class AssetNumberService
     public function categoryCode(Asset $asset): string
     {
         $category = mb_strtolower((string) optional($asset->category)->name);
-        $model = mb_strtolower((string) $asset->brand . ' ' . $asset->model);
+        $model = mb_strtolower((string) $asset->brand.' '.$asset->model);
 
         if (str_contains($category, 'laptop') || str_contains($category, 'notebook') ||
             str_contains($category, 'laptop') || str_contains($model, 'latitude') ||

@@ -178,9 +178,16 @@ class DocumentGenerationTest extends TestCase
         );
         $response->assertSee('data-kelengkapan-type="BAST"', false)
             ->assertDontSee('data-kelengkapan-type="BAST" hidden', false)
-            ->assertSee('data-checklist-type="FAT" hidden', false)
             ->assertSee('id="handover-date-label"', false)
             ->assertSee('Tanggal Serah Terima');
+
+        // The FAT section stays in the DOM for client-side switching and is only
+        // flagged hidden, so match the attribute inside the tag instead of a
+        // fixed substring - the surrounding whitespace is up to the template.
+        $this->assertMatchesRegularExpression(
+            '/<div\b(?=[^>]*\bdata-checklist-type="FAT")(?=[^>]*\bhidden\b)[^>]*>/s',
+            $response->getContent(),
+        );
     }
 
     public function test_document_date_fields_use_date_pickers_without_forcing_optional_dates(): void
@@ -218,11 +225,15 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee('Checklist FAT');
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'TRANSFER']))
-            ->assertOk()
-            ->assertSee('data-checklist-type="FAT" hidden', false)
-            ->assertDontSee('data-checklist-type="TRANSFER"', false);
+            ->assertOk();
+
+        $this->assertMatchesRegularExpression(
+            '/<div\b(?=[^>]*\bdata-checklist-type="FAT")(?=[^>]*\bhidden\b)[^>]*>/s',
+            $response->getContent(),
+        );
+        $response->assertDontSee('data-checklist-type="TRANSFER"', false);
     }
 
     /**
@@ -363,7 +374,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertSessionHas('success');
 
         // Sequential, duplicate-proof numbering.
-        $this->assertSame('FAT/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0001', $document->document_number);
+        $this->assertSame('FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
         $this->assertSame('FAT', $document->document_type);
         $this->assertSame('final', $document->status);
         $this->assertSame('pdf', $document->file_type);
@@ -400,7 +411,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertRedirect(route('documents.preview', Document::latest('id')->firstOrFail()));
 
         $this->assertSame(
-            'FAT/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0002',
+            'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0002',
             Document::latest('id')->firstOrFail()->document_number
         );
     }
@@ -420,7 +431,7 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee($document->document_number);
 
-        $inline = $this->actingAs($viewer)->get(route('documents.download', $document) . '?inline=1');
+        $inline = $this->actingAs($viewer)->get(route('documents.download', $document).'?inline=1');
         $inline->assertOk();
         $this->assertStringContainsString('application/pdf', $inline->headers->get('Content-Type'));
         $this->assertStringStartsWith('%PDF', $inline->streamedContent());
@@ -443,7 +454,7 @@ class DocumentGenerationTest extends TestCase
         $document = Document::firstOrFail();
 
         $response->assertRedirect(route('documents.preview', $document));
-        $this->assertSame('BAST/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0001', $document->document_number);
+        $this->assertSame('BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
         $this->assertSame([], $document->payload['checklist']);
     }
 
