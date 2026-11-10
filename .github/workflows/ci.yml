@@ -19,6 +19,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     name: PHPUnit (sqlite)
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -59,6 +60,7 @@ jobs:
   tests-postgres:
     runs-on: ubuntu-latest
     name: PHPUnit (postgres)
+    timeout-minutes: 20
 
     # The production engine, not an extra safety net.
     #
@@ -147,6 +149,7 @@ jobs:
   sensitive-data:
     runs-on: ubuntu-latest
     name: Sensitive data guards
+    timeout-minutes: 10
     permissions:
       contents: read
       # gitleaks-action resolves the pull request's commit list through the REST
@@ -177,6 +180,7 @@ jobs:
   pint:
     runs-on: ubuntu-latest
     name: Code style (Pint)
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -240,6 +244,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     name: Docker image (GHCR)
+    timeout-minutes: 30
     needs: [tests, tests-postgres, windows-agent, sensitive-data, pint]
     # Enough to push, and nothing more. `packages: write` is what lets the job
     # publish with the token every run already carries - there is no repository

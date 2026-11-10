@@ -11,6 +11,7 @@ jobs:
   pint:
     runs-on: ubuntu-latest
     name: Laravel Pint (auto-fix)
+    timeout-minutes: 10
 
     steps:
       - name: Checkout

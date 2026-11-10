@@ -32,6 +32,7 @@ jobs:
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # workflow_run also fires for failed runs and for pull requests. Neither
     # should deploy. The branch filter above already limits this to main; the
     # event check keeps a PR-triggered CI run from ever reaching the server even
