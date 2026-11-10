@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch supersedes the run it replaced. Without this,
+# every fix-up commit queues a full matrix behind a run whose result nobody will
+# read, and a force-push can leave two builds racing for the same GHCR tag.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -142,6 +149,12 @@ jobs:
     name: Sensitive data guards
     permissions:
       contents: read
+      # gitleaks-action resolves the pull request's commit list through the REST
+      # API before it scans anything. With only `contents: read` that request is
+      # rejected with 403 "Resource not accessible by integration" and the job
+      # fails before the first secret is ever examined - a red build that says
+      # nothing about the diff.
+      pull-requests: read
 
     steps:
       - name: Checkout
