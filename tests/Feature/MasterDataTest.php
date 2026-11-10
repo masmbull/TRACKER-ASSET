@@ -98,6 +98,38 @@ class MasterDataTest extends TestCase
         $this->actingAs($viewer)->post(route('master.store', 'companies'), ['name' => 'X'])->assertForbidden();
     }
 
+    public function test_master_create_and_edit_forms_render_for_support(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+        $category = AssetCategory::where('name', 'Laptop')->firstOrFail();
+
+        $this->actingAs($support)
+            ->get(route('master.create', 'categories'))
+            ->assertOk()
+            ->assertSee('New Category')
+            ->assertSee('name="name"', false);
+
+        $this->actingAs($support)
+            ->get(route('master.edit', ['categories', $category->id]))
+            ->assertOk()
+            ->assertSee('Edit Category')
+            ->assertSee('value="Laptop"', false);
+    }
+
+    public function test_viewer_cannot_open_master_forms(): void
+    {
+        $viewer = User::factory()->create(['role' => 'viewer']);
+        $company = Company::firstOrFail();
+
+        $this->actingAs($viewer)
+            ->get(route('master.create', 'companies'))
+            ->assertForbidden();
+
+        $this->actingAs($viewer)
+            ->get(route('master.edit', ['companies', $company->id]))
+            ->assertForbidden();
+    }
+
     public function test_unknown_type_is_404(): void
     {
         $support = User::factory()->create(['role' => 'support']);
