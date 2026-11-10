@@ -55,11 +55,17 @@ agent/TrackerAgent.exe
 # WHERE clause -- keep it off the repo so nobody runs it against prod.
 # check_cmds.php and delete_laptop.php are the same kind of one-off: they print
 # token names and hard-code one machine's hostname, and belong on a workstation.
+# create_release.php writes a release row and copies a binary next to it, and
+# check_all.php dumps release state for debugging. Neither is a runbook step.
 anti-slop/
 opencode.json
 delete_tokens.php
 check_cmds.php
 delete_laptop.php
+create_release.php
+check_all.php
+# Stale compiler output kept by accident; the build errors it lists are fixed.
+build_errors.txt
 # Pint's config cache, written to the repo root when Pint runs locally.
 .pint-tmp/
 # Single-file publish output: ~160 MB per build, never committed.
