@@ -161,20 +161,26 @@ class DocumentGenerationTest extends TestCase
     /**
      * The document type is in the URL because the form is not the same form for
      * every type. It used to be ignored, so linking straight to a BAST produced a
-     * FAT form with FAT labels and the FAT checklist.
+     * FAT form. BAST deliberately uses the FAT date wording fallback, but its own
+     * type-specific completeness list must still be selected.
      */
     public function test_the_type_in_the_url_selects_that_type(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']))
-            ->assertOk()
-            ->assertSee('value="BAST" data-handover-label="Tanggal Pengembalian"', false)
-            ->assertSee('data-kelengkapan-type="BAST"', false)
+            ->assertOk();
+
+        $this->assertMatchesRegularExpression(
+            '/<option\b(?=[^>]*\bvalue="BAST")(?=[^>]*\bdata-handover-label="Tanggal Serah Terima")(?=[^>]*\bselected\b)[^>]*>/s',
+            $response->getContent(),
+        );
+        $response->assertSee('data-kelengkapan-type="BAST"', false)
+            ->assertDontSee('data-kelengkapan-type="BAST" hidden', false)
             ->assertSee('data-checklist-type="FAT" hidden', false)
             ->assertSee('id="handover-date-label"', false)
-            ->assertSee('Tanggal Pengembalian');
+            ->assertSee('Tanggal Serah Terima');
     }
 
     public function test_document_date_fields_use_date_pickers_without_forcing_optional_dates(): void
@@ -199,9 +205,9 @@ class DocumentGenerationTest extends TestCase
     }
 
     /**
-     * Only the FAT has an acceptance checklist. Rendering the FAT list under a
-     * "Checklist FAT" heading on a TRANSFER claims the document does not back up,
-     * and the answers were stored too.
+     * Only the FAT has an acceptance checklist. The form keeps the FAT section in
+     * the DOM for client-side type switching, but it must be hidden when TRANSFER
+     * is selected and no active TRANSFER checklist may be rendered.
      */
     public function test_only_a_type_with_a_checklist_gets_one(): void
     {
@@ -215,7 +221,8 @@ class DocumentGenerationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'TRANSFER']))
             ->assertOk()
-            ->assertDontSee('Checklist');
+            ->assertSee('data-checklist-type="FAT" hidden', false)
+            ->assertDontSee('data-checklist-type="TRANSFER"', false);
     }
 
     /**
@@ -356,7 +363,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertSessionHas('success');
 
         // Sequential, duplicate-proof numbering.
-        $this->assertSame('FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
+        $this->assertSame('FAT/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0001', $document->document_number);
         $this->assertSame('FAT', $document->document_type);
         $this->assertSame('final', $document->status);
         $this->assertSame('pdf', $document->file_type);
@@ -393,7 +400,7 @@ class DocumentGenerationTest extends TestCase
         $response->assertRedirect(route('documents.preview', Document::latest('id')->firstOrFail()));
 
         $this->assertSame(
-            'FAT/IT-'.now()->format('m').'-'.now()->format('Y').'/0002',
+            'FAT/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0002',
             Document::latest('id')->firstOrFail()->document_number
         );
     }
@@ -413,7 +420,7 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee($document->document_number);
 
-        $inline = $this->actingAs($viewer)->get(route('documents.download', $document).'?inline=1');
+        $inline = $this->actingAs($viewer)->get(route('documents.download', $document) . '?inline=1');
         $inline->assertOk();
         $this->assertStringContainsString('application/pdf', $inline->headers->get('Content-Type'));
         $this->assertStringStartsWith('%PDF', $inline->streamedContent());
@@ -436,7 +443,7 @@ class DocumentGenerationTest extends TestCase
         $document = Document::firstOrFail();
 
         $response->assertRedirect(route('documents.preview', $document));
-        $this->assertSame('BAST/IT-'.now()->format('m').'-'.now()->format('Y').'/0001', $document->document_number);
+        $this->assertSame('BAST/IT-' . now()->format('m') . '-' . now()->format('Y') . '/0001', $document->document_number);
         $this->assertSame([], $document->payload['checklist']);
     }
 

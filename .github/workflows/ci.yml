@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -114,6 +117,50 @@ jobs:
           DB_PASSWORD: postgres
         run: php artisan test
 
+  windows-agent:
+    runs-on: windows-latest
+    name: Windows Agent (build + checks)
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run offline agent checks
+        run: dotnet run --project agent/TrackerAgent.Tests/TrackerAgent.Tests.csproj --configuration Release
+
+      - name: Build Windows Agent
+        run: dotnet build agent/TrackerAgent/TrackerAgent.csproj --configuration Release --no-restore
+
+  sensitive-data:
+    runs-on: ubuntu-latest
+    name: Sensitive data guards
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check tracked paths
+        run: bash scripts/check-sensitive-paths.sh
+
+      - name: Scan Git history for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: gitleaks.toml
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+
   pint:
     runs-on: ubuntu-latest
     name: Code style (Pint)
@@ -167,8 +214,9 @@ jobs:
   # It lives in this workflow instead of a deploy workflow because the order is
   # the point. A workflow can only `needs` jobs in the same run, so the chain in
   # §47 is enforced by the file rather than by convention: a commit that fails
-  # either engine, or the style gate, never gets an image. An image nobody has
-  # tested should not exist under a tag someone can pull.
+  # either database engine, the Windows Agent checks, the sensitive-data guards,
+  # or the style gate never gets an image. An image nobody has tested should not
+  # exist under a tag someone can pull.
   #
   # The deploy arrow after this lives in deploy.yml, on purpose. It fires on
   # workflow_run once this workflow finishes successfully on main, so the
@@ -179,7 +227,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     name: Docker image (GHCR)
-    needs: [tests, tests-postgres, pint]
+    needs: [tests, tests-postgres, windows-agent, sensitive-data, pint]
     # Enough to push, and nothing more. `packages: write` is what lets the job
     # publish with the token every run already carries - there is no repository
     # secret here to create, rotate, or watch expire at the wrong moment.

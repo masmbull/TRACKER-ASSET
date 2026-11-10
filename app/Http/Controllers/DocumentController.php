@@ -43,7 +43,7 @@ class DocumentController extends Controller
             ->with(['asset', 'generator'])
             ->when($type, fn ($query) => $query->where('document_type', $type))
             ->when($search !== '', function ($query) use ($search): void {
-                $like = '%'.$search.'%';
+                $like = '%' . $search . '%';
                 $query->where(function ($query) use ($like): void {
                     $query->where('document_number', 'like', $like)
                         ->orWhere('title', 'like', $like)
@@ -99,8 +99,8 @@ class DocumentController extends Controller
             'types' => $types,
             'selectedType' => $selectedType,
             'selectedTemplateId' => null,
-            'checklist' => (array) config('documents.checklists.'.$selectedType, []),
-            'kelengkapan' => (array) config('documents.kelengkapan.'.$selectedType, []),
+            'checklist' => (array) config('documents.checklists.' . $selectedType, []),
+            'kelengkapan' => (array) config('documents.kelengkapan.' . $selectedType, []),
             'copy' => $this->copyFor($selectedType),
             'companies' => Company::orderBy('name')->get(['id', 'name']),
             'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
@@ -161,9 +161,9 @@ class DocumentController extends Controller
             // Only this type's checklist. A TRANSFER has none, and rendering the
             // FAT list under a "Checklist FAT" heading on it is a lie about the
             // document being produced.
-            'checklist' => (array) config('documents.checklists.'.$selected, []),
+            'checklist' => (array) config('documents.checklists.' . $selected, []),
             // Per-item completeness for this type, rendered as Ada / Tidak Ada.
-            'kelengkapan' => (array) config('documents.kelengkapan.'.$selected, []),
+            'kelengkapan' => (array) config('documents.kelengkapan.' . $selected, []),
             'copy' => $this->copyFor($selected),
             // Entity is a choice from master data, not free text. Typing "PT Mito"
             // against "PT. Mito" makes the sender and receiver look like different
@@ -183,7 +183,7 @@ class DocumentController extends Controller
     private function copyFor(string $type): array
     {
         $default = (array) config('documents.copy.FAT', []);
-        $specific = (array) config('documents.copy.'.$type, []);
+        $specific = (array) config('documents.copy.' . $type, []);
 
         return array_merge($default, $specific);
     }
@@ -348,7 +348,7 @@ class DocumentController extends Controller
         abort_unless($document->file_path && Storage::exists($document->file_path), 404);
 
         $path = Storage::path($document->file_path);
-        $fileName = (Str::slug($document->document_number) ?: 'document').'.pdf';
+        $fileName = (Str::slug($document->document_number) ?: 'document') . '.pdf';
         $headers = ['Content-Type' => 'application/pdf'];
 
         if ($request->boolean('inline')) {
@@ -357,7 +357,7 @@ class DocumentController extends Controller
             // Anything that changes the default would otherwise silently turn the
             // viewer's PDF into a download prompt.
             return response()->file($path, $headers + [
-                'Content-Disposition' => 'inline; filename="'.$fileName.'"',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
             ]);
         }
 

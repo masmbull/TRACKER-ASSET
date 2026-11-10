@@ -28,6 +28,18 @@ database/*.sqlite*
 storage/app/imports/
 storage/app/documents/
 storage/app/attachments/
+# Local exports, database snapshots, and private credentials.
+*.sql
+*.sql.gz
+*.sqlite*
+*.db
+*.dump
+*.bak
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
 # Real company asset data must never enter the repository.
 IT Assets.xlsx
 # Legacy Windows audit app (reference only, never distributed via repo)

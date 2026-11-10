@@ -96,11 +96,16 @@ class DocumentTemplateTest extends TestCase
         $support = User::factory()->create(['role' => 'support']);
         $template = DocumentTemplate::where('document_type', 'BAST')->firstOrFail();
 
-        $this->actingAs($support)
+        $response = $this->actingAs($support)
             ->get(route('documents.generate', [$this->asset, 'template_id' => $template->id]))
-            ->assertOk()
-            ->assertSee('name="template_id"', false)
-            ->assertSee('value="'.$template->id.'" selected', false)
+            ->assertOk();
+
+        $this->assertMatchesRegularExpression(
+            '/<option\b(?=[^>]*\bvalue="' . preg_quote((string) $template->id, '/') . '")(?=[^>]*\bselected\b)[^>]*>/s',
+            $response->getContent(),
+        );
+        $response->assertSee('name="template_id"', false)
+            ->assertSee('data-document-type="BAST"', false)
             ->assertSee('BAST');
 
         $response = $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
@@ -248,7 +253,7 @@ class DocumentTemplateTest extends TestCase
                 'asset_id' => $asset->id,
                 'document_type' => $type,
                 'document_number' => "X/{$type}/2026/00001",
-                'title' => $type.' record',
+                'title' => $type . ' record',
                 'file_path' => 'documents/test.pdf',
                 'file_type' => 'pdf',
                 'generated_date' => $date,
@@ -317,7 +322,7 @@ class DocumentTemplateTest extends TestCase
 
         // Each field's label and raw key must be visible — that pairing is the
         // whole point of the page; the index page only ever showed a number.
-        $response->assertSee($fieldCount.' fields ·');
+        $response->assertSee($fieldCount . ' fields ·');
         foreach (array_slice($template->template_content, 0, 10, true) as $key => $definition) {
             $response->assertSee($key);
             $response->assertSee($definition['label']);

@@ -166,7 +166,8 @@ Two workflows, deliberately separate:
 
 ```text
 Developer → git push (main) → GitHub Actions
-   ci.yml     → composer install → tests (SQLite + PostgreSQL) + Pint
+   ci.yml     → composer install → tests (SQLite + PostgreSQL) + Pint + sensitive-data guards
+              → Windows Agent checks + build
               → build Docker image
               → push ghcr.io/masmbull/tracker-asset:<commit sha>
    deploy.yml → fires on workflow_run once ci.yml is green
@@ -175,9 +176,11 @@ Developer → git push (main) → GitHub Actions
 ```
 
 - **CI (`ci.yml`):** the image job declares `needs: [tests, tests-postgres,
-  pint]`, so the order is enforced by the workflow rather than by convention — a
-  commit that fails either engine or the style gate never gets an image. Pull
-  requests build the same Dockerfile but do not publish.
+  windows-agent, sensitive-data, pint]`, so the order is enforced by the
+  workflow rather than by convention — a commit that fails either database
+  engine, the Windows Agent checks/build, the tracked-path/secret scan, or the
+  style gate never gets an image. Pull requests build the same Dockerfile but do
+  not publish.
 - **Deploy (`deploy.yml`):** never builds or tests. It waits for `CI` to finish
   successfully on `main` and then deploys the commit CI built, so the tag it
   pulls does not exist unless every gate passed. `workflow_dispatch` redeploys
