@@ -200,14 +200,33 @@ jobs:
       - name: Run Pint
         run: vendor/bin/pint --test
 
+  # The deploy path is three files and no application code: the workflow that
+  # drives it, the compose file it runs, the nginx config beside them. What breaks
+  # it is a shape change rather than a behaviour change - an SSH hop creeping back
+  # into a workflow that cannot reach the server, a service that builds instead of
+  # pulling the published image, a database port that appears out of nowhere - and
+  # none of that is visible from a green PHPUnit run. Checked here so it fails on
+  # the pull request instead of on the server, which is where it failed before.
+  deploy-config:
+    runs-on: ubuntu-latest
+    name: Deploy configuration
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check the deploy path
+        run: bash scripts/check-deploy-config.sh
+
   # PRD §47: composer install -> tests -> build Docker image -> push image.
   #
   # It lives in this workflow instead of a deploy workflow because the order is
   # the point. A workflow can only `needs` jobs in the same run, so the chain in
   # §47 is enforced by the file rather than by convention: a commit that fails
   # either database engine, the Windows Agent checks, the sensitive-data guards,
-  # or the style gate never gets an image. An image nobody has tested should not
-  # exist under a tag someone can pull.
+  # the style gate, or the deploy configuration checks never gets an image. An
+  # image nobody has tested should not exist under a tag someone can pull.
   #
   # The deploy arrow after this lives in deploy.yml, on purpose. It fires on
   # workflow_run once this workflow finishes successfully on main, so the
@@ -219,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Docker image (GHCR)
     timeout-minutes: 30
-    needs: [tests, tests-postgres, windows-agent, sensitive-data, pint]
+    needs: [tests, tests-postgres, windows-agent, sensitive-data, pint, deploy-config]
     # Enough to push, and nothing more. `packages: write` is what lets the job
     # publish with the token every run already carries - there is no repository
     # secret here to create, rotate, or watch expire at the wrong moment.

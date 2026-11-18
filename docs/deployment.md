@@ -193,8 +193,8 @@ Two workflows, deliberately separate:
 
 ```text
 Developer → git push (main) → GitHub Actions
-   ci.yml     → composer install → tests (SQLite + PostgreSQL) + Pint + sensitive-data guards
-              → Windows Agent checks + build
+ci.yml     → composer install → tests (SQLite + PostgreSQL) + Pint + sensitive-data guards
+               → Windows Agent checks + build + deploy configuration checks
               → build Docker image
               → push ghcr.io/masmbull/tracker-asset:<commit sha>
 deploy.yml → fires on workflow_run once ci.yml is green, on the self-hosted
@@ -204,11 +204,20 @@ deploy.yml → fires on workflow_run once ci.yml is green, on the self-hosted
 ```
 
 - **CI (`ci.yml`):** the image job declares `needs: [tests, tests-postgres,
-  windows-agent, sensitive-data, pint]`, so the order is enforced by the
-  workflow rather than by convention — a commit that fails either database
-  engine, the Windows Agent checks/build, the tracked-path/secret scan, or the
-  style gate never gets an image. Pull requests build the same Dockerfile but do
-  not publish.
+  windows-agent, sensitive-data, pint, deploy-config]`, so the order is enforced
+  by the workflow rather than by convention — a commit that fails either database
+  engine, the Windows Agent checks/build, the tracked-path/secret scan, the style
+  gate, or the deploy configuration checks never gets an image. Pull requests
+  build the same Dockerfile but do not publish.
+- **Deploy configuration (`deploy-config`):** runs
+  `scripts/check-deploy-config.sh`, which asserts the shape of `deploy.yml`,
+  `docker-compose.prod.yml`, and `docker/nginx.conf` — no outbound SSH from a
+  hosted runner, no SSH secrets, a self-hosted `production` runner, one deploy at
+  a time, an image that is pulled rather than built, only nginx publishing a port,
+  and an nginx upstream held in a variable so a recreated container cannot leave
+  it dialing a dead IP. It is a script rather than a PHPUnit case because what it
+  guards is YAML and nginx syntax, and it has to hold on the runner where there
+  is no PHP.
 - **Deploy (`deploy.yml`):** never builds or tests. It runs on the self-hosted
   runner installed on the server, so it needs no inbound SSH and no SSH secrets.
   It waits for `CI` to finish successfully on `main` and then deploys the commit
