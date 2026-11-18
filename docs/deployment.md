@@ -9,7 +9,8 @@ settings—never in this document, an issue, terminal transcript, or commit.
 The office Ubuntu server, running the stack in `docker-compose.prod.yml` as Docker
 containers behind a reverse proxy that terminates HTTPS for
 `tracker.growthuptogether.web.id`. No Kubernetes — the whole deployment is Docker
-Compose, and GitHub Actions drives it over SSH.
+Compose, and a self-hosted GitHub Actions runner installed on the server drives it
+locally.
 
 ## Infrastructure
 
@@ -38,38 +39,64 @@ nothing to run by hand for a normal release.
 On the server:
 
 1. Install Docker Engine and the Compose v2 plugin using Docker's official installation
-   guide for the server operating system.
-2. Create a private deployment directory and environment file:
+   guide for the server operating system. Also install Git if it is missing
+   (`sudo apt install git`); the self-hosted runner needs it to check out the commit.
+2. Create a dedicated deploy user and put it in the `docker` group so it can run Compose:
    ```bash
-   sudo install -d -m 750 /opt/tracker-asset
-   sudo install -m 600 /dev/null /opt/tracker-asset/.env
+   sudo adduser deploy
+   sudo usermod -aG docker deploy
+   ```
+   Re-login for the group change to take effect. Membership in the Docker group grants
+   root-equivalent access; use a dedicated trusted account.
+3. Create a private deployment directory and environment file owned by that user:
+   ```bash
+   sudo install -d -o deploy -g deploy -m 750 /opt/tracker-asset
+   sudo install -o deploy -g deploy -m 600 /dev/null /opt/tracker-asset/.env
    sudoedit /opt/tracker-asset/.env
    ```
    Configure at least `APP_KEY`, `APP_URL`, `ASSET_QR_BASE_URL`, `DB_DATABASE`,
    `DB_USERNAME`, `DB_PASSWORD`, and the required `MAIL_*` values. Generate unique values
    with an approved secrets manager; do not copy development or example credentials.
-   The deployment workflow uploads Compose/Nginx configuration, **not** this environment
-   file.
-3. Put the dedicated deploy user in the `docker` group so it can run Compose:
+   The deployment workflow copies Compose/Nginx configuration into this directory,
+   **not** this environment file.
+4. Install the self-hosted runner as the `deploy` user. In GitHub, open
+   **Settings → Actions → Runners → New self-hosted runner**, select **Linux → x64**, and
+   run the commands it shows. The download URL and registration token are on that page;
+   the token expires after one hour.
    ```bash
-   sudo usermod -aG docker DEPLOY_USER_NAME
+   sudo -iu deploy
+   mkdir -p ~/actions-runner && cd ~/actions-runner
+   curl -o actions-runner-linux-x64.tar.gz -L <DOWNLOAD_URL_FROM_GITHUB>
+   tar xzf ./actions-runner-linux-x64.tar.gz
+   ./config.sh --url https://github.com/masmbull/TRACKER-ASSET --token <FRESH_TOKEN_FROM_GITHUB> --labels production
+   sudo ./svc.sh install deploy
+   sudo ./svc.sh start
    ```
-   Re-login for the group change to take effect. Membership in the Docker group grants
-   root-equivalent access; use a dedicated trusted account.
-4. Point the HTTPS reverse proxy or tunnel at the server's configured `HTTP_PORT`.
+   Run `config.sh` as `deploy`, never with `sudo`; only the service commands need
+   `sudo`. If the archive was already extracted with `sudo`, fix its ownership before
+   continuing (substitute the actual runner directory if different):
+   ```bash
+   sudo chown -R deploy:deploy /opt/tracker-asset/actions-runner
+   sudo -iu deploy
+   cd /opt/tracker-asset/actions-runner
+   ./config.sh --url https://github.com/masmbull/TRACKER-ASSET --token <FRESH_TOKEN_FROM_GITHUB> --labels production
+   sudo ./svc.sh install deploy
+   sudo ./svc.sh start
+   ```
+   The runner polls GitHub outbound over HTTPS, so the server needs no inbound SSH port
+   and no firewall exception. The `production` label ensures deploy jobs only run on this
+   runner. It must stay online for deploys; a queued job waits for it.
+5. Point the HTTPS reverse proxy or tunnel at the server's configured `HTTP_PORT`.
 
 In GitHub, under **Settings → Secrets and variables → Actions**, add:
 
 | Secret | Value |
 |---|---|
-| `DEPLOY_HOST` | address the runner SSHes to |
-| `DEPLOY_USER` | the deploy user, in the `docker` group |
-| `DEPLOY_SSH_KEY` | private key whose public half is in that user's `~/.ssh/authorized_keys` |
-| `DEPLOY_PORT` | optional, defaults to `22` |
 | `DEPLOY_PATH` | optional, defaults to `/opt/tracker-asset` |
 
-Nothing else is needed: the GHCR pull authenticates with the run's own
-`GITHUB_TOKEN`, so there is no registry password to store.
+Nothing else is needed: the GHCR pull authenticates with the run's own `GITHUB_TOKEN`,
+so there is no registry password to store, and the runner connects outbound so there
+are no SSH host, user, key, or port secrets.
 
 ### First deployment and administrator provisioning
 
@@ -94,11 +121,11 @@ the database directly.
 
 ### Regular releases
 
-Push to `main` and watch the **Deploy** workflow. It uploads
-`docker-compose.prod.yml` and `docker/nginx.conf`, pulls the commit's image,
-re-copies the compiled front-end assets, and recreates the containers. The app
-container runs the migrations as it starts, so a release applies them before
-php-fpm answers a request.
+Push to `main` and watch the **Deploy** workflow. It runs on the self-hosted runner on
+the server, copies `docker-compose.prod.yml` and `docker/nginx.conf` into the deploy
+directory, pulls the commit's image, re-copies the compiled front-end assets, and
+recreates the containers. The app container runs the migrations as it starts, so a
+release applies them before php-fpm answers a request.
 
 The manual equivalent, if you ever need to run it on the server yourself:
 
@@ -170,9 +197,10 @@ Developer → git push (main) → GitHub Actions
               → Windows Agent checks + build
               → build Docker image
               → push ghcr.io/masmbull/tracker-asset:<commit sha>
-   deploy.yml → fires on workflow_run once ci.yml is green
-              → scp compose files to the server
-              → docker login ghcr.io → pull <commit sha> → up -d
+deploy.yml → fires on workflow_run once ci.yml is green, on the self-hosted
+               runner on the server
+               → copy compose/nginx files into /opt/tracker-asset
+               → docker login ghcr.io → pull <commit sha> → up -d
 ```
 
 - **CI (`ci.yml`):** the image job declares `needs: [tests, tests-postgres,
@@ -181,18 +209,19 @@ Developer → git push (main) → GitHub Actions
   engine, the Windows Agent checks/build, the tracked-path/secret scan, or the
   style gate never gets an image. Pull requests build the same Dockerfile but do
   not publish.
-- **Deploy (`deploy.yml`):** never builds or tests. It waits for `CI` to finish
-  successfully on `main` and then deploys the commit CI built, so the tag it
-  pulls does not exist unless every gate passed. `workflow_dispatch` redeploys
-  the current `main` without a new commit.
+- **Deploy (`deploy.yml`):** never builds or tests. It runs on the self-hosted
+  runner installed on the server, so it needs no inbound SSH and no SSH secrets.
+  It waits for `CI` to finish successfully on `main` and then deploys the commit
+  CI built, so the tag it pulls does not exist unless every gate passed.
+  `workflow_dispatch` redeploys the current `main` without a new commit.
 - **Registry:** GHCR, `ghcr.io/masmbull/tracker-asset:<commit sha>`, with
   `latest` alongside it as a pointer for humans reading the package page — never
   what a deployment pulls. The name is lowercased before pushing; GHCR rejects
   `ghcr.io/masmbull/TRACKER-ASSET` with "invalid reference format".
-- **Auth:** CI publishes with the run's `packages: write` scope, and the server
-  pulls with the same run's `packages: read` scope — both the built-in
-  `GITHUB_TOKEN`, so no repository secret exists in this path and none can
-  silently expire.
+- **Auth:** CI publishes with the run's `packages: write` scope, and the deploy
+  run logs the server in with the same built-in `GITHUB_TOKEN` (`packages: read`)
+  before pulling — no repository secret exists in this path and none can silently
+  expire.
 - **Rollback:** pruning keeps the last week of images on the server. To go back,
   set `IMAGE_TAG` to the previous commit's sha in `/opt/tracker-asset/.env` and
   run the three compose commands from `docker-compose.prod.yml`'s header.

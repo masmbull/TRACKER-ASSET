@@ -8,6 +8,10 @@ name: Deploy
 # pulls does not exist unless the image job ran, and that job needs all three
 # gates. The two files stay separate because the jobs are separate concerns: CI
 # answers "does this commit work", Deploy answers "put it in front of users".
+#
+# Deploy runs on a self-hosted runner installed on the production server. The
+# runner polls GitHub outbound over HTTPS, so the server needs no inbound SSH
+# port, no firewall exception, and no SSH key secret. See docs/deployment.md.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -31,19 +35,21 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to production
-    runs-on: ubuntu-latest
+    # The self-hosted runner lives on the office Ubuntu server, next to the
+    # Docker stack. GitHub-hosted runners cannot reach that server's SSH port,
+    # which is why this job used to time out.
+    runs-on: [self-hosted, linux, production]
     timeout-minutes: 20
-    # workflow_run also fires for failed runs and for pull requests. Neither
-    # should deploy. The branch filter above already limits this to main; the
-    # event check keeps a PR-triggered CI run from ever reaching the server even
-    # if that filter is ever loosened.
+    # Never run code from a non-main ref on the production runner. workflow_run
+    # must be a successful push to main; manual redeploys must also target main.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
 
     env:
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/tracker-asset' }}
 
     steps:
@@ -54,25 +60,6 @@ jobs:
           # at now. The compose file has to match the image being deployed.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Check deploy secrets
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          missing=0
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::repository secret ${name} is not set"
-              missing=1
-            fi
-          done
-
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::Add the secrets above under Settings > Secrets and variables > Actions. See docs/deployment.md."
-            exit 1
-          fi
-
       - name: Resolve release
         id: release
         run: |
@@ -81,52 +68,42 @@ jobs:
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare the ssh key
+      - name: Sync compose files to the deploy path
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          set -euo pipefail
 
-      - name: Upload the compose files
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
-            "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH/docker'"
+          if [ ! -w "$DEPLOY_PATH" ]; then
+            echo "::error::${DEPLOY_PATH} is not writable by $(id -un). Fix ownership on the server; see docs/deployment.md."
+            exit 1
+          fi
 
-          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
-            docker-compose.prod.yml \
-            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker-compose.prod.yml"
+          if [ ! -f "$DEPLOY_PATH/.env" ]; then
+            echo "::error::${DEPLOY_PATH}/.env is missing. Create it on the server; see docs/deployment.md."
+            exit 1
+          fi
 
-          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
-            docker/nginx.conf \
-            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker/nginx.conf"
+          mkdir -p "$DEPLOY_PATH/docker"
+          cp docker-compose.prod.yml "$DEPLOY_PATH/docker-compose.prod.yml"
+          cp docker/nginx.conf "$DEPLOY_PATH/docker/nginx.conf"
 
-      - name: Log the server in to GHCR
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      - name: Log in to GHCR
         run: |
           # The image is private, so the pull needs credentials. The run's own
           # token is used (see `permissions: packages: read` above) and piped
           # through stdin so it never appears in a process list. It is short
           # lived, but it only has to survive this one pull.
           printf '%s' '${{ secrets.GITHUB_TOKEN }}' | \
-            ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
-              "$DEPLOY_USER@$DEPLOY_HOST" \
-              "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+            docker login ghcr.io -u '${{ github.actor }}' --password-stdin
 
       - name: Deploy
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           IMAGE_TAG: ${{ steps.release.outputs.sha }}
           IMAGE_REPOSITORY: ${{ steps.release.outputs.image }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
-            "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd '$DEPLOY_PATH' && IMAGE_TAG='$IMAGE_TAG' IMAGE_REPOSITORY='$IMAGE_REPOSITORY' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          IMAGE_TAG="$IMAGE_TAG" IMAGE_REPOSITORY="$IMAGE_REPOSITORY" bash -s <<'REMOTE'
           set -euo pipefail
 
           docker compose -f docker-compose.prod.yml pull
