@@ -567,6 +567,11 @@
                 }
             };
 
+            // Icon markup for the step states, taken from the templates at the
+            // end of the layout so the steps share the icon component.
+            const uiIcon = (name) =>
+                document.getElementById(`ui-icon-${name}`)?.innerHTML.trim() ?? '';
+
             /**
              * The phase checklist: each step of the action, with a tick, a spinner
              * or a dash. Uses the same escape helper as the device list.
@@ -589,13 +594,13 @@
 
                     if (step.state === 'done') {
                         tone = 'text-gray-500 dark:text-gray-400';
-                        icon = '<svg class="h-4 w-4 text-success-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>';
+                        icon = `<span class="text-success-500">${uiIcon('success')}</span>`;
                     } else if (step.state === 'active') {
                         tone = 'font-medium text-gray-800 dark:text-gray-100';
                         icon = '<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"></span>';
                     } else if (step.state === 'failed') {
                         tone = 'font-medium text-error-500';
-                        icon = '<svg class="h-4 w-4 text-error-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>';
+                        icon = `<span class="text-error-500">${uiIcon('error')}</span>`;
                     } else {
                         tone = 'text-gray-400 dark:text-gray-500';
                         icon = '<span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>';
@@ -933,6 +938,12 @@
             });
         })();
     </script>
+    {{-- Icon markup for the process steps the script above writes after load.
+         Keeping it here means the steps use the shared icon component rather
+         than a second copy of the paths. --}}
+    <template id="ui-icon-success"><x-icon name="success" class="h-4 w-4" /></template>
+    <template id="ui-icon-error"><x-icon name="error" class="h-4 w-4" /></template>
+
     @stack('scripts')
 
 </body>

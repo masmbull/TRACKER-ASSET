@@ -239,7 +239,7 @@
                             @if($elevated === true)
                                 <span class="inline-flex items-center gap-1 font-medium text-success-600 dark:text-success-400"><x-icon name="access" class="h-3.5 w-3.5" /> Admin Elevated</span>
                             @elseif($elevated === false)
-                                <span class="font-medium text-gray-500 dark:text-gray-400">👤 Standard User</span>
+                                <span class="inline-flex items-center gap-1 font-medium text-gray-500 dark:text-gray-400"><x-icon name="users" class="h-3.5 w-3.5" /> Standard User</span>
                             @else
                                 <span class="text-gray-400">—</span>
                             @endif
@@ -791,6 +791,13 @@
         </x-modal>
     @endif
 @endforeach
+
+{{-- Live row updates are written by resources/js/app.js. These inert templates
+     let that script reuse the shared icon markup instead of carrying its own
+     copy of the paths, so a 15-second refresh cannot drift from the style the
+     server rendered on first paint. --}}
+<template id="fleet-icon-access"><x-icon name="access" class="h-3.5 w-3.5" /></template>
+<template id="fleet-icon-users"><x-icon name="users" class="h-3.5 w-3.5" /></template>
 
 @endsection
 

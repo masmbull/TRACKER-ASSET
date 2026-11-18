@@ -130,11 +130,11 @@ class AgentTokenController extends Controller
         return "\n<<<TRACKER-AGENT-CONFIG:{$payload}:END>>>\n";
     }
 
-    /// <summary>
-    /// The server's own LAN IP addresses (e.g. 192.168.x.x, 10.x.x.x), so an
-    /// agent downloaded from http://127.0.0.1:8000 on the server machine can
-    /// still reach it from a different laptop on the same network.
-    /// </summary>
+    /**
+     * The server's own LAN IP addresses (e.g. 192.168.x.x, 10.x.x.x), so an
+     * agent downloaded from http://127.0.0.1:8000 on the server machine can
+     * still reach it from a different laptop on the same network.
+     */
     private static function serverLanIps(): array
     {
         $ips = [];

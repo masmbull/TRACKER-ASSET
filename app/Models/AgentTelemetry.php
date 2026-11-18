@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Live Fleet telemetry snapshot (PRD §11) — the latest health reading of one
@@ -89,7 +90,7 @@ class AgentTelemetry extends Model
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($at)->gt(now()->subMinutes(2));
+            return Carbon::parse($at)->gt(now()->subMinutes(2));
         } catch (\Throwable) {
             return false;
         }
