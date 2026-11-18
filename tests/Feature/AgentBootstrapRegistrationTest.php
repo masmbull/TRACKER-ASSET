@@ -17,9 +17,13 @@ class AgentBootstrapRegistrationTest extends TestCase
     use RefreshDatabase;
 
     private Company $company;
+
     private AssetCategory $category;
+
     private Location $location;
+
     private AssetStatus $status;
+
     private User $holder;
 
     protected function setUp(): void

@@ -231,4 +231,3 @@ class Asset extends Model
         return $base.'/a/'.$this->qr_token;
     }
 }
-
