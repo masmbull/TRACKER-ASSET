@@ -139,6 +139,20 @@ jobs:
             exit 1
           fi
 
+          # The image running is only half the story: a container can be up with
+          # php-fpm still stuck behind its entrypoint migrations, which nginx
+          # answers with 502. Ask the app itself, and print its logs either way
+          # so a bad release is diagnosable from this log instead of by hand.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 http://127.0.0.1/up || echo 000)
+          echo "app /up -> ${code}"
+
+          docker compose -f docker-compose.prod.yml logs --tail=150 app || true
+
+          if [ "$code" != "200" ]; then
+            echo "::error::the app answered ${code} after the release, not 200"
+            exit 1
+          fi
+
           # Reclaim what this release replaced, but nothing from the last week,
           # so a same-day rollback does not have to re-pull an image.
           docker image prune -f --filter 'until=168h' >/dev/null
