@@ -213,6 +213,66 @@ const observeReveals = (root = document) => {
 
 document.addEventListener('DOMContentLoaded', () => observeReveals());
 
+// --- Instant client-side filtering -------------------------------------------
+// Typing in a list filter hides the rows that do not match instead of reloading
+// the page. The server search still owns the query string and the pagination;
+// this is only about the half second between a keystroke and seeing the row.
+//
+// Markup contract:
+//   [data-live-filter-scope]  wraps the rows (a table, a card grid)
+//   [data-live-filter]        the input
+//   [data-live-filter-row]    each row/card
+//   [data-live-filter-empty]  optional "nothing matches" node, hidden by default
+const initLiveFilters = (root = document) => {
+    root.querySelectorAll('[data-live-filter]').forEach((input) => {
+        if (input.dataset.liveFilterReady) {
+            return;
+        }
+
+        input.dataset.liveFilterReady = '1';
+
+        const scope = input.closest('[data-live-filter-scope]') || document;
+        const rows = () => scope.querySelectorAll('[data-live-filter-row]');
+        const empty = scope.querySelector('[data-live-filter-empty]');
+
+        const run = () => {
+            const needle = input.value.trim().toLowerCase();
+            let visible = 0;
+
+            rows().forEach((row) => {
+                const match = needle === '' || (row.textContent || '').toLowerCase().includes(needle);
+                row.classList.toggle('hidden', !match);
+                if (match) {
+                    visible += 1;
+                }
+            });
+
+            if (empty) {
+                empty.classList.toggle('hidden', visible !== 0);
+            }
+        };
+
+        input.addEventListener('input', run);
+
+        // Escape clears the instant filter; the submitted query string is left
+        // alone on purpose, because that one belongs to the form.
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && input.value !== '') {
+                input.value = '';
+                run();
+            }
+        });
+
+        run();
+    });
+};
+
+document.addEventListener('DOMContentLoaded', () => initLiveFilters());
+
+// Panels swapped in later (the master-data tabs) need the same wiring, so the
+// initialiser is exposed rather than kept private to this bundle.
+window.initLiveFilters = initLiveFilters;
+
 // --- Buttons: busy state, no double submit -----------------------------------
 document.addEventListener('submit', (event) => {
     const form = event.target;
