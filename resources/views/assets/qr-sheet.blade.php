@@ -16,7 +16,7 @@
     grid onto a second sheet of paper for no reason.
 --}}
 <div class="no-print mb-6">
-    <x-page-header title="QR Labels" subtitle="Printable labels for assets already in the register. Each code opens the asset page when scanned.">
+    <x-page-header title="QR Labels" subtitle="Printable asset labels · MITO GROUP ASSETS. Each code opens the asset page when scanned.">
         <x-slot:actions>
             <x-button variant="primary" size="sm" onclick="window.print()">Print</x-button>
         </x-slot:actions>
@@ -85,10 +85,10 @@
     </div>
 
     <x-card>
-        <form method="GET" action="/assets/qr" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form method="GET" action="/assets/qr" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div>
                 <label for="search" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Search</label>
-                <input type="text" id="search" name="search" value="{{ request('search') }}" placeholder="Asset ID, serial, hostname"
+                <input type="text" id="search" name="search" value="{{ request('search') }}" placeholder="Asset ID, serial, hostname, model"
                        class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
             </div>
             <div>
@@ -97,6 +97,15 @@
                     <option value="">All</option>
                     @foreach($companies as $company)
                         <option value="{{ $company->id }}" {{ (string) request('company') === (string) $company->id ? 'selected' : '' }}>{{ $company->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label for="category" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <select id="category" name="category" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    <option value="">All</option>
+                    @foreach($categories as $category)
+                        <option value="{{ $category->id }}" {{ (string) request('category') === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -178,20 +187,34 @@
     @endif
 </div>
 
+<div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+    <form id="bulk-label-form" method="GET" action="{{ route('assets.qr.print') }}" class="flex flex-wrap items-center gap-2">
+        @foreach(['search', 'company', 'category', 'location', 'status'] as $filter)
+            <input type="hidden" name="{{ $filter }}" value="{{ request($filter) }}">
+        @endforeach
+        <label class="flex items-center gap-2 text-theme-sm text-gray-600 dark:text-gray-300">
+            <input type="checkbox" id="label-select-all" class="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500">
+            Select all
+        </label>
+        <span id="label-selection-count" class="text-theme-sm text-gray-500 dark:text-gray-400">0 selected</span>
+        <x-button type="submit" variant="primary" size="sm">Print selected</x-button>
+        <x-button type="submit" variant="secondary" size="sm" formaction="{{ route('assets.qr.pdf') }}">Download PDF</x-button>
+    </form>
+    <button type="button" class="text-theme-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400" onclick="window.print()">Print this page</button>
+</div>
+
 <div class="label-grid">
     @forelse($assets as $asset)
-        <figure class="label">
-            {{-- The same service that serves /assets/{id}/qr, so a label stuck on
-                 a laptop and the code on the asset page can never disagree. --}}
-            <img src="{{ route('assets.qr', $asset) }}" alt="QR code for {{ $asset->asset_id }}" width="150" height="181">
-            <figcaption>
-                <span class="label-caption">{{ config('assets.qr.caption') }}</span>
-                <span class="label-id">{{ $asset->asset_id }}</span>
-            </figcaption>
-        </figure>
+        <div class="label-item">
+            <x-asset-label :asset="$asset" :qr-src="route('assets.qr', [$asset, 'plain' => 1])" />
+            <label class="no-print label-check">
+                <input type="checkbox" name="ids[]" value="{{ $asset->id }}" form="bulk-label-form" class="label-select h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500">
+                <span>Select</span>
+            </label>
+        </div>
     @empty
         <p class="col-span-full py-10 text-center text-theme-sm text-gray-400">
-            {{ request()->filled(['search', 'company', 'location', 'status']) ? 'No assets match this filter.' : 'No active assets to label yet.' }}
+            {{ request()->filled(['search', 'company', 'category', 'location', 'status']) ? 'No assets match this filter.' : 'No active assets to label yet.' }}
         </p>
     @endforelse
 </div>
@@ -323,52 +346,65 @@
             closeCustomQrModal();
         }
     });
+
+    // Bulk selection. The checkboxes sit outside the form - one form wraps the
+    // whole grid - so each one points at it with the form attribute.
+    const labelSelectAll = document.getElementById('label-select-all');
+    const labelChecks = [...document.querySelectorAll('.label-select')];
+    const labelSelectionCount = document.getElementById('label-selection-count');
+
+    const syncLabelSelection = () => {
+        const selected = labelChecks.filter((box) => box.checked).length;
+
+        if (labelSelectionCount) {
+            labelSelectionCount.textContent = `${selected} selected`;
+        }
+
+        if (labelSelectAll) {
+            labelSelectAll.checked = labelChecks.length > 0 && selected === labelChecks.length;
+            labelSelectAll.indeterminate = selected > 0 && selected < labelChecks.length;
+        }
+    };
+
+    labelChecks.forEach((box) => box.addEventListener('change', syncLabelSelection));
+
+    labelSelectAll?.addEventListener('change', () => {
+        labelChecks.forEach((box) => { box.checked = labelSelectAll.checked; });
+        syncLabelSelection();
+    });
+
+    syncLabelSelection();
 </script>
 
 <style>
     .label-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
         gap: 12px;
     }
 
-    .label {
-        margin: 0;
-        padding: 8px 6px 10px;
-        border: 1px dashed #d1d5db;
-        border-radius: 8px;
-        background: #fff;
-        text-align: center;
+    .label-item {
         break-inside: avoid;
         page-break-inside: avoid;
     }
 
-    .label img { display: block; width: 100%; height: auto; }
-
-    .label figcaption { margin-top: 4px; line-height: 1.25; }
-
-    .label-caption {
-        display: block;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: .04em;
-        color: #111827;
-    }
-
-    .label-id {
-        display: block;
-        margin-top: 2px;
+    .label-check {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
         font-size: 12px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #374151;
-        word-break: break-all;
+        color: #6b7280;
     }
 
     @media print {
         .no-print { display: none !important; }
         body { background: #fff; }
-        .label-grid { gap: 6mm; }
-        .label { border-color: #e5e7eb; }
+        .label-grid {
+            grid-template-columns: repeat(auto-fill, {{ config('assets.label.width_mm', 90) }}mm);
+            gap: {{ config('assets.label.gap_mm', 4) }}mm;
+        }
+        .asset-label { box-shadow: none !important; }
     }
 </style>
 @endsection

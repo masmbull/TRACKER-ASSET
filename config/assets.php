@@ -76,4 +76,24 @@ return [
         'sheet_size' => 60,
     ],
 
+    /*
+    | Compact asset identification label (PRD §41).
+    |
+    | A sticker, not a poster: 90 x 30 mm is the common IT-asset label size, and
+    | the QR takes roughly a quarter of the width. Every value is millimetres so
+    | the browser, the print stylesheet and DomPDF all agree on the physical
+    | size; changing the paper stock later is a config change, not a rewrite.
+    |
+    | page_size is what the PDF and print stylesheet ask for. Keep the label
+    | width below the printable width or the grid will fall back to one column.
+    */
+    'label' => [
+        'width_mm' => (float) env('ASSET_LABEL_WIDTH_MM', 90),
+        'height_mm' => (float) env('ASSET_LABEL_HEIGHT_MM', 30),
+        'qr_mm' => (float) env('ASSET_LABEL_QR_MM', 24),
+        'gap_mm' => (float) env('ASSET_LABEL_GAP_MM', 4),
+        'page_margin_mm' => (float) env('ASSET_LABEL_PAGE_MARGIN_MM', 10),
+        'page_size' => env('ASSET_LABEL_PAGE_SIZE', 'A4'),
+    ],
+
 ];
