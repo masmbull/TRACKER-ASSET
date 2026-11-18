@@ -22,7 +22,7 @@
      */
     $width = (float) ($width ?: config('assets.label.width_mm', 90));
     $height = (float) ($height ?: config('assets.label.height_mm', 30));
-    $qrSize = (float) ($qrSize ?: config('assets.label.qr_mm', 24));
+    $qrSize = (float) ($qrSize ?: config('assets.label.qr_mm', 21));
 
     $model = trim(($asset->brand ?? '').' '.($asset->model ?? ''));
 
@@ -45,11 +45,11 @@
     <div style="display: flex; flex-direction: row; align-items: center; gap: 4mm; width: 100%; height: 100%; box-sizing: border-box; padding: 2.5mm 3mm;">
         <img src="{{ $qrSrc }}" alt="QR code for {{ $asset->asset_id }}" width="{{ $pixel }}" height="{{ $pixel }}"
              style="display: block; flex: 0 0 auto; width: {{ $qrSize }}mm; height: {{ $qrSize }}mm;">
-        <div style="flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; text-align: left; line-height: 1.15; font-family: 'DejaVu Sans', 'Segoe UI', Arial, sans-serif;">
-            <div style="font-size: 4.3mm; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $asset->asset_id }}</div>
-            <div style="margin-top: 0.4mm; font-size: 2.9mm; font-weight: 500; color: #2563eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $model !== '' ? $model : '—' }}</div>
-            <div style="margin-top: 0.4mm; font-size: 2.7mm; font-weight: 500; color: #b45309; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $serial }}</div>
-            <div style="margin-top: 0.4mm; font-size: 2.5mm; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $footer }}</div>
+        <div style="flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; text-align: left; line-height: 1.35; font-family: 'DejaVu Sans', 'Segoe UI', Arial, sans-serif;">
+            <div style="font-size: 3.2mm; font-weight: 700; color: #121213; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $asset->asset_id }}</div>
+            <div style="font-size: 2.6mm; font-weight: 500; color: #4e4e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $model !== '' ? $model : '—' }}</div>
+            <div style="font-size: 2.4mm; font-weight: 500; color: #834100; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $serial }}</div>
+            <div style="font-size: 2.2mm; color: #4e4e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $footer }}</div>
         </div>
     </div>
 </div>

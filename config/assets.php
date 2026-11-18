@@ -90,7 +90,7 @@ return [
     'label' => [
         'width_mm' => (float) env('ASSET_LABEL_WIDTH_MM', 90),
         'height_mm' => (float) env('ASSET_LABEL_HEIGHT_MM', 30),
-        'qr_mm' => (float) env('ASSET_LABEL_QR_MM', 24),
+        'qr_mm' => (float) env('ASSET_LABEL_QR_MM', 21),
         'gap_mm' => (float) env('ASSET_LABEL_GAP_MM', 4),
         'page_margin_mm' => (float) env('ASSET_LABEL_PAGE_MARGIN_MM', 10),
         'page_size' => env('ASSET_LABEL_PAGE_SIZE', 'A4'),
