@@ -229,24 +229,21 @@
         <button type="button" class="qr-print-link" onclick="window.print()">Print this page</button>
     </div>
 
-    {{-- A dense grid of QR tiles: as many columns as the screen allows (2 on a
-         phone, 10+ on a wide monitor) because the list is paginated anyway. The
-         whole tile is the select control - there is no separate button - and a
-         ticked tile is highlighted. The sticker itself is only rendered for
-         print, where it comes back at its real 90mm size. --}}
-    <div class="label-grid qr-tile-grid">
+    {{-- The sticker card: the real 90x30mm label on the left, its identity on
+         the right. The whole card is the select control - there is no separate
+         button - and a selected card is highlighted. --}}
+    <div class="label-grid qr-label-grid">
         @forelse($assets as $asset)
-            <label class="label-item qr-tile" title="Select {{ $asset->asset_id }} for printing">
+            <label class="label-item qr-label-card" title="Select {{ $asset->asset_id }} for printing">
                 <input type="checkbox" name="ids[]" value="{{ $asset->id }}" form="bulk-label-form"
-                       class="label-select qr-tile-input" aria-label="Select {{ $asset->asset_id }} for printing">
-                <span class="qr-tile-check" aria-hidden="true"><x-icon name="check" class="h-3.5 w-3.5" /></span>
-                <span class="qr-tile-code">
-                    <img src="{{ route('assets.qr', [$asset, 'plain' => 1]) }}" alt="QR code for {{ $asset->asset_id }}" width="160" height="160" loading="lazy">
-                </span>
-                <span class="qr-tile-id">{{ $asset->asset_id }}</span>
-                <span class="qr-tile-sub">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) !== '' ? trim(($asset->brand ?? '').' '.($asset->model ?? '')) : '—' }}</span>
-                <span class="qr-tile-label">
+                       class="label-select qr-label-input" aria-label="Select {{ $asset->asset_id }} for printing">
+                <span class="qr-label-check" aria-hidden="true"><x-icon name="check" class="h-3.5 w-3.5" /></span>
+                <span class="qr-label-preview">
                     <x-asset-label :asset="$asset" :qr-src="route('assets.qr', [$asset, 'plain' => 1])" />
+                </span>
+                <span class="qr-label-meta">
+                    <span class="qr-label-id">{{ $asset->asset_id }}</span>
+                    <span class="qr-label-sub">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) !== '' ? trim(($asset->brand ?? '').' '.($asset->model ?? '')) : '—' }}</span>
                 </span>
             </label>
         @empty
@@ -819,22 +816,21 @@
         color: var(--qr-text);
     }
 
-    /* QR tiles: as many columns as fit ------------------------------------- */
+    /* Label cards: the sticker itself, two per row ----------------------- */
     .asset-qr-page .label-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
     }
 
-    .asset-qr-page .qr-tile {
+    .asset-qr-page .qr-label-card {
         position: relative;
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: 6px;
+        gap: 14px;
         min-width: 0;
-        padding: 12px 10px;
-        text-align: center;
+        padding: 12px 14px;
+        text-align: left;
         cursor: pointer;
         background: var(--qr-surface);
         border: 1px solid var(--qr-border);
@@ -843,25 +839,25 @@
         transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
     }
 
-    .asset-qr-page .qr-tile:hover {
+    .asset-qr-page .qr-label-card:hover {
         border-color: color-mix(in srgb, var(--qr-accent) 45%, var(--qr-border));
         transform: translateY(-1px);
     }
 
-    .asset-qr-page .qr-tile:has(.qr-tile-input:checked) {
+    .asset-qr-page .qr-label-card:has(.qr-label-input:checked) {
         border-color: var(--qr-accent);
         background: color-mix(in srgb, var(--qr-accent) 7%, var(--qr-surface));
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--qr-accent) 35%, transparent);
     }
 
-    .asset-qr-page .qr-tile:focus-within {
+    .asset-qr-page .qr-label-card:focus-within {
         outline: 2px solid var(--qr-accent);
         outline-offset: 2px;
     }
 
-    /* The real checkbox stays in the DOM for the bulk form and the keyboard,
-       but the tile itself is what you click. */
-    .asset-qr-page .qr-tile-input {
+    /* The checkbox stays in the DOM for the bulk form and the keyboard, but
+       the card itself is what you click. */
+    .asset-qr-page .qr-label-input {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -874,61 +870,54 @@
         border: 0;
     }
 
-    .asset-qr-page .qr-tile-check {
+    .asset-qr-page .qr-label-check {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 10px;
+        right: 10px;
         display: none;
         place-items: center;
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         color: #fff;
         background: var(--qr-accent);
         border-radius: 999px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
     }
 
-    .asset-qr-page .qr-tile:has(.qr-tile-input:checked) .qr-tile-check {
+    .asset-qr-page .qr-label-card:has(.qr-label-input:checked) .qr-label-check {
         display: grid;
     }
 
-    .asset-qr-page .qr-tile-code {
-        display: block;
-        width: 100%;
-    }
-
-    .asset-qr-page .qr-tile-code img {
-        display: block;
-        width: 100%;
-        height: auto;
-        image-rendering: pixelated;
-        border-radius: 6px;
-    }
-
-    .asset-qr-page .qr-tile-id {
-        display: block;
+    .asset-qr-page .qr-label-preview {
+        flex: 0 0 auto;
         max-width: 100%;
+    }
+
+    .asset-qr-page .qr-label-meta {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .asset-qr-page .qr-label-id {
+        display: block;
         overflow: hidden;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 700;
         color: var(--qr-text);
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    .asset-qr-page .qr-tile-sub {
+    .asset-qr-page .qr-label-sub {
         display: block;
-        max-width: 100%;
         overflow: hidden;
-        font-size: 10.5px;
+        font-size: 11.5px;
         color: var(--qr-muted);
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-
-    /* Only the printed sticker carries the QR + identity; on screen the tile
-       above is the whole card. */
-    .asset-qr-page .qr-tile-label {
-        display: none;
     }
 
     .asset-qr-page .qr-empty {
@@ -959,6 +948,12 @@
     .asset-qr-page .qr-pager-info {
         font-size: 12.5px;
         color: var(--qr-muted);
+    }
+
+    @media (max-width: 1279px) {
+        .asset-qr-page .label-grid {
+            grid-template-columns: 1fr;
+        }
     }
 
     @media (max-width: 640px) {
@@ -1001,7 +996,7 @@
             gap: {{ config('assets.label.gap_mm', 4) }}mm;
         }
 
-        .asset-qr-page .qr-tile {
+        .asset-qr-page .qr-label-card {
             display: block;
             padding: 0;
             background: none;
@@ -1010,15 +1005,9 @@
             cursor: default;
         }
 
-        .asset-qr-page .qr-tile-code,
-        .asset-qr-page .qr-tile-id,
-        .asset-qr-page .qr-tile-sub,
-        .asset-qr-page .qr-tile-check {
+        .asset-qr-page .qr-label-check,
+        .asset-qr-page .qr-label-meta {
             display: none !important;
-        }
-
-        .asset-qr-page .qr-tile-label {
-            display: block;
         }
 
         .asset-label { box-shadow: none !important; }
