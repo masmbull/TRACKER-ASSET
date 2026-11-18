@@ -214,7 +214,7 @@
         </div>
     @empty
         <p class="col-span-full py-10 text-center text-theme-sm text-gray-400">
-            {{ request()->filled(['search', 'company', 'category', 'location', 'status']) ? 'No assets match this filter.' : 'No active assets to label yet.' }}
+            {{ request()->anyFilled(['search', 'company', 'category', 'location', 'status']) ? 'No assets match this filter.' : 'No active assets to label yet.' }}
         </p>
     @endforelse
 </div>
