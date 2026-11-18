@@ -127,6 +127,12 @@ directory, pulls the commit's image, re-copies the compiled front-end assets, an
 recreates the containers. The app container runs the migrations as it starts, so a
 release applies them before php-fpm answers a request.
 
+The `assets` step also deletes the compiled Blade views from the `storage` volume.
+That volume is persistent, and Blade only recompiles a view when the source file is
+newer than the compiled copy - a file copied into the image keeps its checkout
+mtime, which is older than what the previous release compiled. Skipping the delete
+makes every release after the first serve the first release's markup.
+
 The manual equivalent, if you ever need to run it on the server yourself:
 
 ```bash

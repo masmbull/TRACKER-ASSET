@@ -86,15 +86,30 @@ services:
 
   # One-shot, run explicitly by the deploy workflow (see the header) rather than
   # by `up -d`, so it re-copies on every release. Copies the compiled assets out
-  # of the application image into the volume nginx mounts read-only.
+  # of the application image into the volume nginx mounts read-only, and drops
+  # the compiled Blade views in the shared storage volume.
+  #
+  # The view drop is not optional. `storage` is a named volume, so compiled
+  # views survive a release. Blade recompiles only when the source file's mtime
+  # is newer than the compiled one, and a source file copied into the image
+  # keeps its checkout mtime - older than the compiled file the previous release
+  # wrote. Without this, every deploy after the first would serve the first
+  # release's views: the label never changed colour, the live filters never
+  # appeared, and the tabs never showed up.
+  #
+  # It is an `rm` and not `php artisan view:clear` on purpose: this container
+  # runs with no env_file and no database, so booting the framework here could
+  # fail for reasons that have nothing to do with the view cache.
   assets:
     image: ${IMAGE_REPOSITORY:-ghcr.io/masmbull/tracker-asset}:${IMAGE_TAG:-latest}
     working_dir: /var/www/html
     command: >-
-      sh -c "rm -rf /app-public/* /app-public/.[!.]*;
+      sh -c "rm -f /var/www/html/storage/framework/views/*.php;
+             rm -rf /app-public/* /app-public/.[!.]*;
              cp -R /var/www/html/public/. /app-public/"
     volumes:
       - app_public:/app-public
+      - storage:/var/www/html/storage
     restart: "no"
 
   # The HTTP front end. Turns an HTTP request into a FastCGI request for `app`,
