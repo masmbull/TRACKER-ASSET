@@ -24,7 +24,7 @@
 
     <div class="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
     <x-card title="Create a QR code">
-        <form id="custom-qr-form" method="POST" action="{{ route('assets.qr.custom') }}" class="space-y-3">
+        <form id="custom-qr-form" method="POST" action="{{ route('assets.qr.custom') }}" class="space-y-3" data-no-busy>
             @csrf
             <div>
                 <label for="qr-content" class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Text or URL</label>
@@ -379,7 +379,7 @@
 <style>
     .label-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
         gap: 12px;
     }
 
