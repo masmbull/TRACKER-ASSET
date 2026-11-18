@@ -443,7 +443,7 @@ must become relational assignment history.
 
 Source file:
 
-`Template Form Fixed Transfer Asset IT v1 (2026).xlsx`
+`docs/Template Form Fixed Transfer Asset IT v1 (2026).xlsx`
 
 The template includes workflow/content for:
 
@@ -1863,11 +1863,11 @@ Tracked here so the checklist above is not read as "everything in the PRD ships"
       target. Implemented in `.github/workflows/deploy.yml`, split from CI on
       purpose: it fires on `workflow_run` once `ci.yml` is green on main and
       deploys the exact commit CI built — pulling that image from GHCR and
-      recreating the `docker-compose.prod.yml` stack over SSH. Needs the
-      repository secrets (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`) and a
-      filled-in `/opt/tracker-asset/.env` on the server. Ticks only after a real
-      deploy is watched end to end, for the same reason as the item above. No
-      Kubernetes anywhere in this path.
+      recreating the `docker-compose.prod.yml` stack from a self-hosted runner
+      installed on the server. Needs a filled-in `/opt/tracker-asset/.env` on the
+      server and the runner online; no inbound SSH and no SSH secrets. Ticks only
+      after a real deploy is watched end to end, for the same reason as the item
+      above. No Kubernetes anywhere in this path.
 
 ---
 

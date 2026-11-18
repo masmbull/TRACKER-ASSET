@@ -2,8 +2,8 @@
 #
 # This is the file GitHub Actions deploys - see .github/workflows/deploy.yml.
 # It runs the image CI published to GHCR, tagged by commit, instead of building
-# from source: the server needs no clone and no source tree, only this file,
-# docker/nginx.conf and a filled-in .env beside them.
+# from source: the deploy directory needs no clone and no source tree, only this
+# file, docker/nginx.conf and a filled-in .env beside them.
 #
 # Bring it up by hand with exactly what the workflow runs:
 #
