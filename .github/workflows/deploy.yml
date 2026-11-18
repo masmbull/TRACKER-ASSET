@@ -103,25 +103,44 @@ jobs:
           set -euo pipefail
           cd "$DEPLOY_PATH"
 
-          IMAGE_TAG="$IMAGE_TAG" IMAGE_REPOSITORY="$IMAGE_REPOSITORY" bash -s <<'REMOTE'
-          set -euo pipefail
-
-          docker compose -f docker-compose.prod.yml pull
+          # These commands used to live in a `bash -s <<'REMOTE'` heredoc.
+          # `docker compose run` attaches the container to the script's stdin,
+          # so the container ate the rest of the heredoc: `up -d` never ran, the
+          # job still exited 0, and every deploy reported success without
+          # shipping anything. The server kept serving the image from the day
+          # the stack was first started. Running the commands directly, with
+          # stdin closed, is the fix - and the guard at the bottom makes a
+          # silent no-op deploy fail loudly instead.
+          docker compose -f docker-compose.prod.yml pull < /dev/null
 
           # Re-copy the compiled assets out of the new image before nginx can
           # serve them, so a build never serves the previous release's CSS/JS.
-          docker compose -f docker-compose.prod.yml run --rm --no-deps assets
+          docker compose -f docker-compose.prod.yml run --rm --no-deps -T assets < /dev/null
 
           # The app container's entrypoint runs the migrations as it starts.
           # This recreates app/scheduler/nginx because the image string changed,
           # which is what makes a deploy actually deploy.
-          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans < /dev/null
 
           docker compose -f docker-compose.prod.yml ps
+
+          # Prove the release is the one now serving traffic. Without this a
+          # compose file that never recreates the container looks identical to a
+          # successful deploy.
+          running=$(docker compose -f docker-compose.prod.yml ps -q app)
+          if [ -z "$running" ]; then
+            echo "::error::the app container is not running after up -d"
+            exit 1
+          fi
+
+          actual=$(docker inspect --format '{{.Config.Image}}' "$running")
+          if [ "$actual" != "${IMAGE_REPOSITORY}:${IMAGE_TAG}" ]; then
+            echo "::error::app is running ${actual}, expected ${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+            exit 1
+          fi
 
           # Reclaim what this release replaced, but nothing from the last week,
           # so a same-day rollback does not have to re-pull an image.
           docker image prune -f --filter 'until=168h' >/dev/null
 
           echo "Deployed ${IMAGE_REPOSITORY}:${IMAGE_TAG}"
-          REMOTE
