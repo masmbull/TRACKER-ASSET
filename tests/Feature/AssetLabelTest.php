@@ -8,6 +8,7 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\AssetQrCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -242,5 +243,156 @@ class AssetLabelTest extends TestCase
         $this->get(route('assets.label.pdf', $asset))->assertRedirect('/login');
         $this->get(route('assets.qr.print'))->assertRedirect('/login');
         $this->get(route('assets.qr.pdf'))->assertRedirect('/login');
+    }
+
+    /**
+     * The code on the sticker has to open the public page, not the app.
+     *
+     * A label is scanned by whoever is holding the machine - an auditor, a new
+     * hire, a courier - and most of them have no account. The existing tests prove
+     * the code is a well-formed SVG; this proves the thing that makes the sticker
+     * worth printing: what it encodes resolves without a login, and it is the
+     * unguessable token that identifies the asset rather than the numeric id.
+     */
+    public function test_the_label_qr_opens_the_public_scan_page_without_a_login(): void
+    {
+        $asset = $this->asset();
+        $token = $asset->mintQrToken();
+
+        $target = AssetQrCode::fromConfig()->targetUrl($asset);
+
+        $this->assertStringContainsString('/a/'.$token, $target);
+        $this->assertStringNotContainsString(
+            '/assets/'.$asset->id,
+            $target,
+            'The code must not encode the authenticated detail URL; a scan would land on a sign-in page.'
+        );
+
+        $this->get($target)->assertOk()->assertSee($asset->asset_id);
+    }
+
+    /**
+     * Printing a sheet is the act of publishing its codes.
+     *
+     * The sheet mints a token for every label on the page, because a code that
+     * encodes /assets/{id} is dead to the phone that scans it. A label with no
+     * token still has to render, which is exactly how a batch of unreachable
+     * stickers used to be produced.
+     */
+    public function test_the_sheet_publishes_a_scan_target_for_every_label_it_prints(): void
+    {
+        $asset = $this->asset(['qr_token' => null]);
+
+        $this->actingAs($this->user)->get(route('assets.qr.sheet'))->assertOk();
+
+        $asset->refresh();
+
+        $this->assertNotNull($asset->qr_token, 'Printing a sheet must mint a token for each label on it.');
+        $this->assertStringContainsString('/a/'.$asset->qr_token, AssetQrCode::fromConfig()->targetUrl($asset));
+    }
+
+    /** A sheet printed from inside the dashboard would carry the sidebar onto the paper. */
+    public function test_the_label_page_carries_no_dashboard_chrome(): void
+    {
+        $html = $this->actingAs($this->user)
+            ->get(route('assets.label', $this->asset()))
+            ->getContent();
+
+        $this->assertStringNotContainsString('<aside', $html);
+        $this->assertStringNotContainsString('data-sidebar-toggle', $html);
+    }
+
+    /**
+     * Preview, print page and PDF all render one component, so the geometry they
+     * share is the sticker's physical size. Asserted rather than assumed: sizes
+     * are inline millimetres because DomPDF loads no Tailwind build, and a class
+     * that happens to work in the browser collapses to an unstyled block there.
+     */
+    public function test_the_preview_and_the_print_page_share_the_label_geometry(): void
+    {
+        $first = $this->asset();
+        $second = $this->asset();
+
+        $geometry = sprintf(
+            'width: %smm; height: %smm',
+            (float) config('assets.label.width_mm'),
+            (float) config('assets.label.height_mm')
+        );
+
+        $this->actingAs($this->user)->get(route('assets.label', $first))
+            ->assertOk()
+            ->assertSee($geometry, false);
+
+        $this->actingAs($this->user)->get(route('assets.qr.print', ['ids' => [$first->id, $second->id]]))
+            ->assertOk()
+            ->assertSee($geometry, false);
+    }
+
+    public function test_the_label_pdf_is_named_after_the_asset(): void
+    {
+        $asset = $this->asset(['asset_id' => 'AST-PDF-0001']);
+
+        $this->actingAs($this->user)->get(route('assets.label.pdf', $asset))
+            ->assertOk()
+            // DomPDF writes the filename unquoted, so the header is matched as it
+            // emits it rather than as an HTTP client would quote it.
+            ->assertHeader('Content-Disposition', 'attachment; filename=label-AST-PDF-0001.pdf');
+    }
+
+    /** A sticker outlives the register entry it was printed for. */
+    public function test_the_sheet_only_labels_active_assets(): void
+    {
+        $active = $this->asset(['asset_id' => 'AST-ACTIVE-1']);
+        $retired = $this->asset(['asset_id' => 'AST-RETIRED-2', 'is_active' => false]);
+
+        $this->actingAs($this->user)->get(route('assets.qr.sheet'))
+            ->assertOk()
+            ->assertSee($active->asset_id)
+            ->assertDontSee($retired->asset_id);
+    }
+
+    public function test_a_filter_that_matches_nothing_renders_an_empty_sheet(): void
+    {
+        $this->asset(['asset_id' => 'AST-NOMATCH-BASE']);
+
+        $this->actingAs($this->user)->get(route('assets.qr.sheet', ['search' => 'nothing-like-this']))
+            ->assertOk()
+            ->assertSee('No assets match this filter.')
+            ->assertDontSee('AST-NOMATCH-BASE');
+    }
+
+    /**
+     * "Print selected" prints the ticked ids and only those. The count in the
+     * toolbar is the one part of the page derived from the selection rather than
+     * from the filters, so it is what proves the fallback did not kick in.
+     */
+    public function test_the_bulk_print_page_counts_only_the_ticked_labels(): void
+    {
+        $first = $this->asset(['asset_id' => 'AST-TICK-1']);
+        $second = $this->asset(['asset_id' => 'AST-UNTICK-2']);
+
+        $this->actingAs($this->user)->get(route('assets.qr.print', ['ids' => [$first->id]]))
+            ->assertOk()
+            ->assertSee('1 label')
+            ->assertSee($first->asset_id)
+            ->assertDontSee($second->asset_id)
+            ->assertDontSee('2 labels');
+    }
+
+    /** The sheet PDF is named after the release, so a folder of them stays readable. */
+    public function test_the_bulk_pdf_is_named_after_the_release(): void
+    {
+        $this->asset();
+
+        $response = $this->actingAs($this->user)->get(route('assets.qr.pdf'));
+
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+
+        // DomPDF writes the filename unquoted, so the assertion is on the prefix
+        // rather than on a header it formats itself.
+        $this->assertStringStartsWith(
+            'attachment; filename=asset-labels-',
+            (string) $response->headers->get('Content-Disposition')
+        );
     }
 }
