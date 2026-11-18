@@ -10,6 +10,7 @@ coverage/
 storage/*.key
 storage/logs/
 .storage
+.local/
 .idea/
 .vscode/
 .DS_Store
