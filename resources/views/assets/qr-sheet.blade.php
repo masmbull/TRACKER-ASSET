@@ -208,9 +208,6 @@
             </div>
         @endif
 
-        @if($assets->lastPage() > 1)
-            <div class="qr-table-foot">{{ $assets->links() }}</div>
-        @endif
     </div>
 
     {{-- Bulk actions stay a strip, not a card, so the eye goes straight from it
@@ -232,8 +229,9 @@
         <button type="button" class="qr-print-link" onclick="window.print()">Print this page</button>
     </div>
 
-    {{-- Each label is a wide row: the sticker keeps its physical size on the
-         left, its identity and the select box sit to the right. --}}
+    {{-- Two labels per row: the sticker keeps its physical size on the left,
+         its identity sits next to it, and the select box is its own control at
+         the end of the row rather than a line inside the identity block. --}}
     <div class="label-grid qr-label-grid">
         @forelse($assets as $asset)
             <article class="label-item qr-label-card">
@@ -243,11 +241,11 @@
                 <div class="qr-label-meta">
                     <p class="qr-label-id">{{ $asset->asset_id }}</p>
                     <p class="qr-label-sub">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) !== '' ? trim(($asset->brand ?? '').' '.($asset->model ?? '')) : '—' }}</p>
-                    <label class="label-check no-print">
-                        <input type="checkbox" name="ids[]" value="{{ $asset->id }}" form="bulk-label-form" class="label-select qr-checkbox">
-                        <span>Select</span>
-                    </label>
                 </div>
+                <label class="label-check qr-label-select no-print" title="Select {{ $asset->asset_id }} for printing">
+                    <input type="checkbox" name="ids[]" value="{{ $asset->id }}" form="bulk-label-form" class="label-select qr-checkbox">
+                    <span>Select</span>
+                </label>
             </article>
         @empty
             <p class="qr-empty">
@@ -255,6 +253,15 @@
             </p>
         @endforelse
     </div>
+
+    @if($assets->lastPage() > 1)
+        <nav class="qr-pager no-print" aria-label="Label pages">
+            <span class="qr-pager-info">
+                {{ $assets->total() }} {{ Str::plural('label', $assets->total()) }} &middot; page {{ $assets->currentPage() }} of {{ $assets->lastPage() }}
+            </span>
+            {{ $assets->links() }}
+        </nav>
+    @endif
 </div>
 
 <script>
@@ -810,10 +817,10 @@
         color: var(--qr-text);
     }
 
-    /* Labels: wide rows --------------------------------------------------- */
+    /* Labels: two per row ------------------------------------------------- */
     .asset-qr-page .label-grid {
-        grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
     }
 
     .asset-qr-page .qr-label-card {
@@ -866,9 +873,19 @@
         white-space: nowrap;
     }
 
-    .asset-qr-page .qr-label-meta .label-check {
-        margin-top: 6px;
+    .asset-qr-page .qr-label-select {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
         font-size: 11.5px;
+        color: var(--qr-muted);
+        cursor: pointer;
+    }
+
+    .asset-qr-page .qr-label-select:hover {
+        color: var(--qr-text);
     }
 
     .asset-qr-page .qr-empty {
@@ -880,6 +897,31 @@
         background: var(--qr-surface);
         border: 1px dashed var(--qr-border);
         border-radius: 14px;
+    }
+
+    /* Pager --------------------------------------------------------------- */
+    .asset-qr-page .qr-pager {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 20px;
+        background: var(--qr-surface);
+        border: 1px solid var(--qr-border);
+        border-radius: var(--qr-radius);
+        box-shadow: var(--qr-shadow);
+    }
+
+    .asset-qr-page .qr-pager-info {
+        font-size: 12.5px;
+        color: var(--qr-muted);
+    }
+
+    @media (max-width: 1023px) {
+        .asset-qr-page .label-grid {
+            grid-template-columns: 1fr;
+        }
     }
 
     @media (max-width: 640px) {
@@ -908,25 +950,16 @@
             flex: 1 1 100%;
         }
 
-        .asset-qr-page .qr-label-grid {
-            grid-template-columns: 1fr;
-        }
-
         .asset-qr-page .qr-label-card {
             flex-wrap: wrap;
         }
 
         .asset-qr-page .qr-label-meta {
             flex: 1 1 100%;
-            flex-direction: row;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px 12px;
         }
 
-        .asset-qr-page .qr-label-meta .label-check {
-            margin-top: 0;
+        .asset-qr-page .qr-pager {
+            padding: 10px 16px;
         }
     }
 
