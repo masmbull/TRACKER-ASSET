@@ -115,7 +115,7 @@ jobs:
 
           # Re-copy the compiled assets out of the new image before nginx can
           # serve them, so a build never serves the previous release's CSS/JS.
-          docker compose -f docker-compose.prod.yml run --rm --no-deps -T assets < /dev/null
+          docker compose -f docker-compose.prod.yml run --rm --no-deps assets < /dev/null
 
           # The app container's entrypoint runs the migrations as it starts.
           # This recreates app/scheduler/nginx because the image string changed,
