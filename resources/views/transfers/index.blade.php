@@ -11,7 +11,7 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
         <div class="md:col-span-2">
             <label class="block text-xs text-gray-500 dark:text-gray-400">Search</label>
-            <input type="text" name="search" value="{{ request('search') }}"
+            <input type="text" name="search" value="{{ request('search') }}" data-live-filter
                    placeholder="Transfer #, Asset ID, Hostname, User..."
                    class="w-full border rounded-lg px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-400">
         </div>
@@ -27,8 +27,8 @@
         <div>
             <label class="block text-xs text-gray-500 dark:text-gray-400">Date Range</label>
             <div class="flex gap-1">
-                <input type="date" name="from" value="{{ request('from') }}" class="w-1/2 border rounded-lg px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
-                <input type="date" name="to" value="{{ request('to') }}" class="w-1/2 border rounded-lg px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                <input type="date" name="from" value="{{ request('from') }}" aria-label="From date" class="min-w-0 flex-1 border rounded-lg px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                <input type="date" name="to" value="{{ request('to') }}" aria-label="To date" class="min-w-0 flex-1 border rounded-lg px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
             </div>
         </div>
     </div>
@@ -39,7 +39,7 @@
 </form>
 
 @if($transfers->count() > 0)
-<div class="w-full overflow-x-auto">
+<div class="w-full overflow-x-auto" data-live-filter-scope>
 <table class="min-w-[900px] w-full bg-white shadow rounded dark:bg-[#1d2939]">
     <thead>
         <tr class="border-b">
@@ -55,7 +55,7 @@
     </thead>
     <tbody>
         @foreach($transfers as $transfer)
-        <tr class="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
+        <tr class="border-b hover:bg-gray-50 dark:hover:bg-gray-800" data-live-filter-row>
             <td class="py-3 px-4">{{ $transfer->transfer_number }}</td>
             <td class="py-3 px-4">{{ $transfer->transfer_date?->format('Y-m-d') }}</td>
             <td class="py-3 px-4">

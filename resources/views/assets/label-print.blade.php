@@ -53,7 +53,7 @@
         .stage { max-width: 1000px; margin: 0 auto; padding: 28px 16px 56px; }
         .label-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, {{ $width }}mm);
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
             gap: {{ $gap }}mm;
             justify-content: start;
         }

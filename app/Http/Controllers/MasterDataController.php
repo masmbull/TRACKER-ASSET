@@ -110,7 +110,11 @@ class MasterDataController extends Controller
             $record->setAttribute('usage_total', $this->usageCount($config, $record->id));
         });
 
-        return view('master.index', [
+        $view = $request->header('X-Master-Fragment')
+            ? 'master._panel'
+            : 'master.index';
+
+        return view($view, [
             'type' => $type,
             'config' => $config,
             'records' => $records,

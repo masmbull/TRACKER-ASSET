@@ -39,7 +39,6 @@ class AssetLabelTest extends TestCase
         $this->company = Company::create(['name' => 'BPK Penabur', 'code' => 'BPK', 'address' => '']);
         $this->laptop = AssetCategory::create(['name' => 'Laptop']);
         $this->monitor = AssetCategory::create(['name' => 'Monitor']);
-        Location::create(['name' => 'WMS', 'status' => 'active']);
         AssetStatus::create(['name' => 'Active']);
 
         $this->user = User::factory()->create(['role' => 'viewer']);
@@ -68,7 +67,7 @@ class AssetLabelTest extends TestCase
         $response->assertSee('AST-2026-0001');
         $response->assertSee('Lenovo ThinkPad E14');
         $response->assertSee('SN: LPE14-0001');
-        $response->assertSee('BPK Penabur · Laptop');
+        $response->assertSee('MITO GROUP ASSETS');
         $response->assertSee('asset-label', false);
     }
 
@@ -202,7 +201,27 @@ class AssetLabelTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('SN: —');
-        $response->assertSee('BPK Penabur · Laptop');
+        $response->assertSee('MITO GROUP ASSETS');
+    }
+
+    /**
+     * The footer is the organisation mark and nothing else.
+     *
+     * No company (every label is MITO's) and no site name either: a location
+     * printed on the sticker goes stale the first time a machine moves, while
+     * the asset code above is what tells two identical laptops apart.
+     */
+    public function test_the_label_footer_is_the_organisation_mark_only(): void
+    {
+        $location = Location::create(['name' => 'IT Support', 'status' => 'active']);
+
+        $asset = $this->asset(['location_id' => $location->id]);
+
+        $this->actingAs($this->user)->get(route('assets.label', $asset))
+            ->assertOk()
+            ->assertSee('MITO GROUP ASSETS')
+            ->assertDontSee('IT Support')
+            ->assertDontSee('BPK Penabur');
     }
 
     /**
