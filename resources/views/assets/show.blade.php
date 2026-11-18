@@ -10,6 +10,9 @@
 
 <x-page-header :title="$asset->asset_id" :subtitle="$asset->brand . ' ' . $asset->model . ' · ' . ($asset->company?->name ?? '')">
     <x-slot:actions>
+        <x-button type="button" variant="secondary" size="sm" @click="$dispatch('open-modal', 'asset-label-modal')">
+            <x-icon name="printer" class="h-4 w-4" /> Label
+        </x-button>
         @can('audit', $asset)
             <x-button variant="secondary" size="sm" :href="route('assets.audit', $asset)">Audit</x-button>
         @endcan
@@ -500,6 +503,17 @@
             </form>
         </div>
     </x-modal>
-@endcan
+    @endcan
+
+<x-modal id="asset-label-modal" title="Asset label · {{ $asset->asset_id }}" maxWidth="lg">
+    <div class="flex justify-center rounded-xl bg-gray-50 p-6 dark:bg-gray-800/50">
+        <x-asset-label :asset="$asset" :qr-src="route('assets.qr', [$asset, 'plain' => 1])" />
+    </div>
+    <x-slot:footer>
+        <a href="{{ route('assets.label', $asset) }}" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Print view</a>
+        <a href="{{ route('assets.label.pdf', $asset) }}" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 hover:bg-brand-600">Download PDF</a>
+        <button type="button" @click="$dispatch('close-modal', 'asset-label-modal')" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Close</button>
+    </x-slot:footer>
+</x-modal>
 
 @endsection

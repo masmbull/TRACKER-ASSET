@@ -98,6 +98,28 @@ class AssetQrCode
     }
 
     /**
+     * The bare QR symbol, without the MITO mark or caption.
+     *
+     * The compact asset label puts the code on the left and the register data on
+     * the right, so the white plate that pays for the logo is not wanted: it
+     * would cover modules for a mark the label already spells out in text.
+     *
+     * Everything that decides where a scan lands - payload, size, margin, error
+     * correction - is the same as the existing label, so both formats resolve to
+     * the same public page and neither can drift from the other.
+     */
+    public function code(Asset $asset): string
+    {
+        $size = (int) ($this->config['size'] ?? 300);
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="'.$size.'" height="'.$size.'"'
+            .' viewBox="0 0 '.$size.' '.$size.'" role="img" aria-label="'.$this->escape($asset->asset_id).'">'
+            .'<rect width="'.$size.'" height="'.$size.'" fill="#ffffff"/>'
+            .$this->codeSvg($this->targetUrl($asset), $size)
+            .'</svg>';
+    }
+
+    /**
      * A standalone QR symbol for user-entered text or a URL.
      */
     public function customSvg(string $payload): string

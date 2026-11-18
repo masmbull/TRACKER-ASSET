@@ -77,9 +77,16 @@ Route::middleware('auth')->group(function () {
     // Before the resource route below: /assets/qr would otherwise be matched by
     // assets/{asset} with "qr" as the id, and 404 on an asset lookup.
     Route::get('/assets/qr', [QrController::class, 'sheet'])->name('assets.qr.sheet');
+    Route::get('/assets/qr/print', [QrController::class, 'printSheet'])->name('assets.qr.print');
+    Route::get('/assets/qr/pdf', [QrController::class, 'sheetPdf'])->name('assets.qr.pdf');
     Route::post('/assets/qr/custom', [QrController::class, 'custom'])->name('assets.qr.custom');
     Route::get('/assets/qr/history/{customQrHistory}/download', [QrController::class, 'downloadHistory'])->name('assets.qr.history.download');
     Route::get('/assets/{asset}/qr', [QrController::class, 'show'])->name('assets.qr');
+    // The compact sticker: preview/print page and its PDF. Separate from the
+    // square QR label above because this one is a physical asset label, not a
+    // code download, and it prints without the dashboard furniture.
+    Route::get('/assets/{asset}/label', [QrController::class, 'label'])->name('assets.label');
+    Route::get('/assets/{asset}/label/pdf', [QrController::class, 'labelPdf'])->name('assets.label.pdf');
     // Issue or rotate the public scan target behind a label. POST-only: it
     // writes a token, and a GET that mints one would fire on a prefetch or a
     // crawler and silently rotate the code out from under a printed sticker.

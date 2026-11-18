@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\CustomQrHistory;
@@ -31,11 +32,137 @@ class QrController extends Controller
      * code that is scanned off a screen it is the better format anyway: it stays
      * sharp at any size and is a fraction of the bytes.
      */
-    public function show(Asset $asset)
+    public function show(Request $request, Asset $asset)
     {
         $this->authorize('view', $asset);
 
-        return $this->svgResponse(AssetQrCode::fromConfig()->svg($asset), $asset->id.'-qr.svg');
+        $qr = AssetQrCode::fromConfig();
+
+        // "plain" is the compact label's code: the same payload, without the
+        // white logo plate the square label needs. It is an option on the
+        // existing route rather than a second route, so a sticker's address
+        // stays recognisable and the old label keeps its mark.
+        return $this->svgResponse(
+            $request->boolean('plain') ? $qr->code($asset) : $qr->svg($asset),
+            $asset->id.'-qr.svg'
+        );
+    }
+
+    /**
+     * The compact label on its own page, ready to print.
+     *
+     * Deliberately outside the application layout: a label printed from inside
+     * the dashboard would carry the sidebar and the page header onto the sheet,
+     * which is exactly what a sticker sheet must not have.
+     */
+    public function label(Asset $asset)
+    {
+        $this->authorize('view', $asset);
+
+        $asset->load(['company', 'category']);
+
+        return view('assets.label', ['asset' => $asset]);
+    }
+
+    /** The same label as a downloadable PDF, sized for the configured paper. */
+    public function labelPdf(Asset $asset): Response
+    {
+        $this->authorize('view', $asset);
+
+        $asset->load(['company', 'category']);
+
+        $pdf = Pdf::loadView('assets.label-pdf', [
+            'labels' => [['asset' => $asset, 'qrSrc' => $this->qrDataUri($asset)]],
+            'columns' => 1,
+        ])->setPaper($this->paper());
+
+        return $pdf->download('label-'.$asset->asset_id.'.pdf');
+    }
+
+    /**
+     * A print-only sheet for a set of assets.
+     *
+     * "Print selected" posts the checkbox ids here; with none selected the
+     * current filters are used instead, so the button is useful even when the
+     * operator has not ticked anything.
+     */
+    public function printSheet(Request $request)
+    {
+        $this->authorize('viewAny', Asset::class);
+
+        return view('assets.label-print', [
+            'assets' => $this->selectedAssets($request),
+        ]);
+    }
+
+    /** The same selection as a PDF, laid out for the configured paper. */
+    public function sheetPdf(Request $request): Response
+    {
+        $this->authorize('viewAny', Asset::class);
+
+        $qr = AssetQrCode::fromConfig();
+
+        $labels = $this->selectedAssets($request)
+            ->map(fn (Asset $asset) => [
+                'asset' => $asset,
+                'qrSrc' => 'data:image/svg+xml;base64,'.base64_encode($qr->code($asset)),
+            ])
+            ->all();
+
+        $pdf = Pdf::loadView('assets.label-pdf', [
+            'labels' => $labels,
+            'columns' => $this->labelColumns(),
+        ])->setPaper($this->paper());
+
+        return $pdf->download('asset-labels-'.now()->format('Ymd-His').'.pdf');
+    }
+
+    /**
+     * The QR for a label, inlined so a PDF does not depend on a network fetch.
+     *
+     * DomPDF does not request URLs, so an <img src="https://..."> in a PDF is a
+     * blank box. A data URI is the same SVG the browser would fetch, carried in
+     * the document itself.
+     */
+    private function qrDataUri(Asset $asset): string
+    {
+        return 'data:image/svg+xml;base64,'.base64_encode(AssetQrCode::fromConfig()->code($asset));
+    }
+
+    /**
+     * The assets a bulk action applies to: the ticked ids when there are any,
+     * otherwise the current filters.
+     */
+    private function selectedAssets(Request $request)
+    {
+        $ids = array_values(array_filter((array) $request->input('ids', []), 'is_numeric'));
+
+        if ($ids !== []) {
+            return Asset::query()
+                ->with(['company', 'category'])
+                ->whereIn('id', $ids)
+                ->orderBy('asset_id')
+                ->get();
+        }
+
+        return $this->filtered($request)->orderBy('asset_id')->get();
+    }
+
+    /** How many labels fit across the configured paper, gaps included. */
+    private function labelColumns(): int
+    {
+        $width = (float) config('assets.label.width_mm', 90);
+        $gap = (float) config('assets.label.gap_mm', 4);
+        $margin = (float) config('assets.label.page_margin_mm', 10);
+        $page = strtolower((string) config('assets.label.page_size', 'A4')) === 'letter' ? 215.9 : 210.0;
+
+        return max(1, (int) floor(($page - ($margin * 2) + $gap) / ($width + $gap)));
+    }
+
+    /** DomPDF wants a lowercase paper name. */
+    private function paper(): string
+    {
+        return strtolower((string) config('assets.label.page_size', 'A4'));
     }
 
     /**
@@ -176,6 +303,7 @@ class QrController extends Controller
             'qrHistory' => $qrHistory,
             'qr' => AssetQrCode::fromConfig(),
             'companies' => Company::orderBy('name')->get(),
+            'categories' => AssetCategory::orderBy('name')->get(),
             'locations' => Location::orderBy('name')->get(),
             'statuses' => AssetStatus::orderBy('name')->get(),
         ]);
@@ -191,11 +319,14 @@ class QrController extends Controller
         $like = '%'.$search.'%';
 
         return Asset::query()
+            ->with(['company', 'category'])
             ->when($search !== '', fn ($query) => $query->where(fn ($q) => $q
                 ->where('asset_id', 'like', $like)
                 ->orWhere('serial_number', 'like', $like)
-                ->orWhere('hostname', 'like', $like)))
+                ->orWhere('hostname', 'like', $like)
+                ->orWhere('model', 'like', $like)))
             ->when($request->filled('company'), fn ($q) => $q->where('company_id', $request->input('company')))
+            ->when($request->filled('category'), fn ($q) => $q->where('category_id', $request->input('category')))
             ->when($request->filled('location'), fn ($q) => $q->where('location_id', $request->input('location')))
             ->when($request->filled('status'), fn ($q) => $q->where('asset_status_id', $request->input('status')))
             ->where('is_active', true);
