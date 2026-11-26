@@ -8,6 +8,8 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use DOMDocument;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -116,5 +118,30 @@ class DocumentPreviewTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
+    }
+
+    /**
+     * The number is a clickable preview trigger. The wrapper cannot itself be a
+     * <button>: callers pass a button as the slot, and nested buttons break the
+     * HTML parser into two siblings - the visible number then loses its click
+     * handler entirely.
+     */
+    public function test_document_number_trigger_is_not_a_nested_button(): void
+    {
+        $document = $this->document($this->asset());
+
+        $html = $this->actingAs($this->admin())
+            ->get(route('documents.index'))
+            ->assertOk()
+            ->getContent();
+
+        $dom = new DOMDocument;
+        $dom->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+        $nodes = (new DOMXPath($dom))->query('//*[@data-pdf-open="document-preview-'.$document->id.'"]');
+
+        $this->assertSame(1, $nodes->length);
+        $opener = $nodes->item(0);
+        $this->assertSame('span', strtolower($opener->nodeName));
+        $this->assertStringContainsString($document->document_number, trim($opener->textContent));
     }
 }

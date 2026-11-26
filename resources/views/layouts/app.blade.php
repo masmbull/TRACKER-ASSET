@@ -290,31 +290,38 @@
                         </button>
 
                         <div class="relative" x-data="{ dropdownOpen: false }" @click.outside="dropdownOpen = false">
-                            <a class="flex items-center text-gray-700 dark:text-gray-400" href="#" @click.prevent="dropdownOpen = !dropdownOpen">
-                                <span class="mr-2 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-brand-100 text-brand-600 text-xs font-semibold dark:bg-brand-500/20 dark:text-brand-400 sm:mr-3 sm:h-11 sm:w-11 sm:text-sm">
+                            <button type="button" class="group flex items-center gap-2 rounded-xl px-1.5 py-1 text-gray-700 transition hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:text-gray-300 dark:hover:bg-white/5" @click="dropdownOpen = !dropdownOpen" :aria-expanded="dropdownOpen ? 'true' : 'false'">
+                                <span class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-semibold text-white shadow-theme-xs ring-2 ring-white dark:ring-gray-800 sm:h-11 sm:w-11 sm:text-sm">
                                     {{ strtoupper(substr(Auth::user()?->name ?? 'U', 0, 1)) }}
                                 </span>
                                 <span class="hidden text-theme-sm font-medium sm:block">{{ Auth::user()?->name }}</span>
-                                <x-icon name="chevron-down" ::class="dropdownOpen && 'rotate-180'" class="ml-1 hidden h-4 w-4 text-gray-500 sm:block" />
-                            </a>
+                                <x-icon name="chevron-down" ::class="dropdownOpen && 'rotate-180'" class="hidden h-4 w-4 text-gray-400 transition-transform duration-200 sm:block" />
+                            </button>
 
                             <div x-show="dropdownOpen"
-                                 x-transition:enter="transition ease-[cubic-bezier(0.22,1.36,0.36,1)] duration-200"
-                                 x-transition:enter-start="opacity-0 scale-95 translate-y-1" x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                                 x-transition:leave="transition ease-in duration-100"
-                                 x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                                 class="shadow-theme-lg dark:bg-gray-dark absolute right-0 mt-4 origin-top-right w-65 flex flex-col rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800">
-                                <div>
-                                    <span class="text-theme-sm block font-medium text-gray-700 dark:text-gray-400">{{ Auth::user()?->name }}</span>
-                                    <span class="text-theme-xs mt-0.5 block text-gray-500 dark:text-gray-400">{{ Auth::user()?->email }}</span>
+                                 x-transition:enter="transition duration-200 ease-out"
+                                 x-transition:enter-start="opacity-0 -translate-y-1 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave="transition duration-150 ease-in"
+                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100" x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
+                                 class="tracker-dropdown absolute right-0 z-50 mt-3 w-[min(19rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-2 shadow-[0_24px_60px_-18px_rgba(16,24,40,.35)] ring-1 ring-black/[0.03] dark:border-gray-700/80 dark:bg-[#1d2939] dark:ring-white/5">
+                                <div class="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/5">
+                                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-semibold text-white">
+                                        {{ strtoupper(substr(Auth::user()?->name ?? 'U', 0, 1)) }}
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="truncate text-theme-sm font-semibold text-gray-900 dark:text-white">{{ Auth::user()?->name }}</p>
+                                        <p class="truncate text-theme-xs text-gray-500 dark:text-gray-400">{{ Auth::user()?->email }}</p>
+                                    </div>
                                 </div>
-                                <ul class="flex flex-col gap-1 border-b border-gray-200 pt-4 pb-3 dark:border-gray-800">
-                                    <li class="text-theme-xs px-3 text-gray-500 capitalize">Role: {{ Auth::user()?->role }}</li>
-                                </ul>
+                                <div class="flex items-center justify-between px-3 py-3">
+                                    <span class="text-theme-xs text-gray-400">Signed in as</span>
+                                    <span class="rounded-full bg-brand-50 px-2.5 py-0.5 text-theme-xs font-semibold capitalize text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{{ Auth::user()?->role }}</span>
+                                </div>
+                                <div class="my-1 h-px bg-gray-100 dark:bg-white/5"></div>
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
-                                    <button type="submit" class="group text-theme-sm mt-3 flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 w-full dark:text-gray-400 dark:hover:bg-white/5">
-                                        <x-icon name="logout" class="h-5 w-5 text-gray-500 transition-colors group-hover:text-gray-700" />
+                                    <button type="submit" class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-theme-sm font-medium text-gray-700 transition hover:bg-error-50 hover:text-error-700 dark:text-gray-300 dark:hover:bg-error-500/10 dark:hover:text-error-300">
+                                        <x-icon name="logout" class="h-4 w-4 text-gray-400 transition-colors group-hover:text-error-500" />
                                         Sign out
                                     </button>
                                 </form>
