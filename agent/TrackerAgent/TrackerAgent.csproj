@@ -252,6 +252,10 @@
   <ItemGroup>
     <Resource Include="mito-logo-white.png" />
     <Resource Include="mito-icon.png" />
+    <!-- Font Awesome Free 6 (SIL OFL 1.1 font / CC BY 4.0 icons).
+         See Fonts\FONT-AWESOME-LICENSE.txt for the full licence. -->
+    <Resource Include="Fonts\fa-solid-900.ttf" />
+    <Resource Include="Fonts\FONT-AWESOME-LICENSE.txt" />
   </ItemGroup>
 
   <ItemGroup>

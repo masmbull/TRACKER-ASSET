@@ -16,6 +16,7 @@ use App\Http\Controllers\IkeBastInspectionController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\MicrosoftDirectoryController;
 use App\Http\Controllers\QrController;
+use App\Http\Controllers\RemoteController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\TemplateController;
@@ -108,6 +109,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/assets/{asset}/retire', [AssetController::class, 'retire'])->name('assets.retire');
     Route::post('/assets/{asset}/dispose', [AssetController::class, 'dispose'])->name('assets.dispose');
     Route::post('/assets/{asset}/agent-scan', [AssetController::class, 'agentScan'])->name('assets.audit.agent.scan');
+    Route::post('/assets/{asset}/remote', [RemoteController::class, 'remote'])->name('assets.remote');
 
     Route::resource('assets/{asset}/documents', DocumentController::class)->only(['create', 'store', 'destroy']);
 
@@ -186,6 +188,7 @@ Route::middleware('auth')->group(function () {
         // token-scoped routes for the same reason as the others: "commands" must
         // never be read as a token id.
         Route::get('/agent/commands/{command}/status', [AgentFleetController::class, 'commandStatus'])->name('agent.commands.status');
+        Route::get('/agent/commands/{command}/launcher', [RemoteController::class, 'launcher'])->name('agent.commands.launcher');
 
         // Move a device that is not on the register yet into the register.
         // Inside the manage-agents group rather than under the assets policy on

@@ -283,11 +283,9 @@ public partial class App : System.Windows.Application
         };
 
         // The menu is built once, by BuildContextMenu, and assigned above. It
-        // used to be built there and then filled again here, so every entry
-        // appeared twice - Status, Scan Now and Check for Updates below a
-        // separator, then the same three once more with no separator between
-        // them. Appending to ContextMenuStrip.Items adds to that menu; it does
-        // not replace it.
+        // used to be built there and then filled again here, so the same entry
+        // appeared twice. Appending to ContextMenuStrip.Items adds to that menu;
+        // it does not replace it.
         _ = Task.Run(() => CommandLoop(config));
     }
 
@@ -361,24 +359,11 @@ public partial class App : System.Windows.Application
             }));
         });
 
-        menu.Items.Add(new ToolStripSeparator());
-
-        // Not a self-service update. The build that runs on a managed laptop is
-        // chosen by IT and rolled out from the server, so an update started from
-        // the tray would install a build nobody approved - and on a machine whose
-        // exe is held open by the SYSTEM task it would fail anyway. The menu entry
-        // stays because an empty menu looks broken; it explains who to ask.
-        menu.Items.Add("Check for Updates", CreateTrayMenuGlyph("\uE72C", System.Drawing.Color.FromArgb(249, 112, 102)), (_, _) =>
-        {
-            System.Windows.MessageBox.Show(
-                "Pembaruan agent dikelola oleh tim IT.\n\n" +
-                "Hubungi tim IT untuk mendapatkan versi terbaru. " +
-                "Anda tidak perlu mengunduh atau memasang sendiri.",
-                "Pembaruan Agent",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Information);
-        });
-
+        // Status is the only tray action. Update checks were removed: on a
+        // managed laptop the build is chosen by IT and rolled out by the server,
+        // so a tray-driven update would install a build nobody approved - and
+        // the SYSTEM task holds the exe open anyway. Server-pushed `update`
+        // commands still work; only the self-service menu entry is gone.
         return menu;
     }
 

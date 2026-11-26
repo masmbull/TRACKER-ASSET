@@ -20,9 +20,14 @@
     $modalId = 'document-preview-' . $document->getKey();
 @endphp
 
-<button type="button" data-pdf-open="{{ $modalId }}" class="contents">
+{{-- A span, not a button: callers pass a button/x-button as the trigger, and a
+     <button> inside a <button> is invalid HTML. The parser closes the outer one
+     at the inner start tag, leaving an empty data-pdf-open wrapper and a visible
+     trigger with no handler - clicking the document number did nothing. --}}
+<span data-pdf-open="{{ $modalId }}" class="contents" role="button" tabindex="0"
+      aria-label="Preview document {{ $document->document_number }}">
     {{ $trigger ?? $slot }}
-</button>
+</span>
 
 <dialog id="{{ $modalId }}" class="document-dialog w-full max-w-5xl"
         data-pdf-src="{{ route('documents.preview.data', $document) }}"
@@ -39,12 +44,12 @@
 
             <div class="flex shrink-0 items-center gap-1.5">
                 <a href="{{ route('documents.download', $document) }}"
-                   class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3 py-2 text-theme-xs font-semibold text-white transition hover:bg-success-600">
+                   class="inline-flex items-center gap-1.5 rounded-lg bg-success-500 px-3 py-2 text-theme-xs font-semibold text-white shadow-theme-xs transition hover:-translate-y-0.5 hover:bg-success-600 hover:shadow-theme-md">
                     <x-icon name="download" class="h-4 w-4" /> Download
                 </a>
                 <button type="button" data-pdf-print
-                        class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                    Print
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-theme-xs font-semibold text-gray-700 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-brand-500/10 dark:hover:text-brand-300">
+                    <x-icon name="printer" class="h-4 w-4" /> Print
                 </button>
                 <button type="button" data-pdf-close aria-label="Close preview"
                         class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/5 dark:hover:text-gray-200">
@@ -243,6 +248,15 @@
 
             if (closer) {
                 closer.closest('dialog')?.close();
+            }
+        });
+
+        // Keyboard support for the wrapper when a caller passes plain text
+        // instead of a real button. A focused inner button already fires click.
+        document.addEventListener('keydown', (event) => {
+            if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-pdf-open]')) {
+                event.preventDefault();
+                openDocument(event.target.dataset.pdfOpen);
             }
         });
 

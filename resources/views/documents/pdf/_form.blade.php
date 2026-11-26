@@ -85,6 +85,7 @@
     @if(filled($document['notes'] ?? null))
         <tr><td class="label">Catatan</td><td>{{ $document['notes'] }}</td></tr>
     @endif
+    <tr><td class="label">Lain-Lain</td><td class="extra-room"></td></tr>
 </table>
 
 {{-- Completeness, item by item, exactly as the paper form asks.
@@ -125,6 +126,7 @@
             @endif
         </tr>
     @endforeach
+    <tr><td class="label">Lain-Lain</td><td colspan="3" class="extra-room"></td></tr>
 </table>
 @endif
 
@@ -147,65 +149,36 @@
     <tr><td class="statement">{{ $document['statement'] ?? ($copy['statement'] ?? '-') }}</td></tr>
 </table>
 
- {{-- Signatures. 3 kolom x 2 baris, sesuai layout referensi. Setiap sel:
-     judul (bold, rata tengah), posisi, area tanda tangan (garis putus-putus),
-     nama dan tanggal di bawah. Field existing saja — sel tanpa field kosong. --}}
+ {{-- Signatures. Satu kolom: "Diperiksa dan Diterima Oleh". USER dan IT
+     masing-masing punya area tanda tangan, dengan nama tercetak di bawahnya. --}}
 <style>
     .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
-    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px; }
-    .sign-grid td { border: 1px solid #9ca3af; height: 78px; vertical-align: top; padding: 4px; }
-    .sign-cell-pos { text-align: center; font-size: 7px; color: #475569; margin-bottom: 3px; }
-    .sign-cell-dashed { border-bottom: 1px dashed #6b7280; margin: 5px 0; height: 1px; }
-    .sign-cell-name { font-size: 7.5px; font-weight: bold; margin-bottom: 1px; }
-    .sign-cell-date { font-size: 7px; color: #475569; }
-    .sign-cell-image { display: block; height: 32px; max-width: 100%; margin: 2px auto; }
+    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px 6px; }
+    .sign-grid td { border: 1px solid #9ca3af; width: 50%; height: 72px; vertical-align: top; padding: 5px; }
+    .sign-cell-role { font-size: 8px; font-weight: 700; color: #344054; margin-bottom: 2px; }
+    .sign-cell-dashed { border-bottom: 1px dashed #6b7280; margin: 3px 0; height: 1px; }
+    .sign-cell-name { font-size: 8.5px; font-weight: 700; text-align: center; margin-top: 2px; color: #111827; }
+    .sign-cell-date { font-size: 7px; color: #475569; text-align: center; }
+    .sign-cell-image { display: block; height: 30px; max-width: 100%; margin: 2px auto; }
 </style>
 <table class="sign-grid">
     <tr>
-        <th>Dibuat Oleh</th>
-        <th>Diperiksa Oleh</th>
-        <th>Diperiksa dan Diterima Oleh</th>
+        <th colspan="2">Diperiksa dan Diterima Oleh</th>
     </tr>
     <tr>
         <td>
-            <div class="sign-cell-pos">Penerima Aset</div>
+            <div class="sign-cell-role">User / Penerima Aset</div>
             <div class="sign-cell-dashed"></div>
             <div class="sign-cell-name">{{ $blank($sign['menerima'] ?? null) }}</div>
             <div class="sign-cell-date">{{ $blank($sign['menerima_date'] ?? null) }}</div>
         </td>
         <td>
-            <div class="sign-cell-pos"></div>
-            <div class="sign-cell-dashed"></div>
-            <div class="sign-cell-name"></div>
-            <div class="sign-cell-date"></div>
-        </td>
-        <td>
-            <div class="sign-cell-pos">Penyerah</div>
+            <div class="sign-cell-role">IT / Penyerah Aset</div>
             @if(!empty($document['signature_image_data']))
                 <img class="sign-cell-image" src="{{ $document['signature_image_data'] }}" alt="">
             @else
-            <div class="sign-cell-dashed"></div>
+                <div class="sign-cell-dashed"></div>
             @endif
-            <div class="sign-cell-name">{{ $blank($sign['menyerahkan'] ?? null) }}</div>
-            <div class="sign-cell-date">{{ $blank($sign['menyerahkan_date'] ?? null) }}</div>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <div class="sign-cell-pos"></div>
-            <div class="sign-cell-dashed"></div>
-            <div class="sign-cell-name"></div>
-            <div class="sign-cell-date"></div>
-        </td>
-        <td>
-            <div class="sign-cell-pos"></div>
-            <div class="sign-cell-dashed"></div>
-            <div class="sign-cell-name"></div>
-            <div class="sign-cell-date"></div>
-        </td>
-        <td>
-            <div class="sign-cell-pos">Penyerah Aset (IT)</div>
-            <div class="sign-cell-dashed"></div>
             <div class="sign-cell-name">{{ $blank($sign['it'] ?? null) }}</div>
             <div class="sign-cell-date">{{ $blank($sign['it_date'] ?? null) }}</div>
         </td>
