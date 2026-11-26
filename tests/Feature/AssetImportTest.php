@@ -319,8 +319,15 @@ class AssetImportTest extends TestCase
         $headers = array_values($sheet->toArray(null, true, true, false)[0]);
 
         $this->assertSame([
-            'Asset ID', 'KATEGORI', 'Merk / Model', 'Serial Number', 'Hostname',
-            'Spec', 'OS', 'Lokasi', 'User Saat Ini', 'Status Asset', 'Catatan',
+            'Company Name', 'ASSET ID', 'Kategori', 'Merk', 'Model', 'Serial Number',
+            'Hostname', 'Processor', 'Storage', 'RAM', 'OS / Versi', 'LOKASI',
+            'Tahun Pembelian', 'Vendor', 'Harga (Rp)', 'Masa Pakai (thn)', 'Status Aset',
+            'Garansi s/d', 'Tanggal Deploy', 'Lisensi SW/Office', 'MAC Address',
+            'IP Address (Statis)', 'User Pertama', 'Tgl Mulai (U1)', 'Tgl Serah (U1→U2)',
+            'User Kedua', 'Tgl Mulai (U2)', 'Tgl Serah (U2→U3)', 'User Ketiga',
+            'Tgl Mulai (U3)', 'Tgl Serah (U3→U4)', 'USER SEKARANG', 'Tgl Mulai (Current)',
+            'Tgl Serah Terakhir', 'Admin/IT PIC', 'Riwayat Perbaikan / Catatan',
+            'Tgl Retire/Disposal', 'QR', 'BARCODE',
         ], $headers);
     }
 
@@ -328,7 +335,7 @@ class AssetImportTest extends TestCase
     {
         $analysis = app(AssetImportService::class)->analyze(base_path('IT Assets.xlsx'));
 
-        $this->assertSame('Overall', $analysis['sheet']);
+        $this->assertSame('Details', $analysis['sheet']);
         $this->assertSame([], $analysis['unmapped_columns']);
         $this->assertContains('status_name', $analysis['mapped_columns']);
     }

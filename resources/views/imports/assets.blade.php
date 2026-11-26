@@ -64,7 +64,7 @@
     </p>
     <div class="mt-3 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-theme-xs text-gray-600 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-gray-300">
         <p class="font-semibold text-gray-800 dark:text-white">Use the template so the columns match.</p>
-        <p class="mt-1">The sheet <strong>Overall</strong> must keep these columns in row 1: Asset ID, KATEGORI, Merk / Model, Serial Number, Hostname, Spec, OS, Lokasi, User Saat Ini, Status Asset, Catatan. Write <em>Merk / Model</em> as “LENOVO / ThinkPad T14”. Do not rename or reorder the headers.</p>
+        <p class="mt-1">The sheet <strong>Details</strong> must keep its 39 columns in row 1 — Company Name, ASSET ID, Kategori, Merk, Model, Serial Number, Hostname, Processor, Storage, RAM, OS / Versi, LOKASI, Tahun Pembelian, Vendor, Harga (Rp), Masa Pakai (thn), Status Aset, Garansi s/d, Tanggal Deploy, Lisensi SW/Office, MAC Address, IP Address (Statis), User Pertama, Tgl Mulai (U1), Tgl Serah (U1→U2), User Kedua, Tgl Mulai (U2), Tgl Serah (U2→U3), User Ketiga, Tgl Mulai (U3), Tgl Serah (U3→U4), USER SEKARANG, Tgl Mulai (Current), Tgl Serah Terakhir, Admin/IT PIC, Riwayat Perbaikan / Catatan, Tgl Retire/Disposal, QR, BARCODE. Do not rename or reorder the headers — the downloaded template already matches.</p>
     </div>
 </x-card>
 

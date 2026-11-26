@@ -10,7 +10,7 @@
 return [
 
     // Sheet that holds the asset rows. Other sheets (e.g. a dashboard sheet) are ignored.
-    'sheet_names' => ['Overall', 'Details'],
+    'sheet_names' => ['Details'],
 
     // Maximum number of data rows accepted in a single import.
     'max_rows' => 20000,

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -33,53 +34,102 @@ class AssetImportController extends Controller
     /**
      * Blank workbook with exactly the columns of the office's IT Assets sheet.
      *
-     * A template that uses a different header spelling fails silently: analyze()
-     * maps only known headers and lists the rest as unmapped, so the operator
-     * uploads a full sheet and imports almost nothing without a clear reason.
+     * The real register lives in the "Details" sheet of IT Assets.xlsx and has
+     * 39 legacy columns. A template that uses a different header spelling fails
+     * silently: analyze() maps only known headers and lists the rest as
+     * unmapped, so the operator uploads a full sheet and imports almost nothing
+     * without a clear reason. This template is generated from the same header
+     * list the importer understands, so every column maps cleanly.
      */
     public function template()
     {
+        // Keep in sync with IT Assets.xlsx, sheet "Details" (39 columns).
         $headers = [
-            'Asset ID', 'KATEGORI', 'Merk / Model', 'Serial Number', 'Hostname',
-            'Spec', 'OS', 'Lokasi', 'User Saat Ini', 'Status Asset', 'Catatan',
+            'Company Name', 'ASSET ID', 'Kategori', 'Merk', 'Model', 'Serial Number',
+            'Hostname', 'Processor', 'Storage', 'RAM', 'OS / Versi', 'LOKASI',
+            'Tahun Pembelian', 'Vendor', 'Harga (Rp)', 'Masa Pakai (thn)', 'Status Aset',
+            'Garansi s/d', 'Tanggal Deploy', 'Lisensi SW/Office', 'MAC Address',
+            'IP Address (Statis)', 'User Pertama', 'Tgl Mulai (U1)', 'Tgl Serah (U1→U2)',
+            'User Kedua', 'Tgl Mulai (U2)', 'Tgl Serah (U2→U3)', 'User Ketiga',
+            'Tgl Mulai (U3)', 'Tgl Serah (U3→U4)', 'USER SEKARANG', 'Tgl Mulai (Current)',
+            'Tgl Serah Terakhir', 'Admin/IT PIC', 'Riwayat Perbaikan / Catatan',
+            'Tgl Retire/Disposal', 'QR', 'BARCODE',
+        ];
+
+        $guide = [
+            ['Kolom', 'Artinya'],
+            ['Company Name', 'Nama perusahaan. Boleh kosong — memakai perusahaan bawaan.'],
+            ['ASSET ID', 'Kode aset unik. Kosongkan jika ingin dibuat otomatis.'],
+            ['Kategori', 'Misalnya Laptop / PC / Monitor.'],
+            ['Merk', 'Merek perangkat, misalnya LENOVO.'],
+            ['Model', 'Model perangkat, misalnya ThinkPad T14.'],
+            ['Serial Number', 'Nomor seri perangkat.'],
+            ['Hostname', 'Nama host perangkat.'],
+            ['Processor', 'Spesifikasi prosesor.'],
+            ['Storage', 'Kapasitas penyimpanan.'],
+            ['RAM', 'Kapasitas memori.'],
+            ['OS / Versi', 'Sistem operasi yang terpasang.'],
+            ['LOKASI', 'Lokasi aset, misalnya HO atau cabang.'],
+            ['Tahun Pembelian', 'Tahun pembelian (angka, misalnya 2025).'],
+            ['Vendor', 'Nama vendor / supplier.'],
+            ['Harga (Rp)', 'Harga dalam rupiah.'],
+            ['Masa Pakai (thn)', 'Masa pakai dalam tahun.'],
+            ['Status Aset', 'Misalnya Active / Available / Assigned.'],
+            ['Garansi s/d', 'Tanggal berakhirnya garansi.'],
+            ['Tanggal Deploy', 'Tanggal perangkat mulai dipakai.'],
+            ['Lisensi SW/Office', 'Lisensi perangkat lunak / Office.'],
+            ['MAC Address', 'Alamat MAC perangkat.'],
+            ['IP Address (Statis)', 'Alamat IP statis perangkat.'],
+            ['User Pertama', 'Nama pemegang aset pertama.'],
+            ['Tgl Mulai (U1)', 'Tanggal mulai pemegang pertama.'],
+            ['Tgl Serah (U1→U2)', 'Tanggal serah dari pemegang 1 ke 2.'],
+            ['User Kedua', 'Nama pemegang aset kedua.'],
+            ['Tgl Mulai (U2)', 'Tanggal mulai pemegang kedua.'],
+            ['Tgl Serah (U2→U3)', 'Tanggal serah dari pemegang 2 ke 3.'],
+            ['User Ketiga', 'Nama pemegang aset ketiga.'],
+            ['Tgl Mulai (U3)', 'Tanggal mulai pemegang ketiga.'],
+            ['Tgl Serah (U3→U4)', 'Tanggal serah dari pemegang 3 ke 4.'],
+            ['USER SEKARANG', 'Nama pemegang aset saat ini.'],
+            ['Tgl Mulai (Current)', 'Tanggal mulai pemegang saat ini.'],
+            ['Tgl Serah Terakhir', 'Tanggal serah terakhir.'],
+            ['Admin/IT PIC', 'Nama admin / IT PIC.'],
+            ['Riwayat Perbaikan / Catatan', 'Catatan perbaikan atau catatan tambahan.'],
+            ['Tgl Retire/Disposal', 'Tanggal aset di-retire / dihapus.'],
+            ['QR', 'Kode QR yang sudah ada (biasanya kosong).'],
+            ['BARCODE', 'Barcode yang sudah ada (biasanya kosong).'],
+            ['', ''],
+            ['Catatan', 'Jangan mengubah nama kolom di sheet Details. Baris pertama adalah header, sisanya satu aset per baris.'],
         ];
 
         $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Overall');
+        $sheet->setTitle('Details');
         $sheet->fromArray([$headers], null, 'A1');
-        $sheet->getStyle('A1:K1')->applyFromArray([
+        $sheet->getStyle('A1:'.Coordinate::stringFromColumnIndex(count($headers)).'1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DC2626']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
         ]);
-        $sheet->getRowDimension(1)->setRowHeight(24);
+        $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->freezePane('A2');
 
-        foreach (range('A', 'K') as $column) {
-            $sheet->getColumnDimension($column)->setWidth(24);
+        foreach ($headers as $index => $header) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index + 1))
+                ->setWidth(max(16, min(32, strlen($header) + 4)));
         }
 
-        $guide = $spreadsheet->createSheet();
-        $guide->setTitle('Petunjuk');
-        $guide->fromArray([
-            ['Kolom', 'Artinya'],
-            ['Asset ID', 'Kode aset unik. Kosongkan jika ingin dibuat otomatis.'],
-            ['KATEGORI', 'Misalnya Laptop / PC / Monitor.'],
-            ['Merk / Model', 'Ditulis sebagai "Merk / Model", misalnya "LENOVO / ThinkPad T14".'],
-            ['Serial Number', 'Nomor seri perangkat.'],
-            ['Hostname', 'Wajib diisi.'],
-            ['Spec', 'Prosesor / spesifikasi utama.'],
-            ['OS', 'Sistem operasi yang terpasang.'],
-            ['Lokasi', 'Lokasi aset, misalnya HO atau cabang.'],
-            ['User Saat Ini', 'Nama pemegang aset saat ini.'],
-            ['Status Asset', 'Misalnya Active / Available / Assigned.'],
-            ['Catatan', 'Catatan tambahan (disimpan sebagai catatan perbaikan).'],
-            ['', ''],
-            ['Catatan', 'Jangan mengubah nama kolom di sheet Overall. Baris pertama adalah header, sisanya satu aset per baris.'],
-        ], null, 'A1');
-        $guide->getColumnDimension('A')->setWidth(24);
-        $guide->getColumnDimension('B')->setWidth(90);
+        $info = $spreadsheet->createSheet();
+        $info->setTitle('Petunjuk');
+        $info->fromArray($guide, null, 'A1');
+        $info->getStyle('A1:B1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DC2626']],
+        ]);
+        $info->getColumnDimension('A')->setWidth(36);
+        $info->getColumnDimension('B')->setWidth(90);
+
+        // Open the workbook on the data sheet, not the guide sheet.
+        $spreadsheet->setActiveSheetIndex(0);
 
         ob_start();
         IOFactory::createWriter($spreadsheet, 'Xlsx')->save('php://output');
