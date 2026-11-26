@@ -76,6 +76,11 @@ class AssetTransfer extends Model
         return $this->hasMany(AssetAssignment::class);
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class, 'transfer_id');
+    }
+
     public function activities(): HasMany
     {
         return $this->hasMany(ActivityLog::class, 'entity_id')->where('entity_type', 'asset_transfers');

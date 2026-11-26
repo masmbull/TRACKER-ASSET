@@ -13,7 +13,7 @@ class TransferController extends Controller
         Gate::authorize('export-assets');
 
         $query = AssetTransfer::query()
-            ->with(['asset', 'fromUser', 'toUser', 'fromLocation', 'toLocation', 'submitter']);
+            ->with(['asset', 'fromUser', 'toUser', 'fromLocation', 'toLocation', 'submitter', 'documents']);
 
         if ($request->filled('search')) {
             $search = '%'.trim((string) $request->input('search')).'%';

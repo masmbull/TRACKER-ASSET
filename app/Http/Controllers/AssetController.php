@@ -14,10 +14,12 @@ use App\Models\AssetRepair;
 use App\Models\AssetStatus;
 use App\Models\AssetTransfer;
 use App\Models\Company;
+use App\Models\Document;
 use App\Models\DocumentTemplate;
 use App\Models\Location;
 use App\Models\User;
 use App\Services\AuditComparisonService;
+use App\Services\DocumentGenerationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -710,7 +712,7 @@ class AssetController extends Controller
         return view('assets.transfer', compact('asset', 'users', 'locations'));
     }
 
-    public function submitTransfer(Request $request, Asset $asset)
+    public function submitTransfer(Request $request, Asset $asset, DocumentGenerationService $documents)
     {
         $this->authorize('transfer', $asset);
 
@@ -774,6 +776,25 @@ class AssetController extends Controller
 
             return $transfer;
         });
+
+        // A transfer is a handover, so it always produces its FAT document. The
+        // service opens its own transaction and writes the PDF, hence it runs only
+        // after the transfer itself has committed. The guard makes a retried POST
+        // (or a second call for the same transfer) safe.
+        if (! Document::where('transfer_id', $transfer->id)
+            ->where('document_type', 'FAT')
+            ->exists()) {
+            $documents->generate($asset, 'FAT', [
+                'transfer_id' => $transfer->id,
+                'template_id' => DocumentTemplate::where('document_type', 'FAT')
+                    ->where('is_active', true)
+                    ->value('id'),
+                'document_date' => $validated['transfer_date'],
+                'handover_date' => $validated['transfer_date'],
+                'notes' => $validated['notes'] ?? null,
+                'asset_accessories' => $validated['accessories'] ?? null,
+            ], $request->user());
+        }
 
         ActivityLog::create([
             'actor_id' => Auth::id(),

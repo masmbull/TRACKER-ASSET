@@ -8,9 +8,11 @@ use App\Models\AssetCategory;
 use App\Models\AssetStatus;
 use App\Models\AssetTransfer;
 use App\Models\Company;
+use App\Models\Document;
 use App\Models\Location;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -35,6 +37,10 @@ class TransferTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // submitTransfer now generates a PDF for every transfer. Keep those files
+        // out of the real storage/app/documents directory during tests.
+        Storage::fake('local');
 
         Company::create(['name' => 'Test Co', 'code' => 'TC', 'address' => '']);
         AssetCategory::create(['name' => 'Laptop']);
@@ -116,6 +122,51 @@ class TransferTest extends TestCase
             'action' => 'TRANSFER',
             'entity_identifier' => $asset->asset_id,
         ]);
+    }
+
+    public function test_transfer_generates_fat_document_and_pdf(): void
+    {
+        $this->actingAs($this->support)
+            ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->target->id))
+            ->assertRedirect();
+
+        $transfer = AssetTransfer::firstOrFail();
+        $document = Document::firstOrFail();
+
+        $expectedNumber = str_replace(
+            ['{month}', '{year}', '{seq:4}'],
+            [now()->format('m'), now()->format('Y'), '0001'],
+            config('documents.numbering.FAT')
+        );
+
+        $this->assertSame('FAT', $document->document_type);
+        $this->assertSame($transfer->id, $document->transfer_id);
+        $this->assertSame($this->asset->id, $document->asset_id);
+        $this->assertSame($this->support->id, $document->generated_by);
+        $this->assertSame($expectedNumber, $document->document_number);
+        $this->assertStringStartsWith('documents/', $document->file_path);
+        Storage::assertExists($document->file_path);
+        $this->assertStringStartsWith('%PDF', Storage::get($document->file_path));
+        $this->assertTrue($this->asset->fresh()->documents->contains($document));
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'GENERATE_DOCUMENT',
+            'entity_id' => $document->id,
+        ]);
+    }
+
+    public function test_transfer_history_links_to_generated_fat_pdf(): void
+    {
+        $this->actingAs($this->support)
+            ->post("/assets/{$this->asset->id}/transfer", $this->transferPayload($this->target->id));
+
+        $document = Document::firstOrFail();
+
+        $this->actingAs($this->support)
+            ->get('/transfers')
+            ->assertOk()
+            ->assertSee('FAT PDF')
+            ->assertSee(route('documents.download', $document), false);
     }
 
     public function test_transfer_numbers_are_sequential_per_year(): void
