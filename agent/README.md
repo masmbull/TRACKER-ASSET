@@ -183,9 +183,8 @@ shows each phase, its current status, a labelled stage message, and a percentage
    remains visible until the operator closes the result window.
 
 Once configured, later launches go straight to the system tray. Its context menu has
-exactly two actions—**Status** and **Check for Updates**—with icons. There is no Exit
-item: the agent remains resident and is removed only through the uninstall command on
-the fleet page.
+one action—**Status**—with an icon. There is no Exit item: the agent remains resident
+and is removed only through the uninstall command on the fleet page.
 
 ## Zero-Config Download (config trailer)
 
