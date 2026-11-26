@@ -358,7 +358,7 @@
 .dashboard-hero-copy { position: relative; z-index: 1; min-width: 0; }
 .dashboard-eyebrow { display: inline-flex; align-items: center; gap: 9px; font-size: 10px; font-weight: 800; letter-spacing: .17em; color: rgba(255,255,255,.75); }
 .dashboard-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #6CE9A6; box-shadow: 0 0 12px rgba(108,233,166,.75); }
-.dashboard-hero h2 { max-width: 680px; margin: 15px 0 10px; font-size: clamp(25px, 3.5vw, 39px); font-weight: 750; letter-spacing: -.045em; line-height: 1.08; }
+.dashboard-hero h2 { max-width: 680px; margin: 15px 0 10px; color: #fff; font-size: clamp(25px, 3.5vw, 39px); font-weight: 750; letter-spacing: -.045em; line-height: 1.08; }
 .dashboard-hero-copy > p { max-width: 540px; margin: 0; color: rgba(255,255,255,.76); font-size: 14px; line-height: 1.6; }
 .dashboard-hero-link { display: inline-flex; align-items: center; gap: 9px; min-height: 40px; padding: 0 14px; border: 1px solid rgba(255,255,255,.24); border-radius: 9px; background: #fff; color: #912018; font-size: 12px; font-weight: 700; text-decoration: none; transition: transform 150ms ease, background 150ms ease; }
 .dashboard-hero-link:hover { transform: translateY(-1px); background: #FFF7F5; }
