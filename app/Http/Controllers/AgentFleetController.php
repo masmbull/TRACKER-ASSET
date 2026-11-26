@@ -1605,9 +1605,38 @@ class AgentFleetController extends Controller
             'done' => $command->status === 'done',
             'failed' => $command->status === 'failed',
             'message' => $command->result['message'] ?? null,
+            // Read-only commands return their whole answer as text (the agent
+            // captures stdout). Remote uses this to read the live UltraViewer
+            // credentials instead of asking the operator to type them.
+            'stdout' => $command->result['stdout'] ?? null,
+            'credentials' => $this->remoteCredentials($command),
             // The phases of this command, so the dialog can show the whole
             // journey as a checklist instead of a lone bar with no context.
             'steps' => $command->steps(),
         ]);
+    }
+
+    /**
+     * @return array{id: string, password: string}|null
+     */
+    private function remoteCredentials(AgentCommand $command): ?array
+    {
+        $stdout = (string) ($command->result['stdout'] ?? '');
+        $id = null;
+        $password = null;
+
+        foreach (preg_split('/\R/u', $stdout) ?: [] as $line) {
+            if (preg_match('/^UV_ID=(.+)$/', trim($line), $m)) {
+                $id = trim($m[1]);
+            } elseif (preg_match('/^UV_PASS=(.+)$/', trim($line), $m)) {
+                $password = trim($m[1]);
+            }
+        }
+
+        if (! $id || $id === '—' || ! $password || $password === '—') {
+            return null;
+        }
+
+        return ['id' => $id, 'password' => $password];
     }
 }

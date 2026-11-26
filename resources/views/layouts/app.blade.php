@@ -392,8 +392,19 @@
                     <x-mito-loader size="md" />
                 </div>
                 <div class="min-w-0 flex-1">
-                    <h2 id="ajax-action-title" class="text-lg font-semibold text-gray-900 dark:text-white">Working</h2>
-                    <p id="ajax-action-message" class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">Please wait.</p>
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h2 id="ajax-action-title" class="text-lg font-semibold text-gray-900 dark:text-white">Working</h2>
+                            <p id="ajax-action-message" class="mt-1 text-theme-sm text-gray-600 dark:text-gray-300">Please wait.</p>
+                        </div>
+                        {{-- Minimize keeps the poller alive; only the panel is hidden.
+                             The floating pill below can bring it back at any time. --}}
+                        <button id="ajax-action-minimize" type="button"
+                                class="shrink-0 rounded-lg border border-gray-200 bg-white p-1.5 text-gray-500 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                                title="Minimize — the task keeps running" aria-label="Minimize progress panel">
+                            <x-icon name="chevron-down" class="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -429,6 +440,22 @@
         </section>
     </div>
 
+    {{-- The minimized form of the same task. It is a button, so one click restores
+         the full panel; the poll interval is untouched by minimizing. --}}
+    <button id="ajax-action-minimized" type="button"
+            class="process-minimized fixed right-4 bottom-4 z-[9997] hidden w-[min(22rem,calc(100vw-2rem))] items-center gap-3 rounded-2xl border border-brand-200 bg-white px-4 py-3 text-left shadow-theme-xl transition hover:-translate-y-0.5 hover:border-brand-400 dark:border-brand-500/30 dark:bg-[#182230]"
+            aria-label="Restore progress panel">
+        <span class="process-minimized-pulse relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
+            <x-icon name="activity" class="h-4 w-4" />
+        </span>
+        <span class="min-w-0 flex-1">
+            <span id="ajax-action-minimized-title" class="block truncate text-theme-sm font-semibold text-gray-800 dark:text-white">Working</span>
+            <span id="ajax-action-minimized-detail" class="block truncate text-theme-xs text-gray-500 dark:text-gray-400">Task still running…</span>
+        </span>
+        <span id="ajax-action-minimized-percent" class="shrink-0 tabular-nums text-theme-sm font-bold text-brand-600 dark:text-brand-300">0%</span>
+        <x-icon name="chevron-down" class="h-4 w-4 shrink-0 rotate-180 text-gray-400" />
+    </button>
+
     <script>
         // Async action forms (data-modal-action): POST via fetch, no redirect.
         //
@@ -448,6 +475,11 @@
             const barEl = document.getElementById('ajax-action-bar');
             const devicesEl = document.getElementById('ajax-action-devices');
             const stepsEl = document.getElementById('ajax-action-steps');
+            const minimizeButton = document.getElementById('ajax-action-minimize');
+            const minimized = document.getElementById('ajax-action-minimized');
+            const minimizedTitle = document.getElementById('ajax-action-minimized-title');
+            const minimizedDetail = document.getElementById('ajax-action-minimized-detail');
+            const minimizedPercent = document.getElementById('ajax-action-minimized-percent');
 
             const busyBar = () => document.getElementById('top-progress');
             const setBar = (on) => busyBar()?.classList.toggle('is-busy', on);
@@ -465,6 +497,66 @@
 
             let pollTimer = null;
             let pollStartedAt = 0;
+
+            /**
+             * Minimize only hides the panel. `pollTimer` and the command watcher
+             * keep running, so the task still finishes while the operator works
+             * elsewhere on the page. The floating pill is the way back in.
+             */
+            const updateMinimized = (label, detail, percent) => {
+                minimizedTitle.textContent = label || 'Working';
+                minimizedDetail.textContent = detail || 'Task still running…';
+                minimizedPercent.textContent = (Number(percent) || 0) + '%';
+            };
+
+            const minimizeModal = () => {
+                if (modal.dataset.busy !== 'true') {
+                    return;
+                }
+                updateMinimized(title.textContent, stageEl.textContent, String(Number(percentEl.textContent.replace('%', '')) || 0));
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                minimized.classList.remove('hidden');
+                minimized.classList.add('flex');
+            };
+
+            const restoreModal = () => {
+                if (modal.dataset.busy !== 'true') {
+                    return;
+                }
+                minimized.classList.add('hidden');
+                minimized.classList.remove('flex');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            };
+
+            /**
+             * The one place a task becomes a notification. A queued script can
+             * take minutes on the agent; the operator may have minimized the
+             * panel, so a passive toast was too easy to miss. SweetAlert2 waits
+             * for an acknowledgement and is the last thing shown for that task.
+             */
+            const finishWithAlert = (heading, text, icon, html) => {
+                window.clearInterval(pollTimer);
+                pollTimer = null;
+                setBusy(false);
+                setBar(false);
+                modal.dataset.busy = 'false';
+                modal.removeAttribute('aria-busy');
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                minimized.classList.add('hidden');
+                minimized.classList.remove('flex');
+                clearDeviceList();
+                clearSteps();
+
+                if (typeof window.trackerAlert === 'function') {
+                    window.trackerAlert(html ? { title: heading, html, icon } : { title: heading, text, icon });
+                } else {
+                    window.showToast?.(text, icon === 'error' ? 'error' : 'success');
+                }
+                window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: text } }));
+            };
 
             const setProgressBar = (percent, stage, stalled, failed) => {
                 const clamped = Math.max(5, Math.min(100, Number(percent) || 0));
@@ -644,6 +736,7 @@
                 setProgressBar(0, 'Waiting for the device…', false, false);
                 setBusy(true);
                 startElapsedTicker('Waiting for the device…');
+                updateMinimized(title.textContent, 'Waiting for the device…', 0);
 
                 window.clearInterval(pollTimer);
                 pollTimer = window.setInterval(async () => {
@@ -677,15 +770,27 @@
                             pollTimer = null;
                             setBusy(false);
                             setProgressBar(state.done ? 100 : (state.progress ?? 100), state.failed ? 'Failed' : 'Completed', false, state.failed);
-                            modal.dataset.busy = 'false';
-                            modal.removeAttribute('aria-busy');
-                            spinner.classList.remove('hidden');
-                            closeButton.classList.remove('hidden');
-                            setBar(false);
-                            title.textContent = state.failed ? 'Action failed' : 'Done';
-                            message.textContent = state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.');
-                            window.showToast?.(state.message || (state.failed ? 'Action failed.' : 'Done.'), state.failed ? 'error' : 'success');
-                            window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: state.message || '' } }));
+                            updateMinimized(state.failed ? 'Action failed' : 'Done', 'Completed', 100);
+
+                            // A remote request comes back with credentials in
+                            // the command result. Show them with a launcher, and
+                            // never silently drop them into a generic toast.
+                            let resultHtml;
+                            if (state.credentials && state.credentials.id && state.credentials.password) {
+                                resultHtml = '<div class="tracker-remote-result">'
+                                    + '<p class="mb-2 text-sm text-gray-600 dark:text-gray-300">UltraViewer reported these credentials for this laptop:</p>'
+                                    + '<p class="mb-1 text-sm"><strong>ID:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.id) + '</code></p>'
+                                    + '<p class="mb-3 text-sm"><strong>Password:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.password) + '</code></p>'
+                                    + '<a href="/agent/commands/' + commandId + '/launcher" class="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Download one-click launcher</a>'
+                                    + '<p class="mt-3 text-xs text-gray-400">The launcher starts UltraViewer with these credentials. They change on the next restart.</p>'
+                                    + '</div>';
+                            }
+                            finishWithAlert(
+                                state.failed ? 'Action failed' : (resultHtml ? 'UltraViewer credentials ready' : 'Action complete'),
+                                state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.'),
+                                state.failed ? 'error' : 'success',
+                                resultHtml
+                            );
                             return;
                         }
 
@@ -710,12 +815,14 @@
                             setProgressBar(state.progress, device + explanation, true, false);
                             title.textContent = 'Device not responding';
                             message.textContent = explanation;
+                            updateMinimized(title.textContent, explanation, state.progress);
                             return;
                         }
 
                         setProgressBar(state.progress, state.label || 'In progress…', state.stalled, false);
                         setBusy(!state.stalled);
                         startElapsedTicker(state.label || 'In progress…');
+                        updateMinimized(title.textContent, state.label || 'In progress…', state.progress);
                     } catch {
                         // Silence; the next tick retries.
                     }
@@ -741,6 +848,7 @@
                 setProgressBar(0, '0 of ' + commandIds.length + ' devices...', false, false);
                 setBusy(true);
                 startElapsedTicker('0 of ' + commandIds.length + ' devices...');
+                updateMinimized(title.textContent, '0 of ' + commandIds.length + ' devices...', 0);
 
                 window.clearInterval(pollTimer);
                 pollTimer = window.setInterval(async () => {
@@ -777,17 +885,15 @@
                             window.clearInterval(pollTimer);
                             pollTimer = null;
                             setBusy(false);
-                            setProgressBar(100, completedCount + ' of ' + total + ' devices accounted for' + failedNote + stalledNote, false, failed > 0 || stalled > 0);
-                            modal.dataset.busy = 'false';
-                            modal.removeAttribute('aria-busy');
-                            spinner.classList.remove('hidden');
-                            closeButton.classList.remove('hidden');
-                            setBar(false);
-                            title.textContent = (failed + stalled) > 0 ? 'Fleet action finished with issues' : 'Done';
+                            const summary = completedCount + ' of ' + total + ' devices accounted for' + failedNote + stalledNote;
+                            setProgressBar(100, summary, false, failed > 0 || stalled > 0);
+                            updateMinimized('Fleet action complete', summary, 100);
                             const successful = settled.length - failed;
-                            message.textContent = successful + ' of ' + total + ' devices updated successfully' + failedNote + stalledNote + '. Stalled devices are not confirmed as updated.';
-                            window.showToast?.('Fleet action: ' + successful + '/' + total + ' completed' + failedNote + stalledNote + '.', (failed + stalled) > 0 ? 'error' : 'success');
-                            window.dispatchEvent(new CustomEvent('async-action-done', { detail: { message: '' } }));
+                            finishWithAlert(
+                                (failed + stalled) > 0 ? 'Fleet action finished with issues' : 'Fleet action complete',
+                                successful + ' of ' + total + ' devices completed successfully' + failedNote + stalledNote + '. Stalled devices are not confirmed as updated.',
+                                failed > 0 ? 'error' : (stalled > 0 ? 'warning' : 'success')
+                            );
                             return;
                         }
 
@@ -796,6 +902,7 @@
                         setProgressBar(percent, accounted + ' of ' + total + ' devices accounted for · ' + detail, false, stalled > 0);
                         setBusy(true);
                         startElapsedTicker(settled.length + ' of ' + total + ' devices · ' + detail);
+                        updateMinimized(title.textContent, detail, percent);
                     } catch {
                         // Silence; the next tick retries.
                     }
@@ -829,6 +936,8 @@
                 pollTimer = null;
                 progressWrap.classList.add('hidden');
                 modal.dataset.busy = 'true';
+                minimized.classList.add('hidden');
+                minimized.classList.remove('flex');
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 modal.setAttribute('aria-busy', 'true');
@@ -926,6 +1035,8 @@
             });
 
             closeButton.addEventListener('click', closeModal);
+            minimizeButton?.addEventListener('click', minimizeModal);
+            minimized?.addEventListener('click', restoreModal);
             modal.addEventListener('click', (event) => {
                 if (event.target === modal) {
                     closeModal();
