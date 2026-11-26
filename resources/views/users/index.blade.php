@@ -5,8 +5,18 @@
 @section('content')
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <h1 class="text-2xl font-bold">Users</h1>
-    <a href="{{ route('users.create') }}" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">+ Add User</a>
+    <div class="flex flex-wrap items-center gap-2">
+        <a href="{{ route('users.import') }}" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"><x-icon name="download" class="h-4 w-4" /> Import Excel</a>
+        <a href="{{ route('users.create') }}" class="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-theme-sm font-medium text-white shadow-theme-xs transition-all duration-200 active:scale-[0.97] hover:bg-brand-600">+ Add User</a>
+    </div>
 </div>
+
+@if(session('import_result'))
+    @php $imported = session('import_result'); @endphp
+    <div class="mb-4 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-theme-sm text-success-700 dark:border-success-500/20 dark:bg-success-500/10 dark:text-success-300">
+        Imported: <strong>{{ $imported['created'] }}</strong> created, <strong>{{ $imported['updated'] }}</strong> updated, <strong>{{ $imported['assignments'] }}</strong> assigned to assets, <strong>{{ $imported['skipped'] }}</strong> skipped.
+    </div>
+@endif
 
 <form method="GET" action="{{ route('users.index') }}" class="flex flex-wrap items-center gap-2 mb-4">
     <input type="text" name="search" value="{{ request('search') }}" placeholder="Name, email, department..." class="border rounded-lg px-3 py-2 flex-1 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-400">
