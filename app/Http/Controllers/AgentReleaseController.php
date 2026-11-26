@@ -210,7 +210,7 @@ class AgentReleaseController extends Controller
         $path = $release->absolutePath();
 
         if ($path === null || ! is_file($path)) {
-            return back()->with('error', "Release {$release->version} has no stored binary.");
+            return response("Release {$release->version} has no stored binary.", 404);
         }
 
         return response()->streamDownload(function () use ($path, $request) {
