@@ -22,6 +22,8 @@ class ActivityLogController extends Controller
                 $q->where(fn ($sub) => $sub
                     ->where('entity_identifier', 'like', $search)
                     ->orWhere('entity_type', 'like', $search)
+                    ->orWhere('ip_address', 'like', $search)
+                    ->orWhere('request_id', 'like', $search)
                     ->orWhereHas('actor', fn ($actor) => $actor->where('name', 'like', $search)));
             })
             ->orderByDesc('id')
