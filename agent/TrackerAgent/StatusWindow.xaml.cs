@@ -28,6 +28,7 @@ public partial class StatusWindow : Window
         DeviceText.Text = Environment.MachineName;
         VersionText.Text = System.Reflection.Assembly.GetExecutingAssembly()
             .GetName().Version?.ToString(3) ?? "—";
+        RoleText.Text = "Pengguna";
         IpText.Text = LocalIpAddress();
 
         // The public IP needs a round trip to a third party, so it is fetched
