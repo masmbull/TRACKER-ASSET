@@ -101,7 +101,7 @@
                     $asset->category?->name, $asset->status?->name,
                 ])));
             @endphp
-            <article class="asset-card group cursor-pointer rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-md dark:border-gray-800 dark:bg-gray-900"
+            <article class="asset-card group cursor-pointer min-h-[360px] rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-md dark:border-gray-800 dark:bg-gray-900 flex flex-col"
                      role="button" tabindex="0"
                      data-search="{{ $searchText }}"
                      data-status="{{ $asset->status?->id }}"
