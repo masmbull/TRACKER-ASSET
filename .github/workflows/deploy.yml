@@ -111,7 +111,27 @@ jobs:
           # the stack was first started. Running the commands directly, with
           # stdin closed, is the fix - and the guard at the bottom makes a
           # silent no-op deploy fail loudly instead.
-          docker compose -f docker-compose.prod.yml pull < /dev/null
+          # Only the application image changes between releases. Pull that from
+          # GHCR; nginx/postgres/redis are pinned third-party tags already on the
+          # server from the first install.
+          #
+          # A blanket `pull` also contacts registry-1.docker.io on every deploy.
+          # On a host whose DNS returns AAAA records but which has no IPv6 egress,
+          # that request dies with "network is unreachable" and the release never
+          # ships even though the app image on GHCR is perfectly reachable. Their
+          # tags do not move, so refreshing them is best-effort only.
+          docker compose -f docker-compose.prod.yml pull app < /dev/null
+          docker compose -f docker-compose.prod.yml pull nginx postgres redis --ignore-pull-failures < /dev/null || true
+
+          # `up` still needs a local copy of every service image. Fail here with
+          # an actionable message rather than letting compose retry Docker Hub in
+          # the middle of a rollout. The one-time pull is in docs/deployment.md.
+          for image in nginx:alpine postgres:16-alpine redis:7-alpine; do
+            if ! docker image inspect "$image" >/dev/null 2>&1; then
+              echo "::error::${image} is not cached on this host. See 'Docker Hub pull fails over IPv6' in docs/deployment.md."
+              exit 1
+            fi
+          done
 
           # Re-copy the compiled assets out of the new image before nginx can
           # serve them, so a build never serves the previous release's CSS/JS.
