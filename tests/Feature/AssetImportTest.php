@@ -9,9 +9,11 @@ use App\Models\AssetStatus;
 use App\Models\Company;
 use App\Models\Location;
 use App\Models\User;
+use App\Services\AssetImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -298,5 +300,36 @@ class AssetImportTest extends TestCase
         $this->actingAs($viewer)->post(route('assets.import.analyze'), [
             'file' => $this->workbook([$this->row([])]),
         ])->assertForbidden();
+    }
+
+    public function test_template_uses_the_it_assets_columns(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $response = $this->actingAs($support)->get(route('assets.import.template'));
+        $response->assertOk()->assertHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+
+        $path = tempnam(sys_get_temp_dir(), 'tpl').'.xlsx';
+        file_put_contents($path, $response->getContent());
+
+        $sheet = IOFactory::load($path)->getActiveSheet();
+        $headers = array_values($sheet->toArray(null, true, true, false)[0]);
+
+        $this->assertSame([
+            'Asset ID', 'KATEGORI', 'Merk / Model', 'Serial Number', 'Hostname',
+            'Spec', 'OS', 'Lokasi', 'User Saat Ini', 'Status Asset', 'Catatan',
+        ], $headers);
+    }
+
+    public function test_it_assets_headers_all_map_to_import_fields(): void
+    {
+        $analysis = app(AssetImportService::class)->analyze(base_path('IT Assets.xlsx'));
+
+        $this->assertSame('Overall', $analysis['sheet']);
+        $this->assertSame([], $analysis['unmapped_columns']);
+        $this->assertContains('status_name', $analysis['mapped_columns']);
     }
 }

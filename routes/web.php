@@ -67,6 +67,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/assets/import', [AssetImportController::class, 'show'])
         ->name('assets.import')
         ->middleware('can:import-assets');
+    Route::get('/assets/import/template', [AssetImportController::class, 'template'])
+        ->name('assets.import.template')
+        ->middleware('can:import-assets');
     Route::post('/assets/import/analyze', [AssetImportController::class, 'analyze'])
         ->name('assets.import.analyze')
         ->middleware('can:import-assets');
@@ -227,6 +230,9 @@ Route::middleware('auth')->group(function () {
         Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->name('master.destroy');
 
         Route::middleware('can:manage-users')->group(function () {
+            // Panel fragment for in-place selection. Declared before the other
+            // /users routes so "access" is never read as a user id.
+            Route::get('/users/access/panel/{user}', [UserController::class, 'accessPanel'])->name('users.access.panel');
             Route::get('/users/access', [UserController::class, 'access'])->name('users.access');
             Route::put('/users/{user}/access', [UserController::class, 'updateAccess'])->name('users.access.update');
             Route::get('/users', [UserController::class, 'index'])->name('users.index');

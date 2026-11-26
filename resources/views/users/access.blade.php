@@ -22,41 +22,44 @@
         </div>
     @endif
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.9fr)]">
+    <div class="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.9fr)]"
+         data-panel-endpoint="{{ route('users.access.panel', ['user' => '__USER__']) }}"
+         x-data='accessControl(@json($selectedUser?->id), @json(request('search', '')))'>
         <section class="flex flex-col self-start overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-800">
             <div class="border-b border-gray-200 p-4 dark:border-gray-800">
-                <form method="GET" action="{{ route('users.access') }}" class="relative">
-                    @if($selectedUser)
-                        <input type="hidden" name="user" value="{{ $selectedUser->id }}">
-                    @endif
+                {{-- Filtering is local: the list is already on the page and a GET
+                     here would tear down the panel and lose the selection. --}}
+                <div class="relative">
                     <span class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2">
                         <x-icon name="search" class="h-[18px] w-[18px] shrink-0 text-gray-400" />
                     </span>
-                    <input type="search" name="search" value="{{ request('search') }}" placeholder="Search users..."
+                    <input type="search" x-model="query" @keydown.enter.prevent value="{{ request('search') }}" placeholder="Search users..."
                            class="w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pr-3 pl-10 text-theme-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:ring-brand-500/10 focus:ring-3 focus:outline-none dark:border-gray-700 dark:text-white/90 dark:placeholder:text-white/30">
-                </form>
+                </div>
             </div>
             {{-- The list used to be a fixed-height scroll box with a Prev/Next
                  footer, so a 40-person directory was two nested scrollers (the box
                  and the page) and the count was invisible. It now flows at its
                  natural height with a numbered pager and a per-page selector, the
                  same shape as every other list in the app. --}}
-            <div class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div class="divide-y divide-gray-100 dark:divide-gray-800" x-ref="list">
                 @forelse($users as $user)
                     @php
                         $isSelected = $selectedUser?->is($user);
                         $initials = \Illuminate\Support\Str::of($user->name)->trim()->explode(' ')->filter()->map(fn ($part) => mb_substr($part, 0, 1))->take(2)->implode('');
                     @endphp
-                    <a href="{{ route('users.access', array_filter(['user' => $user->id, 'search' => request('search'), 'per_page' => request('per_page')])) }}"
-                       @if($isSelected) aria-current="true" @endif
-                       class="flex items-center gap-3 px-4 py-3 transition-colors {{ $isSelected ? 'bg-brand-50/70 shadow-[inset_3px_0_0_0_theme(colors.brand.500)] dark:bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-white/5' }}">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-theme-xs font-semibold uppercase {{ $isSelected ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300' }}">{{ $initials }}</span>
+                    <button type="button" data-user-row data-user-id="{{ $user->id }}" data-user-search="{{ mb_strtolower($user->name.' '.$user->email) }}"
+                            x-show="$data.matches($el.dataset.userSearch)"
+                            @click="$data.select({{ $user->id }})"
+                            @if($isSelected) aria-current="true" @endif
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors {{ $isSelected ? 'bg-brand-50/70 shadow-[inset_3px_0_0_0_theme(colors.brand.500)] dark:bg-brand-500/10' : 'hover:bg-gray-50 dark:hover:bg-white/5' }}">
+                        <span data-user-avatar class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-theme-xs font-semibold uppercase {{ $isSelected ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300' }}">{{ $initials }}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-theme-sm font-semibold text-gray-800 dark:text-white">{{ $user->name }}</span>
                             <span class="block truncate text-theme-xs text-gray-500 dark:text-gray-400">{{ $user->email }}</span>
                         </span>
-                        <x-badge :variant="$isSelected ? 'brand' : 'gray'" class="capitalize">{{ $user->role }}</x-badge>
-                    </a>
+                        <x-badge :variant="$isSelected ? 'brand' : 'gray'" class="capitalize" data-user-badge>{{ $user->role }}</x-badge>
+                    </button>
                 @empty
                     <p class="p-5 text-theme-sm text-gray-500 dark:text-gray-400">No users found.</p>
                 @endforelse
@@ -88,76 +91,94 @@
                 {{ $users->links('components.pagination') }}
             @endif
         </section>
-        <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-800">
-            @if($selectedUser)
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50/70 p-5 dark:border-gray-800 dark:bg-gray-800/60">
-                    <div class="flex min-w-0 items-center gap-3">
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-500 text-theme-sm font-bold uppercase text-white">{{ \Illuminate\Support\Str::of($selectedUser->name)->trim()->explode(' ')->filter()->map(fn ($part) => mb_substr($part, 0, 1))->take(2)->implode('') }}</span>
-                        <div class="min-w-0">
-                            <h2 class="truncate text-lg font-bold text-gray-900 dark:text-white">{{ $selectedUser->name }}</h2>
-                            <p class="truncate text-theme-sm text-gray-500 dark:text-gray-400">{{ $selectedUser->email }} &middot; Base role: <span class="font-semibold capitalize text-gray-700 dark:text-gray-300">{{ $selectedUser->role }}</span></p>
-                        </div>
-                    </div>
-                    @if($selectedUser->isAdmin())
-                        <x-badge variant="brand" :dot="true">Full administrator access</x-badge>
-                    @else
-                        <x-badge :variant="$selectedUser->is_active ? 'success' : 'gray'" :dot="true">{{ $selectedUser->is_active ? 'Active' : 'Inactive' }}</x-badge>
-                    @endif
-                </div>
-
-                @if($selectedUser->isAdmin())
-                    <div class="p-6 text-theme-sm text-gray-600 dark:text-gray-300">Administrator access cannot be restricted from this screen. Change the user role first if their access needs to be limited.</div>
-                @else
-                    <form method="POST" action="{{ route('users.access.update', $selectedUser) }}" x-data="{ dirty: false }" @input="dirty = true" @change="dirty = true">
-                        @csrf
-                        @method('PUT')
-                        <div class="space-y-6 p-5">
-                            <div class="flex gap-3 rounded-xl border border-blue-light-200 bg-blue-light-50 px-4 py-3 text-theme-sm text-blue-light-800 dark:border-blue-light-500/30 dark:bg-blue-light-500/10 dark:text-blue-light-200">
-                                <x-icon name="info" class="mt-0.5 h-[18px] w-[18px] shrink-0" />
-                                <p><strong>Inherit</strong> uses the base role. <strong>Allow</strong> grants an exception; <strong>Deny</strong> blocks it, even when the role normally allows it.</p>
-                            </div>
-
-                            @foreach($permissionGroups as $group => $permissions)
-                                <div>
-                                    <h3 class="mb-3 flex items-center gap-2 text-theme-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                        {{ $group }}
-                                        <span class="h-px flex-1 bg-gray-200 dark:bg-gray-800"></span>
-                                    </h3>
-                                    <div class="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
-                                        @foreach($permissions as $permission => $label)
-                                            @php
-                                                $override = $selectedUser->permissionOverride($permission);
-                                                $state = $override === null ? 'inherit' : ($override ? 'allow' : 'deny');
-                                                $name = 'permissions['.$permission.']';
-                                            @endphp
-                                            <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <span class="min-w-0 flex-1 text-theme-sm font-medium text-gray-800 dark:text-gray-100">{{ $label }}</span>
-                                                <div class="inline-flex shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-800/60" role="radiogroup" aria-label="{{ $label }}">
-                                                    @foreach(['inherit' => ['Inherit', 'hover:text-gray-800 dark:hover:text-gray-200', 'peer-checked:bg-white peer-checked:text-gray-800 peer-checked:shadow-theme-xs dark:peer-checked:bg-gray-700 dark:peer-checked:text-white'], 'allow' => ['Allow', 'hover:text-success-700 dark:hover:text-success-400', 'peer-checked:bg-success-500 peer-checked:text-white'], 'deny' => ['Deny', 'hover:text-error-700 dark:hover:text-error-400', 'peer-checked:bg-error-500 peer-checked:text-white']] as $value => [$text, $idle, $active])
-                                                        <label class="cursor-pointer">
-                                                            <input type="radio" name="{{ $name }}" value="{{ $value }}" @checked($state === $value) class="peer sr-only">
-                                                            <span class="inline-flex h-8 min-w-[4.5rem] items-center justify-center rounded-md px-3 text-theme-xs font-semibold text-gray-500 transition dark:text-gray-400 {{ $idle }} {{ $active }}">{{ $text }}</span>
-                                                        </label>
-                                                    @endforeach
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                        <div class="flex items-center gap-3 border-t border-gray-200 bg-gray-50/70 px-5 py-4 dark:border-gray-800 dark:bg-gray-800/60">
-                            <p class="text-theme-xs font-medium text-warning-600 dark:text-warning-500" x-show="dirty" x-cloak>Unsaved changes</p>
-                            <button type="submit" class="ml-auto inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-theme-sm font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 focus:ring-brand-500/40 focus:ring-3 focus:outline-none">
-                                <x-icon name="save" class="h-4 w-4" />
-                                Save access
-                            </button>
-                        </div>
-                    </form>
-                @endif
-            @else
-                <div class="p-6 text-theme-sm text-gray-500 dark:text-gray-400">Choose a user to configure their access.</div>
-            @endif
+        <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-800" x-ref="panel">
+            @include('users._access-panel', ['selectedUser' => $selectedUser, 'permissionGroups' => $permissionGroups])
         </section>
     </div>
 @endsection
+
+@push('scripts')
+<script>
+    // Selecting a user fetches only the permission panel. The page, the filtered
+    // list and the scroll position stay put; the URL is updated without a load.
+    // A global factory, registered without waiting for alpine:init: the page's
+    // inline script runs before the Vite module starts Alpine, so an event
+    // listener here can miss the one event that registers the component.
+    window.accessControl = function (selected, query) {
+        return {
+            selected,
+            query,
+
+            matches(haystack) {
+                const term = this.query.trim().toLowerCase();
+
+                return term === '' || haystack.includes(term);
+            },
+
+            async select(id) {
+                if (id === this.selected) {
+                    return;
+                }
+
+                try {
+                    const endpoint = this.$el.dataset.panelEndpoint.replace('__USER__', String(id));
+                    const response = await fetch(endpoint, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html' },
+                        credentials: 'same-origin',
+                    });
+
+                    if (! response.ok) {
+                        throw new Error('Could not load that user.');
+                    }
+
+                    const panel = this.$refs.panel;
+                    panel.innerHTML = await response.text();
+                    // The panel carries its own Alpine nodes (the dirty form).
+                    Alpine.initTree(panel);
+
+                    this.selected = id;
+                    this.markSelected(id);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('user', String(id));
+                    window.history.replaceState(null, '', url);
+                } catch (error) {
+                    window.showToast?.(error.message || 'Could not load that user.', 'error');
+                }
+            },
+
+            // The list is server-rendered, so its selected styling is updated in
+            // place rather than re-rendering the whole page.
+            markSelected(id) {
+                const selectedRow = ['bg-brand-50/70', 'shadow-[inset_3px_0_0_0_theme(colors.brand.500)]', 'dark:bg-brand-500/10'];
+                const idleRow = ['hover:bg-gray-50', 'dark:hover:bg-white/5'];
+                const selectedAvatar = ['bg-brand-500', 'text-white'];
+                const idleAvatar = ['bg-gray-100', 'text-gray-600', 'dark:bg-gray-700/50', 'dark:text-gray-300'];
+                const selectedBadge = ['bg-brand-50', 'text-brand-500', 'dark:bg-brand-500/15', 'dark:text-brand-400'];
+                const idleBadge = ['bg-gray-100', 'text-gray-600', 'dark:bg-gray-700/50', 'dark:text-gray-300'];
+
+                this.$refs.list.querySelectorAll('[data-user-row]').forEach((row) => {
+                    const isCurrent = Number(row.dataset.userId) === id;
+
+                    if (isCurrent) {
+                        row.setAttribute('aria-current', 'true');
+                    } else {
+                        row.removeAttribute('aria-current');
+                    }
+
+                    selectedRow.forEach((name) => row.classList.toggle(name, isCurrent));
+                    idleRow.forEach((name) => row.classList.toggle(name, ! isCurrent));
+
+                    const avatar = row.querySelector('[data-user-avatar]');
+                    selectedAvatar.forEach((name) => avatar.classList.toggle(name, isCurrent));
+                    idleAvatar.forEach((name) => avatar.classList.toggle(name, ! isCurrent));
+
+                    const badge = row.querySelector('[data-user-badge]');
+                    selectedBadge.forEach((name) => badge.classList.toggle(name, isCurrent));
+                    idleBadge.forEach((name) => badge.classList.toggle(name, ! isCurrent));
+                });
+            },
+        };
+    };
+</script>
+@endpush

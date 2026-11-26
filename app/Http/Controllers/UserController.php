@@ -141,6 +141,19 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * The permission panel on its own, fetched by the access screen when a user
+     * is selected so the list (and the search text) never have to reload.
+     * Authorisation is the same as access(): the route sits behind manage-users.
+     */
+    public function accessPanel(User $user): View
+    {
+        return view('users._access-panel', [
+            'selectedUser' => $user,
+            'permissionGroups' => User::PERMISSION_GROUPS,
+        ]);
+    }
+
     public function updateAccess(Request $request, User $user): RedirectResponse
     {
         abort_if($user->isAdmin(), 422, 'Administrator access is always unrestricted.');

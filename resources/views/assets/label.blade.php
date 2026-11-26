@@ -62,7 +62,7 @@
     <div class="toolbar">
         <div>
             <h1>Asset label · {{ $asset->asset_id }}</h1>
-            <p>Print at 100% scale (no “fit to page”) so the {{ config('assets.label.width_mm', 90) }} × {{ config('assets.label.height_mm', 30) }} mm label keeps its size.</p>
+            <p>Print on {{ config('assets.label.page_size', 'A4') }} paper at 100% scale (no “fit to page”), {{ config('assets.label.page_margin_mm', 10) }} mm margins, so the {{ config('assets.label.width_mm', 90) }} × {{ config('assets.label.height_mm', 30) }} mm label keeps its size.</p>
         </div>
         <div class="actions">
             <a href="{{ route('assets.show', $asset) }}" class="btn btn-secondary">Back to asset</a>

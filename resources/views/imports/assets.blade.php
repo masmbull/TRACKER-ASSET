@@ -5,6 +5,7 @@
 @section('content')
 <x-page-header title="Import Assets from Excel" subtitle="Upload and validate inventory data before confirming the import.">
     <x-slot:actions>
+        <x-button variant="success" size="sm" :href="route('assets.import.template')">Download template</x-button>
         <x-button variant="secondary" size="sm" :href="route('assets.index')">Back to Assets</x-button>
     </x-slot:actions>
 </x-page-header>
@@ -61,6 +62,10 @@
     <p class="mt-3 text-theme-xs text-gray-500 dark:text-gray-400">
         Nothing is written to the database until you confirm the preview. Existing assets are never modified or deleted — duplicates are skipped.
     </p>
+    <div class="mt-3 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-theme-xs text-gray-600 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-gray-300">
+        <p class="font-semibold text-gray-800 dark:text-white">Use the template so the columns match.</p>
+        <p class="mt-1">The sheet <strong>Overall</strong> must keep these columns in row 1: Asset ID, KATEGORI, Merk / Model, Serial Number, Hostname, Spec, OS, Lokasi, User Saat Ini, Status Asset, Catatan. Write <em>Merk / Model</em> as “LENOVO / ThinkPad T14”. Do not rename or reorder the headers.</p>
+    </div>
 </x-card>
 
 @if(isset($analysis) && $analysis)

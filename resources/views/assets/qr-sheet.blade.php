@@ -27,6 +27,23 @@
             </x-slot:actions>
         </x-page-header>
 
+        <div class="qr-panel no-print" role="note">
+            <div class="qr-panel-intro">
+                <span class="qr-panel-icon" aria-hidden="true"><x-icon name="info" class="h-5 w-5" /></span>
+                <div>
+                    <h2 class="qr-panel-title">Print setup</h2>
+                    <p class="qr-panel-text">
+                        Use <strong>{{ config('assets.label.page_size', 'A4') }}</strong> paper with
+                        <strong>{{ config('assets.label.page_margin_mm', 10) }} mm</strong> margins.
+                        Print at <strong>100% scale</strong> — turn off “Fit to page” — so each
+                        <strong>{{ config('assets.label.width_mm', 90) }} × {{ config('assets.label.height_mm', 30) }} mm</strong>
+                        sticker keeps its size. Labels are spaced {{ config('assets.label.gap_mm', 4) }} mm apart.
+                        Plain adhesive label paper works best; print one sheet first to check alignment.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         {{-- Wide horizontal action panels: the icon and the copy sit on the left,
              the control runs the rest of the row instead of being boxed into a
              square card. --}}
@@ -988,6 +1005,10 @@
     }
 
     @media print {
+        @page {
+            size: {{ config('assets.label.page_size', 'A4') }};
+            margin: {{ config('assets.label.page_margin_mm', 10) }}mm;
+        }
         .no-print { display: none !important; }
         body { background: #fff; }
 
