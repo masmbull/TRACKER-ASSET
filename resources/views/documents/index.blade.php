@@ -91,7 +91,7 @@
 <x-card>
     @if($documents->count() > 0)
         <div class="overflow-x-auto">
-            <x-table :headers="['Number', 'Type', 'Title', 'Asset', 'Generated', 'By', '']">
+            <x-table :headers="['Number', 'Type', 'Title', 'Asset', 'Penyerah', 'Penerima', 'Generated', 'By', '']">
                 @foreach($documents as $document)
                     <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5">
                         <td class="py-3 px-4">
@@ -120,6 +120,12 @@
                             @else
                                 <span class="text-gray-400">—</span>
                             @endif
+                        </td>
+                        <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">
+                            {{ $document->payload['parties']['sender']['name'] ?? '—' }}
+                        </td>
+                        <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">
+                            {{ $document->payload['parties']['receiver']['name'] ?? '—' }}
                         </td>
                         <td class="py-3 px-4 text-theme-sm text-gray-600 dark:text-gray-400">
                             {{ $document->generated_date?->format('d M Y') }}

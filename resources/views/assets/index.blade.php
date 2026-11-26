@@ -90,7 +90,7 @@
 </x-card>
 
 @if($assets->count() > 0)
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 align-start">
         @foreach($assets as $asset)
             @php
                 $badgeMap = ['Active' => 'success', 'Available' => 'brand', 'Assigned' => 'warning', 'Repair' => 'orange', 'Retired' => 'gray', 'Disposed' => 'error'];

@@ -109,6 +109,20 @@
             </div>
         @endif
 
+        @if(!empty($log->old_value))
+            <div>
+                <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">Old value</p>
+                <pre class="overflow-x-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-100">{{ $log->old_value }}</pre>
+            </div>
+        @endif
+
+        @if(!empty($log->field_changed))
+            <div>
+                <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">Fields changed</p>
+                <p class="overflow-x-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-100">{{ $log->field_changed }}</p>
+            </div>
+        @endif
+
         @if(!empty($log->metadata))
             <div>
                 <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">Metadata</p>
@@ -116,7 +130,7 @@
             </div>
         @endif
 
-        @if(empty($log->mismatches) && empty($log->new_value) && empty($log->metadata))
+        @if(empty($log->mismatches) && empty($log->new_value) && empty($log->old_value) && empty($log->metadata) && empty($log->field_changed))
             <p class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                 This entry carries no payload — only the actor, the entity and the source.
             </p>
