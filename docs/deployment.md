@@ -169,7 +169,7 @@ picks the unreachable AAAA record, then pre-pull the three pinned images once:
 
 ```bash
 sudo bash -c '
-for host in registry-1.docker.io auth.docker.io production.cloudflare.docker.com; do
+for host in registry-1.docker.io auth.docker.io production.cloudflare.docker.com ghcr.io; do
   ip=$(getent ahostsv4 "$host" | awk "NR==1 {print \$1}")
   [ -n "$ip" ] || continue
   grep -qE "[[:space:]]${host}([[:space:]]|$)" /etc/hosts || echo "$ip $host" >> /etc/hosts
