@@ -102,7 +102,10 @@
                         $status = $state['status'];
                         $deviceFindings = $findingsByToken[$device->id] ?? [];
                         $deviceOperation = $activeOperations->get($device->id);
-
+                        $settledCommand = $lastSettled->get($device->id);
+                        $settledMessage = is_array($settledCommand?->result)
+                            ? ($settledCommand->result['message'] ?? null)
+                            : null;
                     @endphp
                     <tr class="border-b border-gray-100 bg-white/60 hover:bg-gray-50 dark:border-gray-800 dark:bg-[#1d2939]/50 dark:hover:bg-white/5" data-fleet-device="{{ $device->id }}">
                         <td class="py-3 px-3">
@@ -181,20 +184,37 @@
                                 'hidden' => ($state['reason'] ?? null) === null,
                             ]) data-fleet-reason>{{ $state['reason'] ?? '' }}</span>
 
+                            {{-- The agent's own explanation of its last command.
+                                 Previously this only survived as raw JSON on the
+                                 Commands page; the device row said only "stale". --}}
+                            <span @class([
+                                'mt-1 block max-w-[16rem] break-words text-theme-xs text-gray-500 dark:text-gray-400',
+                                'hidden' => blank($settledMessage),
+                            ]) data-fleet-result-message>{{ $settledMessage ?? '' }}</span>
+
                             {{-- Install and update progress. Without this a rollout is
                                  a blank wait: there is no way to tell a machine working
                                  through its first inventory from one that hung
-                                 halfway, and the first inventory is the slow step. --}}
-                            @if($isSettingUp)
-                                <div class="mt-2 w-full max-w-[16rem]">
-                                    <div class="mb-1 text-theme-xs break-words {{ $deviceOperation->isStalled() ? 'font-medium text-error-500' : 'text-gray-500 dark:text-gray-400' }}">
-                                        {{ $deviceOperation->progressLabel() }}
-                                    </div>
-                                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                        <div class="h-full rounded-full transition-all duration-500 {{ $deviceOperation->isStalled() ? 'bg-error-500' : 'bg-brand-500' }}" style="width: {{ max($deviceOperation->progress ?? 2, 2) }}%"></div>
-                                    </div>
+                                 halfway, and the first inventory is the slow step.
+
+                                 The wrapper is always rendered so the 15-second refresh
+                                 can reveal and update a bar that started *after* the
+                                 page was opened; only its visibility depends on the
+                                 first paint. --}}
+                            <div class="mt-2 w-full max-w-[16rem] {{ $isSettingUp ? '' : 'hidden' }}" data-fleet-operation>
+                                <div @class([
+                                    'mb-1 text-theme-xs break-words',
+                                    'text-gray-500 dark:text-gray-400' => ! $isSettingUp || ! $deviceOperation->isStalled(),
+                                    'font-medium text-error-500' => $isSettingUp && $deviceOperation->isStalled(),
+                                ]) data-fleet-operation-label>{{ $isSettingUp ? $deviceOperation->progressLabel() : '' }}</div>
+                                <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                    <div @class([
+                                        'h-full rounded-full transition-all duration-500',
+                                        'bg-brand-500' => ! $isSettingUp || ! $deviceOperation->isStalled(),
+                                        'bg-error-500' => $isSettingUp && $deviceOperation->isStalled(),
+                                    ]) data-fleet-operation-bar style="width: {{ $isSettingUp ? max($deviceOperation->progress ?? 2, 2) : 2 }}%"></div>
                                 </div>
-                            @endif
+                            </div>
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-battery>
                             @if($telemetry?->battery_percent !== null)
@@ -520,11 +540,51 @@
                                         @if($printer->is_offline)
                                             · offline
                                         @endif
+                                        @if($printer->status_code !== null)
+                                            · code {{ $printer->status_code }}
+                                        @endif
+                                        @if($printer->location)
+                                            · {{ $printer->location }}
+                                        @endif
                                     </span>
                                 </li>
                             @endforeach
                         </ul>
                     </section>
+                @endif
+
+                @if($settledMessage)
+                    <section class="mt-5 border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <h4 class="mb-2 text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Last agent report
+                        </h4>
+                        <p class="break-words text-theme-xs text-gray-700 dark:text-gray-200">{{ $settledMessage }}</p>
+                    </section>
+                @endif
+
+                {{-- A labelled row cannot cover every sensor reading. Keep the raw
+                     reports available so an unusual value is still recoverable,
+                     without paying for thousands of software rows on page load. --}}
+                @if(($rawByDevice[$device->id]['telemetry'] ?? null) || ($rawByDevice[$device->id]['fingerprint'] ?? null))
+                    <details class="mt-5 border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <summary class="cursor-pointer text-theme-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Raw reported payload
+                        </summary>
+                        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                            @if($rawByDevice[$device->id]['telemetry'] ?? null)
+                                <div>
+                                    <p class="mb-1 text-theme-xs font-medium text-gray-600 dark:text-gray-300">Telemetry</p>
+                                    <pre class="max-h-64 overflow-auto rounded-lg bg-gray-50 p-2 text-theme-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ $rawByDevice[$device->id]['telemetry'] }}</pre>
+                                </div>
+                            @endif
+                            @if($rawByDevice[$device->id]['fingerprint'] ?? null)
+                                <div>
+                                    <p class="mb-1 text-theme-xs font-medium text-gray-600 dark:text-gray-300">Inventory</p>
+                                    <pre class="max-h-64 overflow-auto rounded-lg bg-gray-50 p-2 text-theme-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ $rawByDevice[$device->id]['fingerprint'] }}</pre>
+                                </div>
+                            @endif
+                        </div>
+                    </details>
                 @endif
 
                 @if($audit)
