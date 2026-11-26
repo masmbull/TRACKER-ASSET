@@ -255,6 +255,21 @@ class AssetImportService
             $values[$field] = $this->cleanString($value);
         }
 
+        // "Merk / Model" from IT Assets.xlsx carries both fields in one cell.
+        // Keep the brand and the model apart so the register and the generated
+        // documents can show them as separate facts.
+        if (filled($values['brand'] ?? null) && blank($values['model'] ?? null)
+            && str_contains((string) $values['brand'], '/')) {
+            [$brand, $model] = array_pad(
+                array_map('trim', preg_split('/\s*\/\s*/u', (string) $values['brand'], 2)),
+                2,
+                null
+            );
+
+            $values['brand'] = $brand !== '' ? $brand : null;
+            $values['model'] = $model !== '' ? $model : null;
+        }
+
         foreach (['purchase_year', 'useful_life_years'] as $field) {
             $values[$field] = $this->parseInt($values[$field] ?? null);
         }

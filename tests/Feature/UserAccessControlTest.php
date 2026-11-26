@@ -74,4 +74,46 @@ class UserAccessControlTest extends TestCase
             ->assertOk()
             ->assertSee('results');
     }
+
+    public function test_panel_endpoint_returns_the_selected_users_permissions(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $viewer = User::factory()->create([
+            'role' => 'viewer',
+            'permission_overrides' => ['assets.create' => true],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('users.access.panel', $viewer))
+            ->assertOk()
+            ->assertSee($viewer->name)
+            ->assertSee($viewer->email)
+            ->assertSee('View assets')
+            ->assertSee('name="permissions[assets.create]" value="allow" checked', false)
+            ->assertDontSee('Choose a user to configure their access.');
+    }
+
+    public function test_panel_endpoint_is_admin_only(): void
+    {
+        $viewer = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($viewer)
+            ->get(route('users.access.panel', $viewer))
+            ->assertForbidden();
+    }
+
+    public function test_access_page_renders_the_initial_panel_and_client_side_controls(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $viewer = User::factory()->create(['role' => 'viewer']);
+
+        $this->actingAs($admin)
+            ->get(route('users.access', ['user' => $viewer->id]))
+            ->assertOk()
+            ->assertSee('View assets')
+            ->assertSee('data-user-search', false)
+            ->assertSee('data-user-row', false)
+            ->assertSee('accessControl(', false)
+            ->assertSee(route('users.access.panel', ['user' => '__USER__']), false);
+    }
 }
