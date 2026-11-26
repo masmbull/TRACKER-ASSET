@@ -55,6 +55,7 @@
     </thead>
     <tbody>
         @foreach($transfers as $transfer)
+        @php($fatDocument = $transfer->documents->firstWhere('document_type', 'FAT'))
         <tr class="border-b hover:bg-gray-50 dark:hover:bg-gray-800" data-live-filter-row>
             <td class="py-3 px-4">{{ $transfer->transfer_number }}</td>
             <td class="py-3 px-4">{{ $transfer->transfer_date?->format('Y-m-d') }}</td>
@@ -85,7 +86,14 @@
                 @endif
             </td>
             <td class="py-3 px-4">
-                <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-red-600 text-sm hover:text-red-700 dark:text-red-400">View Asset</a>
+                <div class="flex items-center gap-3">
+                    <a href="{{ route('assets.show', $transfer->asset_id) }}" class="text-red-600 text-sm hover:text-red-700 dark:text-red-400">View Asset</a>
+                    @if($fatDocument)
+                        <a href="{{ route('documents.download', $fatDocument) }}" class="inline-flex items-center gap-1 text-sm text-brand-500 hover:text-brand-600">
+                            <x-icon name="download" class="h-4 w-4" /> FAT PDF
+                        </a>
+                    @endif
+                </div>
             </td>
         </tr>
         @endforeach
