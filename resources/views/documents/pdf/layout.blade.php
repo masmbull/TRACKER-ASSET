@@ -18,7 +18,7 @@
 <style>
     @page { margin: 1cm 1.3cm; size: auto; }
     body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111827; line-height: 1.28; }
-    .letterhead { border-bottom: 2px solid #1e40af; padding-bottom: 5px; margin-bottom: 6px; }
+    .letterhead { border-bottom: 3px solid #e11d2e; padding-bottom: 5px; margin-bottom: 6px; }
     .letterhead table { border: none; width: 100%; margin: 0; }
     .letterhead td { border: none; vertical-align: middle; padding: 0; }
     /* The brand block: a red tile holding the mark, sized to the mark's own
@@ -27,15 +27,16 @@
        bar, which is why the logo looked like a placeholder. The source image is
        now cropped to the mark and supersampled for print, so it is drawn at its
        real proportions and stays sharp at 96 dpi and above. */
-    .logo-cell { width: 74px; padding: 5px 7px; background: #e11d2e; text-align: center; }
-    .logo-cell img { width: 60px; height: auto; display: block; margin: 0 auto; image-rendering: auto; }
-    .entities { padding-left: 11px; }
-    .entities .legal { font-size: 8.5px; font-weight: bold; color: #0f172a; }
+    .logo-cell { width: 76px; padding: 6px; background: #e11d2e; text-align: center; }
+    .logo-cell img { width: 58px; height: auto; display: block; margin: 0 auto; image-rendering: auto; }
+    .entities { padding-left: 12px; }
+    .entities .legal { font-size: 8.5px; font-weight: 600; line-height: 1.35; color: #344054; }
+    .entities .legal-primary { font-size: 10px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: .02em; }
     .doc-title { text-align: right; }
-    .doc-title h1 { font-size: 12px; margin: 0; color: #1e40af; text-transform: uppercase; }
-    .doc-title .sub { font-size: 8px; color: #475569; margin-top: 1px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
-    th, td { border: 1px solid #cbd5e1; padding: 2px 6px; text-align: left; vertical-align: top; }
+    .doc-title h1 { margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid #e11d2e; font-size: 12px; font-weight: 800; color: #b42318; text-transform: uppercase; letter-spacing: .03em; }
+    .doc-title .sub { font-size: 8px; line-height: 1.45; color: #475569; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
+    th, td { border: 1px solid #cbd5e1; padding: 1px 6px; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; font-size: 7.5px; text-transform: uppercase; letter-spacing: .04em; color: #334155; }
     .section-head { background: #e2e8f0; font-weight: bold; font-size: 8.5px; }
     .label { width: 34%; color: #475569; }
@@ -43,7 +44,8 @@
     .spec-line { margin: 0; }
     .pass { color: #027a48; font-weight: bold; }
     .fail { color: #b42318; font-weight: bold; }
-    .statement { padding: 5px 8px; }
+    .statement { padding: 3px 8px; line-height: 1.35; text-align: justify; }
+    .extra-room { height: 20px; }
     .sign { width: 100%; margin-top: 3px; border: none; }
     .sign td { border: none; width: 50%; padding: 0 8px 0 0; vertical-align: top; }
     .sign-box { border: 1px solid #cbd5e1; }
@@ -53,7 +55,7 @@
     
     /* Single-page enforcement: prevent tables from splitting across pages */
     .section-head, table { page-break-inside: avoid; }
-    .sign-box, .sign-row { page-break-inside: avoid; }
+    .sign-box, .sign-row, .sign-grid, .sign-grid tr { page-break-inside: avoid; }
 </style>
 </head>
 <body>
@@ -69,7 +71,7 @@
             </td>
             <td class="entities">
                 @foreach((array) config('documents.entities', []) as $entity)
-                    <div class="legal">{{ $entity }}</div>
+                    <div class="{{ $loop->first ? 'legal legal-primary' : 'legal' }}">{{ $entity }}</div>
                 @endforeach
             </td>
             <td class="doc-title">
