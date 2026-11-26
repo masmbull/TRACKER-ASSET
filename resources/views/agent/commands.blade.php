@@ -37,10 +37,13 @@
 </x-card>
 
 <x-card class="mb-6" title="Commands">
-    <div data-live-region="commands"{!! $pendingCount > 0 ? ' data-poll-interval="10"' : '' !!}>
+    {{-- Always poll. The old rule started the timer only if a command was
+         pending at page load, so an operator who opened this page before a scan
+         was queued never saw its result until a manual reload. --}}
+    <div data-live-region="commands" data-poll-interval="10">
     @if($commands->count() > 0)
         <div class="overflow-x-auto">
-            <x-table :headers="['ID', 'Command', 'Token', 'Status', 'Result', 'Created', 'Executed']">
+            <x-table :headers="['ID', 'Command', 'Token', 'Status', 'Stage', 'Progress', 'Result', 'Created', 'Executed']">
                 @foreach($commands as $cmd)
                     <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5">
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">#{{ $cmd->id }}</td>
@@ -51,6 +54,17 @@
                                 $statusColors = ['pending' => 'bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300', 'done' => 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300', 'failed' => 'bg-error-100 text-error-700 dark:bg-error-500/10 dark:text-error-300'];
                             @endphp
                             <span class="rounded px-2 py-1 text-theme-xs font-medium {{ $statusColors[$cmd->status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }}">{{ $cmd->status }}</span>
+                        </td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->stage ?: '—' }}</td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">
+                            @if($cmd->progress !== null)
+                                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                    <div class="h-full rounded-full bg-brand-500" style="width: {{ max($cmd->progress, 2) }}%"></div>
+                                </div>
+                                <span class="text-theme-xs">{{ $cmd->progress }}%</span>
+                            @else
+                                —
+                            @endif
                         </td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->result ? json_encode($cmd->result) : '—' }}</td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->created_at->diffForHumans() }}</td>

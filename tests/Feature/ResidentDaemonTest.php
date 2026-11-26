@@ -371,14 +371,19 @@ class ResidentDaemonTest extends TestCase
             ->assertDontSee('window.location.reload()', false);
     }
 
-    public function test_commands_page_does_not_poll_without_pending()
+    public function test_commands_page_keeps_polling_without_pending_commands()
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
+        // A command can be queued, run and settled *after* this page was opened.
+        // Starting the timer only when one was already pending at page load meant
+        // an operator who opened the page a moment too early never saw that
+        // result without a manual reload. The region poll is soft (no shell
+        // reload), so keeping it running costs one small HTML fetch per tick.
         $this->actingAs($admin)->get(route('agent.commands'))
             ->assertOk()
             ->assertSee('data-live-region="commands"', false)
-            ->assertDontSee('data-poll-interval', false);
+            ->assertSee('data-poll-interval="10"', false);
     }
 
     public function test_dashboard_shows_fleet_health()
