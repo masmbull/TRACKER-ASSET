@@ -109,6 +109,12 @@
                     @endif
                 @endcan
                 @can('audit', $asset)
+                    <form method="POST" action="{{ route('assets.remote', $asset) }}" data-modal-action>
+                        @csrf
+                        <x-button type="submit" variant="success" size="sm" title="Read the current UltraViewer ID and password from this laptop, then open a remote session">
+                            <x-icon name="remote" class="h-4 w-4" /> Remote
+                        </x-button>
+                    </form>
                     <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'scan-again-modal')">Scan Again</x-button>
                 @endcan
             </div>

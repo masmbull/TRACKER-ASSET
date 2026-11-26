@@ -536,7 +536,7 @@
              * panel, so a passive toast was too easy to miss. SweetAlert2 waits
              * for an acknowledgement and is the last thing shown for that task.
              */
-            const finishWithAlert = (heading, text, icon) => {
+            const finishWithAlert = (heading, text, icon, html) => {
                 window.clearInterval(pollTimer);
                 pollTimer = null;
                 setBusy(false);
@@ -551,7 +551,7 @@
                 clearSteps();
 
                 if (typeof window.trackerAlert === 'function') {
-                    window.trackerAlert({ title: heading, text, icon });
+                    window.trackerAlert(html ? { title: heading, html, icon } : { title: heading, text, icon });
                 } else {
                     window.showToast?.(text, icon === 'error' ? 'error' : 'success');
                 }
@@ -771,10 +771,25 @@
                             setBusy(false);
                             setProgressBar(state.done ? 100 : (state.progress ?? 100), state.failed ? 'Failed' : 'Completed', false, state.failed);
                             updateMinimized(state.failed ? 'Action failed' : 'Done', 'Completed', 100);
+
+                            // A remote request comes back with credentials in
+                            // the command result. Show them with a launcher, and
+                            // never silently drop them into a generic toast.
+                            let resultHtml;
+                            if (state.credentials && state.credentials.id && state.credentials.password) {
+                                resultHtml = '<div class="tracker-remote-result">'
+                                    + '<p class="mb-2 text-sm text-gray-600 dark:text-gray-300">UltraViewer reported these credentials for this laptop:</p>'
+                                    + '<p class="mb-1 text-sm"><strong>ID:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.id) + '</code></p>'
+                                    + '<p class="mb-3 text-sm"><strong>Password:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.password) + '</code></p>'
+                                    + '<a href="/agent/commands/' + commandId + '/launcher" class="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Download one-click launcher</a>'
+                                    + '<p class="mt-3 text-xs text-gray-400">The launcher starts UltraViewer with these credentials. They change on the next restart.</p>'
+                                    + '</div>';
+                            }
                             finishWithAlert(
-                                state.failed ? 'Action failed' : 'Action complete',
+                                state.failed ? 'Action failed' : (resultHtml ? 'UltraViewer credentials ready' : 'Action complete'),
                                 state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.'),
-                                state.failed ? 'error' : 'success'
+                                state.failed ? 'error' : 'success',
+                                resultHtml
                             );
                             return;
                         }

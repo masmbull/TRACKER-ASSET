@@ -466,6 +466,7 @@ PS;
             'empty-recycle-bin' => ['Empty Recycle Bin', self::EMPTY_RECYCLE_BIN, 'current-user', 'all', 'Empties the Recycle Bin without a confirmation prompt.', 'Maintenance'],
             'system-health' => ['System Health Check', self::SYSTEM_HEALTH_CHECK, 'current-user', 'all', 'Read-only OS, disk, memory and stopped-services report in the log.', 'Diagnostics'],
             'sfc-dism' => ['SFC + DISM Scan', self::SFC_DISM_SCAN, 'system', 'device', 'Repairs the component store and system files. Allow a long timeout.', 'Diagnostics'],
+            'ultraviewer-credentials' => ['Read UltraViewer ID/Password', self::READ_ULTRAVIEWER_CREDENTIALS, 'current-user', 'device', 'Read-only: reports the current UltraViewer ID and password so the Remote button can open a session.', 'Diagnostics'],
         ];
 
         return collect($definitions)->mapWithKeys(fn (array $preset, string $key) => [
@@ -495,5 +496,101 @@ try {
     Write-Log ('FAIL: ' + $_.Exception.Message)
     exit 1
 }
+PS;
+
+    /**
+     * Read the UltraViewer ID and the password currently shown by the running
+     * client. The password changes on every start, so it must be read on demand
+     * at the moment an operator clicks Remote - it cannot be stored in advance.
+     *
+     * Three sources are tried: the values visible in the UltraViewer window,
+     * the HKCU settings key, and the user configuration folder. The raw findings
+     * are logged too, because UltraViewer changes where it keeps them between
+     * versions and an operator can still pick the right one by hand.
+     */
+    public const READ_ULTRAVIEWER_CREDENTIALS = <<<'PS'
+$ErrorActionPreference = 'Stop'
+Add-Type @"
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class UvWindow {
+    public delegate bool EnumProc(IntPtr h, IntPtr p);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr p);
+    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc cb, IntPtr p);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int max);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    public static string Text(IntPtr h) { var s = new StringBuilder(512); GetWindowText(h, s, s.Capacity); return s.ToString(); }
+}
+"@
+
+$script:findings = @()
+$uvIds = @()
+$script:seen = New-Object 'System.Collections.Generic.HashSet[string]'
+$script:uvPids = @(Get-Process -Name 'UltraViewer*' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+
+if ($script:uvPids.Count -gt 0) {
+    $topCb = [UvWindow+EnumProc] {
+        param($h, $p)
+        $procId = [uint32]0
+        [void][UvWindow]::GetWindowThreadProcessId($h, [ref]$procId)
+        if ($script:uvPids -notcontains [int]$procId) { return $true }
+        $text = [UvWindow]::Text($h)
+        if ($text -and $script:seen.Add($text)) { $script:findings += "WINDOW: $text" }
+        $childCb = [UvWindow+EnumProc] {
+            param($ch, $cp)
+            $t = [UvWindow]::Text($ch)
+            if ($t -and $script:seen.Add($t)) { $script:findings += "CONTROL: $t" }
+            return $true
+        }
+        [void][UvWindow]::EnumChildWindows($h, $childCb, [IntPtr]::Zero)
+        return $true
+    }
+    [void][UvWindow]::EnumWindows($topCb, [IntPtr]::Zero)
+}
+
+foreach ($path in @('HKCU:\Software\UltraViewer', 'HKCU:\Software\DucFabulous\UltraViewer')) {
+    if (Test-Path -LiteralPath $path) {
+        $item = Get-ItemProperty -LiteralPath $path
+        foreach ($name in $item.PSObject.Properties.Name) {
+            if ($name -like 'PS*') { continue }
+            $value = $item.$name
+            $findings += "REG: $name=$value"
+            if ($name -match 'id' -and "$value" -match '^\d{5,12}$') { $uvIds += "$value" }
+            if ($name -match 'pass|pwd|key' -and "$value" -ne '') { $findings += "PASSWORD_CANDIDATE: $value" }
+        }
+    }
+}
+
+$configDir = Join-Path $env:APPDATA 'UltraViewer'
+if (Test-Path -LiteralPath $configDir) {
+    Get-ChildItem -LiteralPath $configDir -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Length -lt 200000 } |
+        ForEach-Object {
+            $content = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                $findings += "FILE: $($_.Name) => $($content.Substring(0, [Math]::Min(500, $content.Length)))"
+                if ($content -match '(?i)(?:id|partner)[^0-9]{0,12}([0-9]{6,12})') { $uvIds += $Matches[1] }
+            }
+        }
+}
+
+foreach ($line in @($findings)) {
+    if ($line -match '(?<!\d)([0-9]{8,10})(?!\d)') { $uvIds += $Matches[1] }
+}
+
+$id = ($uvIds | Where-Object { $_ } | Sort-Object Length -Descending | Select-Object -First 1)
+$passwordCandidates = @()
+foreach ($line in @($findings)) {
+    if ($line -match 'PASSWORD_CANDIDATE:\s*(.+)$') { $passwordCandidates += $Matches[1].Trim() }
+}
+$password = ($passwordCandidates | Where-Object { $_ } | Select-Object -First 1)
+
+Write-Output "UV_ID=$id"
+Write-Output "UV_PASS=$password"
+Write-Output "UV_FOUND=$($script:uvPids.Count) UltraViewer process(es)"
+foreach ($line in ($findings | Select-Object -First 60)) { Write-Output "UV_RAW=$line" }
+exit 0
 PS;
 }

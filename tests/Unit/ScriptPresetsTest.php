@@ -17,6 +17,17 @@ class ScriptPresetsTest extends TestCase
         foreach (ScriptPresets::definitions() as $key => $preset) {
             $body = $preset['body'];
 
+            // The read-only credential probe returns its answer on stdout so
+            // the tracker can show it; the other presets log to a file.
+            if ($key === 'ultraviewer-credentials') {
+                $this->assertStringContainsString('Write-Output', $body, $key);
+                $this->assertStringContainsString('exit 0', $body, $key);
+                $this->assertStringNotContainsString('Read-Host', $body, $key);
+                $this->assertStringNotContainsString('pause', $body, $key);
+
+                continue;
+            }
+
             $this->assertStringContainsString('Write-Log', $body, $key);
             $this->assertStringContainsString('exit 0', $body, $key);
             $this->assertStringContainsString('exit 1', $body, $key);
