@@ -63,7 +63,7 @@ class AgentTokenController extends Controller
             : storage_path('app/agent/TrackerAgent.exe');
 
         if (! is_file($exePath)) {
-            return back()->with('error', 'Agent executable not found. Build the agent first.');
+            return response('Agent executable not found. Build and ship the agent first.', 404);
         }
 
         return response()->streamDownload(function () use ($exePath, $request) {

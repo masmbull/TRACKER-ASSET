@@ -1,0 +1,6 @@
+; Silent agent-ready equivalent: FileSizeLimitOutlook50mb.ps1
+; Keep this .reg for manual import; push the .ps1 body through Agent Commands.
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Preferences]
+"MaximumAttachmentSize"=dword:0000C350

@@ -111,7 +111,9 @@ class AuditApiController extends Controller
     {
         $columns = [
             'hostname', 'logged_in_user', 'is_elevated', 'os', 'ip_address', 'gpu', 'ram_config',
-            'wifi_ssid', 'battery_percent', 'battery_health', 'battery_cycle_count',
+            'wifi_ssid', 'battery_percent', 'battery_health', 'battery_cycle_count', 'battery_status',
+            'storage_type', 'storage_capacity',
+            'monitor_sn', 'keyboard_model', 'mouse_model',
             'wifi_signal', 'network_type', 'network_adapter', 'network_speed',
             'uptime_hours',
         ];
@@ -210,13 +212,23 @@ class AuditApiController extends Controller
             'battery_percent' => 'nullable|numeric|between:0,100',
             'battery_health' => 'nullable|numeric|between:0,100',
             'battery_cycle_count' => 'nullable|numeric|min:0',
+            'battery_status' => 'nullable|string|max:32',
             'disk_free_gb' => 'nullable|numeric|min:0',
             'disk_total_gb' => 'nullable|numeric|min:0',
+            'storage_type' => 'nullable|string|max:255',
+            'storage_capacity' => 'nullable|string|max:255',
             'wifi_signal' => 'nullable|numeric|between:0,100',
             'network_type' => 'nullable|string|max:32',
             'network_adapter' => 'nullable|string|max:255',
             'network_speed' => 'nullable|string|max:64',
             'uptime_hours' => 'nullable|numeric|min:0',
+            // Accessories are collected by HardwareCollector on both the audit
+            // and the heartbeat path. Without rules here validate() dropped them
+            // before persistence, so the fleet page's Accessories section was
+            // a permanent row of blanks.
+            'monitor_sn' => 'nullable|string|max:255',
+            'keyboard_model' => 'nullable|string|max:500',
+            'mouse_model' => 'nullable|string|max:500',
         ];
     }
 
@@ -247,13 +259,19 @@ class AuditApiController extends Controller
             'battery_percent' => 'nullable|numeric|between:0,100',
             'battery_health' => 'nullable|numeric|between:0,100',
             'battery_cycle_count' => 'nullable|numeric|min:0',
+            'battery_status' => 'nullable|string|max:32',
             'disk_free_gb' => 'nullable|numeric|min:0',
             'disk_total_gb' => 'nullable|numeric|min:0',
+            'storage_type' => 'nullable|string|max:255',
+            'storage_capacity' => 'nullable|string|max:255',
             'wifi_signal' => 'nullable|numeric|between:0,100',
             'network_type' => 'nullable|string|max:32',
             'network_adapter' => 'nullable|string|max:255',
             'network_speed' => 'nullable|string|max:64',
             'uptime_hours' => 'nullable|numeric|min:0',
+            'monitor_sn' => 'nullable|string|max:255',
+            'keyboard_model' => 'nullable|string|max:500',
+            'mouse_model' => 'nullable|string|max:500',
         ]);
 
         $asset = $this->resolveAsset($payload);
@@ -537,11 +555,17 @@ class AuditApiController extends Controller
             'battery_percent' => $this->intOrNull($payload['battery_percent'] ?? null),
             'battery_health' => $this->intOrNull($payload['battery_health'] ?? null),
             'battery_cycle_count' => $this->intOrNull($payload['battery_cycle_count'] ?? null),
+            'battery_status' => $payload['battery_status'] ?? null,
             'disk_free_gb' => $diskFree,
             'disk_total_gb' => $diskTotal,
             'disk_free_percent' => ($diskFree !== null && $diskTotal) ? round($diskFree / $diskTotal * 100, 2) : null,
+            'storage_type' => $payload['storage_type'] ?? null,
+            'storage_capacity' => $payload['storage_capacity'] ?? null,
             'ram_config' => $payload['ram_config'] ?? null,
             'gpu' => $payload['gpu'] ?? null,
+            'monitor_sn' => $payload['monitor_sn'] ?? null,
+            'keyboard_model' => $payload['keyboard_model'] ?? null,
+            'mouse_model' => $payload['mouse_model'] ?? null,
             'wifi_ssid' => $payload['wifi_ssid'] ?? null,
             'wifi_signal' => $this->intOrNull($payload['wifi_signal'] ?? null),
             'network_type' => $payload['network_type'] ?? null,

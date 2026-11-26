@@ -17,9 +17,11 @@ class AgentTelemetry extends Model
     protected $fillable = [
         'agent_token_id', 'asset_id', 'device_id', 'hostname', 'logged_in_user', 'os', 'ip_address',
         'is_elevated',
-        'battery_percent', 'battery_health', 'battery_cycle_count',
+        'battery_percent', 'battery_health', 'battery_cycle_count', 'battery_status',
         'disk_free_gb', 'disk_total_gb', 'disk_free_percent',
+        'storage_type', 'storage_capacity',
         'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
+        'monitor_sn', 'keyboard_model', 'mouse_model',
         'network_type', 'network_adapter', 'network_speed',
         'uptime_hours', 'payload', 'reported_at',
     ];

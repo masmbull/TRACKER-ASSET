@@ -142,6 +142,47 @@ docker compose -f docker-compose.prod.yml run --rm --no-deps assets
 docker compose -f docker-compose.prod.yml up -d --remove-orphans
 ```
 
+### Docker Hub pull fails over IPv6
+
+A deploy that stops at `docker compose pull` with
+
+```
+Error Get "https://registry-1.docker.io/v2/": dial tcp [2600:...]:443: connect: network is unreachable
+```
+
+is a DNS/network problem on the server, not a bad image. The resolver returns
+AAAA records for Docker Hub while the host has no IPv6 egress, and Docker dials
+the IPv6 address without falling back to IPv4. The deploy workflow now pulls only
+the application image from GHCR on every release and refreshes the pinned third
+party images on a best-effort basis, so Docker Hub reachability no longer blocks
+a release — but those images do need to exist locally at least once.
+
+Check connectivity from the server (the IPv6 failure is expected):
+
+```bash
+curl -4 -sS -o /dev/null -w 'ipv4 %{http_code}\n' https://registry-1.docker.io/v2/
+curl -6 -sS -o /dev/null -w 'ipv6 %{http_code}\n' https://registry-1.docker.io/v2/ || echo 'ipv6 unreachable'
+```
+
+Permanent fix — pin the registry hosts to their IPv4 addresses so Docker never
+picks the unreachable AAAA record, then pre-pull the three pinned images once:
+
+```bash
+sudo bash -c '
+for host in registry-1.docker.io auth.docker.io production.cloudflare.docker.com ghcr.io; do
+  ip=$(getent ahostsv4 "$host" | awk "NR==1 {print \$1}")
+  [ -n "$ip" ] || continue
+  grep -qE "[[:space:]]${host}([[:space:]]|$)" /etc/hosts || echo "$ip $host" >> /etc/hosts
+done'
+sudo systemctl restart docker
+
+cd /opt/tracker-asset
+docker compose -f docker-compose.prod.yml pull nginx postgres redis
+```
+
+If the pinned addresses ever go stale, remove the matching lines from
+`/etc/hosts` and run the block again.
+
 ## Scheduler (required in production)
 
 Two behaviours are not event-driven and simply never happen unless something

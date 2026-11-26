@@ -92,7 +92,14 @@ class AgentFleetController extends Controller
             ->whereIn('command', ['install', 'update'])
             ->whereIn('agent_token_id', $devices->pluck('id'))
             ->orderByDesc('id')
-            ->get(['agent_token_id', 'command'])
+            // The whole operation is needed, not just its name: progressLabel()
+            // and isStalled() read stage/progress and the movement timestamps.
+            // Selecting only the first two made every live bar render as stalled
+            // and every percentage read null.
+            ->get([
+                'id', 'agent_token_id', 'command', 'status', 'progress', 'stage',
+                'started_at', 'updated_at', 'created_at',
+            ])
             ->unique('agent_token_id')
             ->keyBy('agent_token_id');
 
@@ -146,6 +153,24 @@ class AgentFleetController extends Controller
                     ? null
                     : number_format((float) $telemetry->disk_free_gb, 0),
                 'rdp_enabled' => $fp?->rdp_enabled,
+                // The inline bars used to be painted once on page load: the 15 s
+                // refresh sent battery and status but not the operation driving
+                // that status, so an install sat frozen at its first percentage
+                // until someone reloaded the whole page.
+                'operation' => ($operation = $activeOperations->get($device->id)) === null ? null : [
+                    'command' => $operation->command,
+                    'status' => $operation->status,
+                    'progress' => $operation->progress,
+                    'label' => $operation->progressLabel(),
+                    'stalled' => $operation->isStalled(),
+                ],
+                // The agent's own explanation of the last settled command. The
+                // page used to show only a derived "maybe switched off" reason,
+                // hiding failures such as a refused elevated script or a failed
+                // update download from the operator who needed them.
+                'result_message' => ($settled = $lastSettled->get($device->id)) === null
+                    ? null
+                    : ($settled->result['message'] ?? null),
             ];
         }
 
@@ -243,8 +268,10 @@ class AgentFleetController extends Controller
                         'id', 'agent_token_id', 'asset_id', 'hostname', 'logged_in_user',
                         'is_elevated',
                         'os', 'ip_address', 'battery_percent', 'battery_health',
-                        'battery_cycle_count', 'disk_free_gb', 'disk_total_gb',
-                        'disk_free_percent', 'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
+                        'battery_cycle_count', 'battery_status', 'disk_free_gb', 'disk_total_gb',
+                        'disk_free_percent', 'storage_type', 'storage_capacity',
+                        'ram_config', 'gpu', 'wifi_ssid', 'wifi_signal',
+                        'monitor_sn', 'keyboard_model', 'mouse_model',
                         'network_type', 'network_adapter', 'network_speed', 'uptime_hours',
                         // payload carries agent_mode, which deviceState() reads for
                         // every status cell on this page. Leaving it out of the
@@ -271,7 +298,8 @@ class AgentFleetController extends Controller
                         'security_updates_pending', 'updates_failed', 'updates_succeeded',
                         'last_security_update_at', 'security_updates_installed',
                         'local_admin_count', 'software_count', 'startup_count', 'ram_modules',
-                        'ram_slots', 'collected_at',
+                        'ram_slots', 'os_build', 'os_installed_at', 'last_boot_at', 'timezone',
+                        'cpu_physical_cores', 'collected_at', 'payload',
                         // Accessories
                         'monitor_sn', 'keyboard_model', 'mouse_model',
                         'headset_model', 'webcam_model', 'other_accessories',
@@ -490,6 +518,18 @@ class AgentFleetController extends Controller
         $rowsByDevice = $paginatedDevices->getCollection()
             ->mapWithKeys(fn (AgentApiToken $device) => [$device->id => $this->detailRows($device)]);
 
+        // Raw reports, for the rare case where a reading is not one of the
+        // labelled fields above. Software and printers are left out: they have
+        // their own tables, and embedding hundreds of rows per device would bloat
+        // every fleet page load.
+        $rawByDevice = $paginatedDevices->getCollection()
+            ->mapWithKeys(fn (AgentApiToken $device) => [$device->id => [
+                'telemetry' => $this->payloadJson($device->telemetry?->payload ?? []),
+                'fingerprint' => $this->payloadJson(
+                    collect($device->fingerprint?->payload ?? [])->except(['software', 'printers'])->all()
+                ),
+            ]]);
+
         // Printers, loaded only for the devices on the current page.
         //
         // The printer list is per-device and per-page, not per-fleet, so it is
@@ -513,6 +553,8 @@ class AgentFleetController extends Controller
             // badge have to be able to look up a device on any page.
             'paginatedDevices' => $paginatedDevices,
             'rowsByDevice' => $rowsByDevice,
+            'rawByDevice' => $rawByDevice,
+            'lastSettled' => $lastSettled,
             'printersByFingerprint' => $printersByFingerprint,
             'pageSizes' => self::PAGE_SIZES,
             'perPage' => $perPage,
@@ -525,6 +567,26 @@ class AgentFleetController extends Controller
             'findingsByToken' => $findingsByToken,
             'deviceStates' => $deviceStates,
         ]);
+    }
+
+    /**
+     * Pretty-print a stored agent payload for the "raw report" disclosure.
+     *
+     * Returns null for an empty payload so the view can skip the disclosure
+     * entirely instead of showing an empty pair of braces on every device.
+     */
+    private function payloadJson(array $payload): ?string
+    {
+        if ($payload === []) {
+            return null;
+        }
+
+        $json = json_encode(
+            $payload,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+
+        return $json === false ? null : $json;
     }
 
     /**
@@ -558,6 +620,7 @@ class AgentFleetController extends Controller
             ],
             'Hardware' => [
                 'CPU cores' => $fp?->cpu_cores,
+                'Physical cores' => $fp?->cpu_physical_cores,
                 'Architecture' => $fp?->cpu_architecture,
                 'RAM' => $t?->ram_config,
                 'RAM slots' => $this->ramSlotsLabel($fp),
@@ -572,9 +635,12 @@ class AgentFleetController extends Controller
                 'SMART' => $fp?->smart_health,
             ],
             'Accessories' => [
-                'Monitor S/N' => $fp?->monitor_sn,
-                'Keyboard' => $fp?->keyboard_model,
-                'Mouse' => $fp?->mouse_model,
+                // The collector reports these three with the hardware snapshot,
+                // not with the deep inventory, so the fingerprint row is usually
+                // empty. Fall back to the telemetry columns that now receive them.
+                'Monitor S/N' => $fp?->monitor_sn ?: $t?->monitor_sn,
+                'Keyboard' => $fp?->keyboard_model ?: $t?->keyboard_model,
+                'Mouse' => $fp?->mouse_model ?: $t?->mouse_model,
                 'Headset' => $fp?->headset_model,
                 'Webcam' => $fp?->webcam_model,
                 'Other' => $fp?->other_accessories,
@@ -590,6 +656,9 @@ class AgentFleetController extends Controller
                 'Battery' => $t?->battery_percent !== null ? $t->battery_percent.'%' : null,
                 'Battery health' => $t?->battery_health !== null ? $t->battery_health.'%' : null,
                 'Battery cycles' => $t?->battery_cycle_count,
+                'Battery status' => $t?->battery_status,
+                'Storage type' => $t?->storage_type,
+                'Storage capacity' => $t?->storage_capacity,
             ],
             'Network' => [
                 'Network' => $this->networkLabel($t),
@@ -602,6 +671,9 @@ class AgentFleetController extends Controller
                 'Activation' => $fp?->activation_status,
                 'Licence' => $fp?->license_channel,
                 'OS build' => $fp?->os_build,
+                'OS installed' => $fp?->os_installed_at?->format('Y-m-d'),
+                'Last boot' => $fp?->last_boot_at?->format('Y-m-d H:i'),
+                'Timezone' => $fp?->timezone,
                 'Domain' => $fp?->domain,
             ],
             'Security' => [
@@ -1442,6 +1514,24 @@ class AgentFleetController extends Controller
             return 'Went offline right after an update: the agent downloaded the new build but did not restart. Reinstall the agent on this machine.';
         }
 
+        // The agent's own last word, when it sent one. "Script completed
+        // successfully" or "Windows refused the restart request" is more useful
+        // than a generic "maybe the machine is off" - especially on a device
+        // that went quiet immediately after reporting a failure.
+        // Only a recent settlement explains the current silence. A command from
+        // last week is history, and presenting its message as today's reason
+        // would be a different kind of made-up certainty.
+        $settledAt = $lastSettled?->executed_at;
+        $recentlySettled = $settledAt !== null && (
+            $device->last_used_at === null
+            || abs($device->last_used_at->diffInSeconds($settledAt)) <= 15 * 60
+        );
+        $result = $recentlySettled ? $lastSettled?->result : null;
+        $message = is_array($result) ? ($result['message'] ?? null) : null;
+        if (is_string($message) && trim($message) !== '') {
+            return $message;
+        }
+
         // Use absolute English duration: "5 minutes" not "5 minutes ago".
         $quiet = $device->last_used_at
             ?->diffForHumans([
@@ -1515,9 +1605,38 @@ class AgentFleetController extends Controller
             'done' => $command->status === 'done',
             'failed' => $command->status === 'failed',
             'message' => $command->result['message'] ?? null,
+            // Read-only commands return their whole answer as text (the agent
+            // captures stdout). Remote uses this to read the live UltraViewer
+            // credentials instead of asking the operator to type them.
+            'stdout' => $command->result['stdout'] ?? null,
+            'credentials' => $this->remoteCredentials($command),
             // The phases of this command, so the dialog can show the whole
             // journey as a checklist instead of a lone bar with no context.
             'steps' => $command->steps(),
         ]);
+    }
+
+    /**
+     * @return array{id: string, password: string}|null
+     */
+    private function remoteCredentials(AgentCommand $command): ?array
+    {
+        $stdout = (string) ($command->result['stdout'] ?? '');
+        $id = null;
+        $password = null;
+
+        foreach (preg_split('/\R/u', $stdout) ?: [] as $line) {
+            if (preg_match('/^UV_ID=(.+)$/', trim($line), $m)) {
+                $id = trim($m[1]);
+            } elseif (preg_match('/^UV_PASS=(.+)$/', trim($line), $m)) {
+                $password = trim($m[1]);
+            }
+        }
+
+        if (! $id || $id === '—' || ! $password || $password === '—') {
+            return null;
+        }
+
+        return ['id' => $id, 'password' => $password];
     }
 }

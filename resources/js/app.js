@@ -1,8 +1,30 @@
 import Alpine from 'alpinejs';
 import persist from '@alpinejs/persist';
 import collapse from '@alpinejs/collapse';
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
 
 window.Alpine = Alpine;
+
+// One place for the look and feel of completion dialogs. Fleet actions finish
+// asynchronously (the agent runs the job long after the POST returned), so the
+// old inline toast was easy to miss - especially when the progress panel had
+// been minimized. Swal gives the result a modal the operator has to acknowledge.
+window.trackerAlert = (options = {}) => Swal.fire({
+    buttonsStyling: false,
+    reverseButtons: true,
+    showCancelButton: false,
+    confirmButtonText: 'OK',
+    customClass: {
+        popup: 'tracker-swal-popup',
+        title: 'tracker-swal-title',
+        htmlContainer: 'tracker-swal-text',
+        confirmButton: 'tracker-swal-confirm',
+        cancelButton: 'tracker-swal-cancel',
+        actions: 'tracker-swal-actions',
+    },
+    ...options,
+});
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -525,6 +547,39 @@ document.addEventListener('DOMContentLoaded', () => {
                             reason.classList.add('hidden');
                         }
                     }
+                    // The agent's own explanation of its last settled command,
+                    // rather than a generic "maybe it is switched off".
+                    const resultMessage = row.querySelector('[data-fleet-result-message]');
+                    if (resultMessage) {
+                        resultMessage.textContent = state.result_message || '';
+                        resultMessage.classList.toggle('hidden', !state.result_message);
+                    }
+
+                    // Install/update bars have to move with the status cell.
+                    // The wrapper exists on every row so an operation that starts
+                    // after page load can reveal it without a full reload.
+                    const operation = row.querySelector('[data-fleet-operation]');
+                    if (operation) {
+                        const op = state.operation;
+                        operation.classList.toggle('hidden', !op);
+                        if (op) {
+                            const label = operation.querySelector('[data-fleet-operation-label]');
+                            if (label) {
+                                label.textContent = op.label || '';
+                                label.classList.toggle('text-error-500', !!op.stalled);
+                                label.classList.toggle('font-medium', !!op.stalled);
+                                label.classList.toggle('text-gray-500', !op.stalled);
+                                label.classList.toggle('dark:text-gray-400', !op.stalled);
+                            }
+                            const bar = operation.querySelector('[data-fleet-operation-bar]');
+                            if (bar) {
+                                bar.style.width = Math.max(op.progress ?? 2, 2) + '%';
+                                bar.classList.toggle('bg-error-500', !!op.stalled);
+                                bar.classList.toggle('bg-brand-500', !op.stalled);
+                            }
+                        }
+                    }
+
                     const battery = row.querySelector('[data-fleet-battery]');
                     if (battery && state.battery_percent !== null && state.battery_percent !== undefined) {
                         battery.innerHTML = `<span class="font-medium ${state.battery_alert ? 'text-error-500' : 'text-gray-700 dark:text-gray-300'}">${state.battery_percent}%</span><span class="block text-theme-xs text-gray-500 dark:text-gray-400">health ${state.battery_health ?? '—'}%</span>`;

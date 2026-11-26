@@ -54,17 +54,22 @@ return [
         'FAT' => [
             'handover_date' => 'Tanggal Serah Terima',
             'received_date' => 'Tanggal Diterima',
-            'statement' => 'Digunakan untuk keperluan pekerjaan dan jika akan dikembalikan harus dalam kondisi baik seperti diterima.',
+            'statement' => 'Aset ini diserahkan oleh pihak penyerah kepada penerima untuk digunakan dalam mendukung pelaksanaan tugas. Penerima bertanggung jawab menjaga keutuhan, keamanan, dan kondisi aset selama penggunaan, serta wajib mengembalikannya kepada pihak penyerah dalam kondisi baik sesuai keadaan saat diterima, kecuali kerusakan wajar akibat pemakaian normal.',
+        ],
+        'BAST' => [
+            'handover_date' => 'Tanggal Serah Terima',
+            'received_date' => 'Tanggal Diterima',
+            'statement' => 'Dengan ini pihak penyerah menyerahkan aset kepada penerima, dan penerima menyatakan telah menerima aset tersebut dalam kondisi baik serta lengkap sesuai daftar yang tercantum dalam dokumen ini. Penerima berkewajiban menggunakan aset semata-mata untuk keperluan pekerjaan, menjaga dan memeliharanya dengan baik, serta mengembalikannya dalam kondisi baik apabila tidak lagi digunakan atau sesuai dengan ketentuan yang berlaku.',
         ],
         'RETURN' => [
             'handover_date' => 'Tanggal Pengembalian',
             'received_date' => 'Tanggal Diterima Kembali',
-            'statement' => 'Dikembalikan dalam kondisi baik seperti saat diterima.',
+            'statement' => 'Aset ini dikembalikan oleh penerima kepada pihak penyerah dalam kondisi baik sesuai keadaan saat diterima, beserta seluruh aksesoris dan kelengkapannya, kecuali kerusakan wajar akibat penggunaan normal.',
         ],
         'ASSIGNMENT' => [
             'handover_date' => 'Tanggal Penyerahan',
             'received_date' => 'Tanggal Diterima',
-            'statement' => 'Diserahkan untuk dipergunakan dalam pelaksanaan tugas dan wajib dikembalikan saat tugas selesai.',
+            'statement' => 'Aset ini diserahkan kepada penerima untuk dipergunakan dalam pelaksanaan tugas dan tanggung jawabnya. Penerima wajib menjaga, memelihara, dan menggunakan aset secara bertanggung jawab, serta mengembalikannya kepada pihak penyerah setelah tugas selesai atau sesuai dengan ketentuan yang berlaku.',
         ],
     ],
 

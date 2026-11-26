@@ -818,6 +818,10 @@ public static class AgentRunner
                     Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\"",
                     WorkingDirectory = safeDirectory,
                     UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
                 }
                 : new ProcessStartInfo
                 {
@@ -825,6 +829,10 @@ public static class AgentRunner
                     Arguments = $"/c \"\"{scriptPath}\"\"",
                     WorkingDirectory = safeDirectory,
                     UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
                 };
 
             Api.ReportProgress(url, token, commandId, 25, "Running script...");
@@ -871,12 +879,33 @@ public static class AgentRunner
                 return 1;
             }
 
-            var exitCodeFinal = launched.WaitForExit(timeoutSeconds * 1000) ? launched.ExitCode : 1;
+            // Drain the pipes asynchronously: a script that writes more than a
+            // pipe buffer would otherwise block forever on WaitForExit. The
+            // output is needed for read-only commands (for example "read the
+            // current UltraViewer credentials") whose whole result is text.
+            var outputTask = launched.StandardOutput.ReadToEndAsync();
+            var errorTask = launched.StandardError.ReadToEndAsync();
+            var exited = launched.WaitForExit(timeoutSeconds * 1000);
+            var stdout = exited ? outputTask.Result : string.Empty;
+            var stderr = exited ? errorTask.Result : string.Empty;
+            var exitCodeFinal = exited ? launched.ExitCode : 1;
 
-            Api.Ack(url, token, commandId, exitCodeFinal == 0 ? "done" : "failed", new Dictionary<string, string>
+            var combined = (stdout + (stderr.Length > 0 ? "\n" + stderr : string.Empty)).Trim();
+            if (combined.Length > 6000)
+            {
+                combined = combined.Substring(0, 6000);
+            }
+
+            var ack = new Dictionary<string, string>
             {
                 ["message"] = exitCodeFinal == 0 ? "Script completed successfully." : "The script timed out or exited with an error.",
-            });
+            };
+            if (combined.Length > 0)
+            {
+                ack["stdout"] = combined;
+            }
+
+            Api.Ack(url, token, commandId, exitCodeFinal == 0 ? "done" : "failed", ack);
 
             return exitCodeFinal;
         }
