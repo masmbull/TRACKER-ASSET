@@ -333,7 +333,11 @@ class AssetImportTest extends TestCase
 
     public function test_it_assets_headers_all_map_to_import_fields(): void
     {
-        $analysis = app(AssetImportService::class)->analyze(base_path('IT Assets.xlsx'));
+        $path = tempnam(sys_get_temp_dir(), 'it_assets').'.xlsx';
+        $uploaded = $this->workbook([]);
+        file_put_contents($path, file_get_contents($uploaded->getRealPath()));
+
+        $analysis = app(AssetImportService::class)->analyze($path);
 
         $this->assertSame('Details', $analysis['sheet']);
         $this->assertSame([], $analysis['unmapped_columns']);
