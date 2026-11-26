@@ -1,6 +1,6 @@
 <div align="center">
 
-# TRACKER-ASSET
+# 📦 TRACKER-ASSET
 
 ### Asset operations, made clear.
 
@@ -12,8 +12,12 @@
 ![Livewire](https://img.shields.io/badge/Livewire-4-FB70A1?logo=livewire&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
 ![.NET](https://img.shields.io/badge/Windows_agent-.NET_8-512BD4?logo=dotnet&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=github-actions&logoColor=white)
 
-**Inventory · Audits · Live Fleet · Transfers · FAT/BAST · Reports**
+**🔍 Inventory · 🔎 Audits · 🖥️ Live Fleet · 🔄 Transfers · 📄 FAT/BAST · 📊 Reports**
 
 An IT asset operations platform for MITO Group, replacing spreadsheet-led inventory,
 manual device audits, and copy/paste document preparation with one auditable workflow.
@@ -22,42 +26,42 @@ manual device audits, and copy/paste document preparation with one auditable wor
 
 ---
 
-## What it does
+## 🚀 What it does
 
-- **One asset register** — searchable inventory, master data, attachments, transfers,
+- **📋 One asset register** — searchable inventory, master data, attachments, transfers,
   repairs, assignment history, and activity trail.
-- **Live Windows fleet** — agent telemetry, online/offline state, battery and disk health,
+- **🖥️ Live Windows fleet** — agent telemetry, online/offline state, battery and disk health,
   scan/update commands, and per-device progress.
-- **Server-side audits** — compare reported hardware with registered values; mismatches
+- **🔎 Server-side audits** — compare reported hardware with registered values; mismatches
   are reviewed explicitly and never silently overwrite the register.
-- **Documents that stay findable** — generate FAT/BAST and other PDFs from asset data and
+- **📄 Documents that stay findable** — generate FAT/BAST and other PDFs from asset data and
   templates; `/documents` tracks generated records across the whole register.
-- **Controlled access** — admin, support, technician, and viewer roles; local sign-in or
+- **🔐 Controlled access** — admin, support, technician, and viewer roles; local sign-in or
   optional Microsoft Entra ID SSO.
-- **Operations visibility** — `/services` lists project engines, backing services,
+- **📊 Operations visibility** — `/services` lists project engines, backing services,
   endpoints, and optional integrations with explicit health states.
 
-## Current workflows
+## 🔄 Current workflows
 
 ```mermaid
 flowchart LR
-    A[Register or import asset] --> B[Assign / transfer / repair]
-    B --> C[Agent reports device state]
-    C --> D[Audit compares in Laravel]
-    D --> E{Match?}
-    E -->|Yes| F[Keep verified history]
-    E -->|No| G[Review mismatch]
-    B --> H[Choose template in modal]
-    H --> I[Fill asset-aware document form]
-    I --> J[Create PDF and tracking record]
-    J --> K[Find, preview or download in Documents]
+    A[📝 Register or import asset] --> B[🔄 Assign / transfer / repair]
+    B --> C[🖥️ Agent reports device state]
+    C --> D[🔎 Audit compares in Laravel]
+    D --> E{✅ Match?}
+    E -->|Yes| F[💾 Keep verified history]
+    E -->|No| G[⚠️ Review mismatch]
+    B --> H[📄 Choose template in modal]
+    H --> I[✍️ Fill asset-aware document form]
+    I --> J[📑 Create PDF and tracking record]
+    J --> K[🔍 Find, preview or download in Documents]
 ```
 
 The web application is the system of record. The Windows agent collects and reports data;
 it does not decide whether inventory values are correct. See
 [`docs/architecture.md`](docs/architecture.md) and [`docs/README.md`](docs/README.md).
 
-## Install a fresh local copy
+## 📦 Install a fresh local copy
 
 ### Recommended: Docker Compose
 
@@ -102,7 +106,7 @@ docker compose down
 > `docker compose down -v` removes database and Redis volumes. Use it only when you
 > intend to delete local data.
 
-### Local PHP development
+### 💻 Local PHP development
 
 Use PHP 8.4, Composer, Node.js 22+, and a configured database. Then:
 
@@ -120,7 +124,7 @@ php artisan serve --port=8000
 For a continuously rebuilding front end, run `npm run dev` in a separate terminal.
 Detailed database and Windows instructions: [`docs/local-development.md`](docs/local-development.md).
 
-## Production deployment
+## 🌍 Production deployment
 
 Production runs the versioned Docker image from GitHub Container Registry; the server
 does not need a source checkout. Configure the server-side `.env` and GitHub Actions
@@ -142,14 +146,14 @@ into Markdown, issue reports, chat, shell history, or Git.
 
 Full runbook, rollback, scheduler, and backup notes: [`docs/deployment.md`](docs/deployment.md).
 
-### Existing installations
+### 🔄 Existing installations
 
 The current seeder no longer creates default users, but seeding does not delete or reset
 accounts already stored in an existing database. Before upgrading a database created by
 an older version, review its user list, remove or reset any legacy seed accounts, and
 confirm at least one trusted administrator can sign in. Back up the database first.
 
-## Verify a change
+## ✅ Verify a change
 
 ```bash
 php artisan test
@@ -162,11 +166,11 @@ CI runs PHPUnit against SQLite and PostgreSQL and checks formatting before publi
 container image. Local full-suite baseline: **486 tests** (test count can change as the
 project evolves).
 
-## Documentation
+## 📚 Documentation
 
 Start at [`docs/README.md`](docs/README.md) for the guide index. Key references:
 
-| Guide | Covers |
+| 📖 Guide | Covers |
 |---|---|
 | [Local development](docs/local-development.md) | Fresh clone, Docker, tests, first admin |
 | [Deployment](docs/deployment.md) | New server, CI/CD, scheduler, rollback, backup |
@@ -176,7 +180,9 @@ Start at [`docs/README.md`](docs/README.md) for the guide index. Key references:
 | [Windows agent](agent/README.md) | Build, install, fleet operation |
 | [PRD](TRACKER-ASSET-PRD.md) | Product requirements and historical decisions |
 
-## Technology
+## 🛠️ Technology
 
 Laravel 13 · PHP 8.4 · PostgreSQL · Redis · Blade · Livewire 4 · Alpine.js · Tailwind CSS 4 ·
 Vite 8 · Dompdf · Laravel Excel · QR Code · .NET 8 Windows agent · Docker Compose.
+
+</div>
