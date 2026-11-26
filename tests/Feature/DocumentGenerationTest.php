@@ -249,7 +249,7 @@ class DocumentGenerationTest extends TestCase
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'RETURN']))
             ->assertOk()
             ->assertSee('Tanggal Pengembalian')
-            ->assertSee('Dikembalikan dalam kondisi baik seperti saat diterima.');
+            ->assertSee('Aset ini dikembalikan oleh penerima kepada pihak penyerah dalam kondisi baik sesuai keadaan saat diterima');
 
         $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']))

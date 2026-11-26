@@ -92,6 +92,7 @@
                             <th class="py-2 pr-4">Printer</th>
                             <th class="py-2 pr-4">Driver</th>
                             <th class="py-2 pr-4">Port</th>
+                            <th class="py-2 pr-4">Location</th>
                             <th class="py-2 pr-4">Type</th>
                             <th class="py-2">Status</th>
                         </tr>
@@ -107,6 +108,7 @@
                                 </td>
                                 <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->driver_name ?? '—' }}</td>
                                 <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->port_name ?? '—' }}</td>
+                                <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->location ?? '—' }}</td>
                                 <td class="py-2 pr-4 text-gray-600 dark:text-gray-300">{{ $printer->is_network ? 'Network' : 'Local' }}</td>
                                 <td class="py-2">
                                     @if($printer->is_offline)
@@ -115,6 +117,9 @@
                                         <span class="text-gray-600 dark:text-gray-300">{{ $printer->status }}</span>
                                     @else
                                         <x-badge variant="success">ready</x-badge>
+                                    @endif
+                                    @if($printer->status_code !== null)
+                                        <span class="ml-1 text-theme-xs text-gray-400">code {{ $printer->status_code }}</span>
                                     @endif
                                 </td>
                             </tr>

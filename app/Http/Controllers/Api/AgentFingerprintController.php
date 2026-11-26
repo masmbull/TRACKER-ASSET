@@ -332,6 +332,17 @@ class AgentFingerprintController extends Controller
             'screen_resolution' => $this->clean($payload['screen_resolution'] ?? null),
             'cpu_architecture' => $this->clean($payload['cpu_architecture'] ?? null),
 
+            // The current collector reports these three through the audit and
+            // heartbeat endpoints, where they survive as telemetry columns.
+            // Accepting them here too means a future agent can put them on the
+            // fingerprint row directly without another server change.
+            'monitor_sn' => $this->clean($payload['monitor_sn'] ?? null),
+            'keyboard_model' => $this->clean($payload['keyboard_model'] ?? null),
+            'mouse_model' => $this->clean($payload['mouse_model'] ?? null),
+            'headset_model' => $this->clean($payload['headset_model'] ?? null),
+            'webcam_model' => $this->clean($payload['webcam_model'] ?? null),
+            'other_accessories' => $this->clean($payload['other_accessories'] ?? null),
+
             'auto_logon_enabled' => $this->boolOrNull($payload['auto_logon_enabled'] ?? null),
             'screen_lock_enabled' => $this->boolOrNull($payload['screen_lock_enabled'] ?? null),
             // 0 is deliberately kept: it means "locks immediately", which is the
@@ -520,6 +531,19 @@ class AgentFingerprintController extends Controller
 
             'software_count' => $int,
             'startup_count' => $int,
+            // Reported by the collector but previously had no rule, so it was
+            // dropped by validate() before the report was stored.
+            'printer_count' => $int,
+
+            // Accessories. The three the collector currently reads arrive on the
+            // audit/heartbeat endpoints; these rules let the fingerprint row
+            // carry them too, and cover the fields a future collector adds.
+            'monitor_sn' => 'nullable|string|max:255',
+            'keyboard_model' => 'nullable|string|max:500',
+            'mouse_model' => 'nullable|string|max:500',
+            'headset_model' => 'nullable|string|max:500',
+            'webcam_model' => 'nullable|string|max:500',
+            'other_accessories' => 'nullable|string|max:1000',
 
             'software' => 'nullable|array|max:'.self::MAX_SOFTWARE_ROWS,
             'software.*.name' => 'required|string|max:255',

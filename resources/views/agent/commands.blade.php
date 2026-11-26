@@ -41,10 +41,13 @@
 </x-card>
 
 <x-card class="mb-6" title="Commands">
-    <div data-live-region="commands"{!! $liveCount > 0 ? ' data-poll-interval="10"' : '' !!}>
+    {{-- Always poll. The old rule started the timer only if a command was
+         pending at page load, so an operator who opened this page before a scan
+         was queued never saw its result until a manual reload. --}}
+    <div data-live-region="commands" data-poll-interval="10">
     @if($commands->count() > 0)
         <div class="overflow-x-auto">
-            <x-table :headers="['ID', 'Command', 'Device', 'Status', 'Progress', 'Created', 'Executed']">
+            <x-table :headers="['ID', 'Command', 'Token', 'Status', 'Stage', 'Progress', 'Result', 'Created', 'Executed']">
                 @foreach($commands as $cmd)
                     @php
                         $statusColors = [
@@ -68,6 +71,7 @@
                                 {{ $cmd->status === 'in_progress' ? 'running' : $cmd->status }}
                             </span>
                         </td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->stage ?: '—' }}</td>
                         <td class="py-2 px-2">
                             @if(in_array($cmd->status, ['pending', 'in_progress']))
                                 <div class="w-28">
@@ -81,6 +85,7 @@
                                 <span class="text-theme-xs text-gray-400">{{ $cmd->status === 'done' ? '100% · done' : ($cmd->result ? 'failed' : '—') }}</span>
                             @endif
                         </td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->result ? json_encode($cmd->result) : '—' }}</td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->created_at?->diffForHumans() ?? '—' }}</td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->executed_at?->diffForHumans() ?? '—' }}</td>
                     </tr>
