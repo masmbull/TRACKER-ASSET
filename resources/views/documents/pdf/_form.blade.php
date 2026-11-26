@@ -153,8 +153,8 @@
      masing-masing punya area tanda tangan, dengan nama tercetak di bawahnya. --}}
 <style>
     .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
-    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: left; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px 6px; }
-    .sign-grid td { border: 1px solid #9ca3af; height: 56px; vertical-align: top; padding: 4px; }
+    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px 6px; }
+    .sign-grid td { border: 1px solid #9ca3af; width: 50%; height: 72px; vertical-align: top; padding: 5px; }
     .sign-cell-role { font-size: 8px; font-weight: 700; color: #344054; margin-bottom: 2px; }
     .sign-cell-dashed { border-bottom: 1px dashed #6b7280; margin: 3px 0; height: 1px; }
     .sign-cell-name { font-size: 8.5px; font-weight: 700; text-align: center; margin-top: 2px; color: #111827; }
@@ -163,7 +163,7 @@
 </style>
 <table class="sign-grid">
     <tr>
-        <th>Diperiksa dan Diterima Oleh</th>
+        <th colspan="2">Diperiksa dan Diterima Oleh</th>
     </tr>
     <tr>
         <td>
@@ -172,8 +172,6 @@
             <div class="sign-cell-name">{{ $blank($sign['menerima'] ?? null) }}</div>
             <div class="sign-cell-date">{{ $blank($sign['menerima_date'] ?? null) }}</div>
         </td>
-    </tr>
-    <tr>
         <td>
             <div class="sign-cell-role">IT / Penyerah Aset</div>
             @if(!empty($document['signature_image_data']))
