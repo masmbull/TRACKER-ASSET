@@ -21,6 +21,7 @@ use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login')->middleware('guest');
@@ -227,6 +228,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->name('master.destroy');
 
         Route::middleware('can:manage-users')->group(function () {
+            Route::get('/users/import', [UserImportController::class, 'show'])->name('users.import');
+            Route::get('/users/import/template', [UserImportController::class, 'template'])->name('users.import.template');
+            Route::post('/users/import/analyze', [UserImportController::class, 'analyze'])->name('users.import.analyze');
+            Route::post('/users/import/confirm', [UserImportController::class, 'confirm'])->name('users.import.confirm');
+
             Route::get('/users/access', [UserController::class, 'access'])->name('users.access');
             Route::put('/users/{user}/access', [UserController::class, 'updateAccess'])->name('users.access.update');
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
