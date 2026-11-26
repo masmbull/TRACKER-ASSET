@@ -20,9 +20,14 @@
     $modalId = 'document-preview-' . $document->getKey();
 @endphp
 
-<button type="button" data-pdf-open="{{ $modalId }}" class="contents">
+{{-- A span, not a button: callers pass a button/x-button as the trigger, and a
+     <button> inside a <button> is invalid HTML. The parser closes the outer one
+     at the inner start tag, leaving an empty data-pdf-open wrapper and a visible
+     trigger with no handler - clicking the document number did nothing. --}}
+<span data-pdf-open="{{ $modalId }}" class="contents" role="button" tabindex="0"
+      aria-label="Preview document {{ $document->document_number }}">
     {{ $trigger ?? $slot }}
-</button>
+</span>
 
 <dialog id="{{ $modalId }}" class="document-dialog w-full max-w-5xl"
         data-pdf-src="{{ route('documents.preview.data', $document) }}"
@@ -243,6 +248,15 @@
 
             if (closer) {
                 closer.closest('dialog')?.close();
+            }
+        });
+
+        // Keyboard support for the wrapper when a caller passes plain text
+        // instead of a real button. A focused inner button already fires click.
+        document.addEventListener('keydown', (event) => {
+            if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-pdf-open]')) {
+                event.preventDefault();
+                openDocument(event.target.dataset.pdfOpen);
             }
         });
 
