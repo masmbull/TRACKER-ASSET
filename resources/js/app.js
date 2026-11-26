@@ -1,8 +1,30 @@
 import Alpine from 'alpinejs';
 import persist from '@alpinejs/persist';
 import collapse from '@alpinejs/collapse';
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
 
 window.Alpine = Alpine;
+
+// One place for the look and feel of completion dialogs. Fleet actions finish
+// asynchronously (the agent runs the job long after the POST returned), so the
+// old inline toast was easy to miss - especially when the progress panel had
+// been minimized. Swal gives the result a modal the operator has to acknowledge.
+window.trackerAlert = (options = {}) => Swal.fire({
+    buttonsStyling: false,
+    reverseButtons: true,
+    showCancelButton: false,
+    confirmButtonText: 'OK',
+    customClass: {
+        popup: 'tracker-swal-popup',
+        title: 'tracker-swal-title',
+        htmlContainer: 'tracker-swal-text',
+        confirmButton: 'tracker-swal-confirm',
+        cancelButton: 'tracker-swal-cancel',
+        actions: 'tracker-swal-actions',
+    },
+    ...options,
+});
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

@@ -3,20 +3,26 @@
 @section('title', 'Fleet Commands')
 
 @section('content')
-@php $pendingCount = $commands->where('status', 'pending')->count(); @endphp
+@php
+    $pendingCount = $commands->where('status', 'pending')->count();
+    $runningCount = $commands->where('status', 'in_progress')->count();
+    $liveCount = $pendingCount + $runningCount;
+@endphp
 
 <x-page-header title="Fleet Command Center" subtitle="Agents poll every 10 seconds and pending commands are executed automatically.">
     <x-slot:actions>
         <div class="flex flex-wrap items-center gap-2">
             <form method="POST" action="{{ route('agent.scanAll') }}" data-modal-action>
                 @csrf
-                <x-button type="submit" variant="secondary" size="sm">Scan All Laptops</x-button>
+                <x-button type="submit" variant="secondary" size="sm"><x-icon name="activity" class="h-4 w-4" /> Scan All</x-button>
             </form>
-            <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')">Update All Agents</x-button>
-            <x-button type="button" variant="success" size="sm" @click="$dispatch('open-modal', 'push-script-modal')">Push Script</x-button>
+            <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')"><x-icon name="refresh" class="h-4 w-4" /> Update All</x-button>
+            <x-button type="button" size="sm" class="bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-theme-md hover:from-brand-700 hover:to-brand-600" @click="$dispatch('open-modal', 'push-script-modal')">
+                <x-icon name="code" class="h-4 w-4" /> Push Script
+            </x-button>
             <form method="POST" action="{{ route('agent.sweep') }}" data-modal-action>
                 @csrf
-                <x-button type="submit" variant="secondary" size="sm">Sweep Now</x-button>
+                <x-button type="submit" variant="secondary" size="sm"><x-icon name="laptop-pulse" class="h-4 w-4" /> Sweep Now</x-button>
             </form>
         </div>
     </x-slot:actions>
@@ -29,43 +35,68 @@
         <a href="{{ route('agent.fleet') }}" class="rounded-lg bg-gray-100 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Live Fleet</a>
     </div>
 
-    @if(session('success'))
-        <div class="mt-4 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-theme-sm text-success-700 dark:border-success-500/20 dark:bg-success-500/10 dark:text-success-300">
-            {{ session('success') }}
-        </div>
-    @endif
+    <p class="mt-3 text-theme-xs text-gray-400">
+        Commands are picked up by each agent on its next 10-second poll. Running and waiting commands are highlighted below.
+    </p>
 </x-card>
 
 <x-card class="mb-6" title="Commands">
-    <div data-live-region="commands"{!! $pendingCount > 0 ? ' data-poll-interval="10"' : '' !!}>
+    <div data-live-region="commands"{!! $liveCount > 0 ? ' data-poll-interval="10"' : '' !!}>
     @if($commands->count() > 0)
         <div class="overflow-x-auto">
-            <x-table :headers="['ID', 'Command', 'Token', 'Status', 'Result', 'Created', 'Executed']">
+            <x-table :headers="['ID', 'Command', 'Device', 'Status', 'Progress', 'Created', 'Executed']">
                 @foreach($commands as $cmd)
-                    <tr class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5">
-                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">#{{ $cmd->id }}</td>
-                        <td class="py-2 px-2"><span class="rounded bg-gray-100 px-2 py-1 text-theme-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ $cmd->command }}</span></td>
-                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->token?->name ?? 'All' }}</td>
+                    @php
+                        $statusColors = [
+                            'pending' => 'bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300',
+                            'in_progress' => 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300',
+                            'done' => 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300',
+                            'failed' => 'bg-error-100 text-error-700 dark:bg-error-500/10 dark:text-error-300',
+                        ];
+                        $percent = $cmd->status === 'done' ? 100 : (int) ($cmd->progress ?? 0);
+                        $stalled = $cmd->isStalled();
+                    @endphp
+                    <tr class="border-b border-gray-100 transition hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5 {{ $cmd->status === 'in_progress' ? 'bg-brand-50/40 dark:bg-brand-500/5' : '' }}">
+                        <td class="py-2 px-2 font-mono text-theme-xs font-semibold text-gray-500 dark:text-gray-400">#{{ $cmd->id }}</td>
+                        <td class="py-2 px-2"><span class="rounded-lg bg-gray-100 px-2 py-1 text-theme-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ $cmd->command }}</span></td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->token?->name ?? 'All devices' }}</td>
                         <td class="py-2 px-2">
-                            @php
-                                $statusColors = ['pending' => 'bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300', 'done' => 'bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300', 'failed' => 'bg-error-100 text-error-700 dark:bg-error-500/10 dark:text-error-300'];
-                            @endphp
-                            <span class="rounded px-2 py-1 text-theme-xs font-medium {{ $statusColors[$cmd->status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }}">{{ $cmd->status }}</span>
+                            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-theme-xs font-medium {{ $statusColors[$cmd->status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }}">
+                                @if($cmd->status === 'in_progress')
+                                    <span class="pulse-dot h-1.5 w-1.5 rounded-full bg-brand-500"></span>
+                                @endif
+                                {{ $cmd->status === 'in_progress' ? 'running' : $cmd->status }}
+                            </span>
                         </td>
-                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->result ? json_encode($cmd->result) : '—' }}</td>
-                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->created_at->diffForHumans() }}</td>
+                        <td class="py-2 px-2">
+                            @if(in_array($cmd->status, ['pending', 'in_progress']))
+                                <div class="w-28">
+                                    <div class="process-progress-track h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                                        <div class="h-full rounded-full {{ $stalled ? 'bg-error-500' : 'bg-gradient-to-r from-brand-600 to-brand-400' }} {{ $cmd->status === 'in_progress' ? 'progress-stripes' : '' }}"
+                                             style="width: {{ $stalled ? $percent : max(3, $percent) }}%"></div>
+                                    </div>
+                                    <p class="mt-1 truncate text-theme-xs {{ $stalled ? 'text-error-500' : 'text-gray-400' }}" title="{{ $cmd->progressLabel() }}">{{ $cmd->progressLabel() ?? 'queued' }}</p>
+                                </div>
+                            @else
+                                <span class="text-theme-xs text-gray-400">{{ $cmd->status === 'done' ? '100% · done' : ($cmd->result ? 'failed' : '—') }}</span>
+                            @endif
+                        </td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->created_at?->diffForHumans() ?? '—' }}</td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->executed_at?->diffForHumans() ?? '—' }}</td>
                     </tr>
                 @endforeach
             </x-table>
         </div>
     @else
-        <p class="py-8 text-center text-theme-sm text-gray-400">No commands yet.</p>
+        <div class="py-10 text-center">
+            <span class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-400 dark:bg-gray-800"><x-icon name="activity" class="h-5 w-5" /></span>
+            <p class="text-theme-sm text-gray-400">No commands yet. Queue a script or scan a device to get started.</p>
+        </div>
     @endif
-    @if($pendingCount > 0)
+    @if($liveCount > 0)
         <p class="mt-3 flex items-center gap-2 text-theme-xs text-gray-400">
-            <span class="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-warning-500"></span>
-            {{ $pendingCount }} pending — updating automatically, no need to refresh.
+            <span class="pulse-dot inline-block h-1.5 w-1.5 rounded-full {{ $runningCount > 0 ? 'bg-brand-500' : 'bg-warning-500' }}"></span>
+            {{ $runningCount }} running · {{ $pendingCount }} waiting — updating automatically, no need to refresh.
         </p>
     @endif
     </div>
@@ -123,49 +154,21 @@
               trigger: 'once',
               workingDir: 'C:\\Temp\\Scripts',
               notes: '',
+              showAdvanced: false,
               deviceSearch: '',
               selected: [],
               devices: @js($tokens->filter(fn ($t) => $t->isUsable())->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'host' => $t->telemetry?->hostname, 'online' => (bool) ($t->last_used_at && $t->last_used_at->gt(now()->subSeconds(90)))])->values()),
-              presets: {
-                  'disable-usb': {
-                      label: 'Disable USB storage',
-                      body: @js(\App\Support\ScriptPresets::DISABLE_USB),
-                      runAs: 'system',
-                      workingDir: 'C:\\Temp\\Scripts',
-                      notes: 'Blocks USB mass storage by setting the USBSTOR service to disabled.',
-                  },
-                   'enable-usb': {
-                      label: 'Enable USB storage',
-                      body: @js(\App\Support\ScriptPresets::ENABLE_USB),
-                      runAs: 'system',
-                      workingDir: 'C:\\Temp\\Scripts',
-                       notes: 'Restores USB mass storage by setting the USBSTOR service back to manual.',
-                   },
-                   'printer-restart': {
-                       label: 'Restart Print Spooler',
-                       body: @js(\App\Support\ScriptPresets::RESTART_PRINT_SPOOLER),
-                       runAs: 'system',
-                       workingDir: 'C:\\Temp\\Scripts',
-                       target: 'device',
-                       notes: 'Restarts the Windows Print Spooler on one selected laptop. Runs unattended; no prompts.',
-                   },
-                   'printer-clear-queue': {
-                       label: 'Clear Stuck Print Jobs',
-                       body: @js(\App\Support\ScriptPresets::CLEAR_PRINT_QUEUE),
-                       runAs: 'system',
-                       workingDir: 'C:\\Temp\\Scripts',
-                       target: 'device',
-                       notes: 'DESTRUCTIVE: deletes all pending print jobs on one selected laptop, then restarts the Print Spooler. Confirm with the user first.',
-                   },
-                   'network-check': {
-                       label: 'Network Quick Check',
-                       body: @js(\App\Support\ScriptPresets::NETWORK_QUICK_CHECK),
-                       runAs: 'current-user',
-                       workingDir: 'C:\\Temp\\Scripts',
-                       target: 'device',
-                       notes: 'Read-only ipconfig diagnostic for one selected laptop.',
-                   },
-               },
+              // One catalogue in PHP: label, notes, default target and the
+              // silent script body always agree.
+              presets: @js(\App\Support\ScriptPresets::definitions()),
+              get groupedPresets() {
+                  const groups = {};
+                  Object.entries(this.presets).forEach(([key, preset]) => {
+                      if (!groups[preset.section]) { groups[preset.section] = []; }
+                      groups[preset.section].push(Object.assign({ key }, preset));
+                  });
+                  return Object.entries(groups).map(([section, items]) => ({ section, items }));
+              },
               applyPreset(key) {
                   const p = this.presets[key];
                   if (!p) { return; }
@@ -209,6 +212,14 @@
           x-init="$watch('target', () => { if (target !== 'devices') { selected = []; } })">
         @csrf
 
+        <div class="flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50/70 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-brand-600 shadow-theme-xs dark:bg-white/5 dark:text-brand-300"><x-icon name="code" class="h-5 w-5" /></span>
+            <div class="min-w-0">
+                <p class="text-theme-sm font-semibold text-gray-800 dark:text-white">Run a script on enrolled laptops</p>
+                <p class="mt-0.5 text-theme-xs text-gray-600 dark:text-gray-300">The script is hashed, queued, and verified by each agent before it runs. You can minimize the progress panel while it works.</p>
+            </div>
+        </div>
+
         {{-- Script body is the single input. Everything else - file type, file
              name, SHA-256 - is derived from what is pasted here, so there is no
              second field to disagree with the first. --}}
@@ -231,20 +242,30 @@
             {{-- Ready-made scripts, so the common jobs are one click instead of a
                  paste. A preset only fills the form (body, run-as, notes); the
                  operator still sees the exact body and target before queueing. --}}
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-                <span class="text-theme-xs font-medium text-gray-400">Presets:</span>
-                <template x-for="(p, key) in presets" :key="key">
-                    <button type="button" @click="applyPreset(key)"
-                            class="rounded-lg border border-gray-200 px-2.5 py-1 text-theme-xs font-medium text-gray-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
-                            x-text="p.label"></button>
+            <div class="mb-2 space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-3 dark:border-gray-800 dark:bg-gray-800/40">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="inline-flex items-center gap-1 text-theme-xs font-semibold uppercase tracking-wider text-gray-400"><x-icon name="save" class="h-3.5 w-3.5" /> Presets by category</span>
+                    <a href="{{ asset('downloads/MITOGROUP_IT_Support_Toolkit.bat') }}" download class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-theme-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"><x-icon name="download" class="h-3.5 w-3.5" /> Full toolkit</a>
+                </div>
+                <template x-for="group in groupedPresets" :key="group.section">
+                    <div class="border-t border-gray-100 pt-2 first:border-0 first:pt-0 dark:border-gray-800">
+                        <p class="mb-1.5 text-theme-xs font-semibold text-gray-500 dark:text-gray-400" x-text="group.section"></p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <template x-for="p in group.items" :key="p.key">
+                                <button type="button" @click="applyPreset(p.key)" :title="p.notes"
+                                        class="rounded-full border border-gray-200 bg-white px-3 py-1 text-theme-xs font-medium text-gray-600 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                                        x-text="p.label"></button>
+                            </template>
+                        </div>
+                    </div>
                 </template>
-                <a href="{{ asset('downloads/MITOGROUP_IT_Support_Toolkit.bat') }}" download class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-theme-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"><x-icon name="download" class="h-3.5 w-3.5" /> Download full toolkit</a>
             </div>
             <p class="mb-2 text-theme-xs text-warning-700 dark:text-warning-300">Full toolkit is interactive (UAC/menu prompts), so download and run it locally. The presets above are unattended-safe and default to one laptop.</p>
 
             <textarea name="script_body" x-model="body" rows="12" required
-                      class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-                      placeholder="Paste the script here. The type and its SHA-256 are detected automatically."></textarea>
+                      spellcheck="false"
+                      class="code-editor w-full rounded-xl border border-gray-200 bg-gray-950 px-4 py-3 font-mono text-[12.5px] leading-relaxed text-gray-100 shadow-theme-xs focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-500/20 dark:border-gray-700"
+                      placeholder="# Paste your PowerShell or CMD script here..."></textarea>
             <p class="mt-1.5 text-theme-xs text-gray-400">The agent verifies the SHA-256 before running it, so the payload cannot be altered in transit.</p>
         </div>
 
@@ -259,7 +280,7 @@
                 ]" :key="opt.value">
                     <label class="cursor-pointer">
                         <input type="radio" name="target" :value="opt.value" x-model="target" class="peer sr-only">
-                        <span class="inline-flex items-center rounded-lg border border-gray-200 px-3 py-2 text-theme-sm font-medium text-gray-600 peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-600 dark:border-gray-700 dark:text-gray-300 dark:peer-checked:bg-brand-500/10 dark:peer-checked:text-brand-300"
+                        <span class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-600 shadow-theme-xs transition peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:peer-checked:bg-brand-500/10 dark:peer-checked:text-brand-300"
                               x-text="opt.label"></span>
                     </label>
                 </template>
@@ -301,9 +322,30 @@
             </div>
         </div>
 
-        {{-- Advanced options --}}
-        <div class="border-t border-gray-100 pt-4 dark:border-gray-800">
-            <div class="grid gap-4 md:grid-cols-3">
+        {{-- Compact summary. The detailed options still exist and still submit
+             their defaults - they are just folded away until someone needs them. --}}
+        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 text-theme-xs dark:border-gray-800 dark:bg-gray-800/40">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-medium text-gray-700 shadow-theme-xs dark:bg-gray-900 dark:text-gray-200">
+                <x-icon name="code" class="h-3.5 w-3.5 text-brand-500" />
+                <span x-text="detectedType === 'binary' ? 'Binary — not allowed' : (detectedType === 'powershell' ? 'PowerShell' : 'CMD / Batch')"></span>
+            </span>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-medium text-gray-700 shadow-theme-xs dark:bg-gray-900 dark:text-gray-200">
+                <x-icon name="laptop" class="h-3.5 w-3.5 text-brand-500" />
+                <span x-text="targetSummary"></span>
+            </span>
+            <span class="ml-auto font-mono text-gray-400" x-text="fileName"></span>
+        </div>
+
+        {{-- Advanced options: needed, but default to the safe values above and
+             stay collapsed so the common case is just paste -> target -> queue. --}}
+        <div class="border-t border-gray-100 dark:border-gray-800">
+            <button type="button" @click="showAdvanced = !showAdvanced"
+                    class="flex w-full items-center justify-between py-3 text-left text-theme-sm font-medium text-gray-600 transition hover:text-brand-600 dark:text-gray-300"
+                    :aria-expanded="showAdvanced ? 'true' : 'false'">
+                <span class="inline-flex items-center gap-2"><x-icon name="settings" class="h-4 w-4" /> Advanced options <span class="text-theme-xs font-normal text-gray-400">(run as, timeout, trigger, notes)</span></span>
+                <x-icon name="chevron-down" class="h-4 w-4 transition-transform" ::class="showAdvanced ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="showAdvanced" x-collapse x-cloak class="grid gap-4 pb-1 md:grid-cols-3">
                 <div>
                     <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Run as</label>
                     <select name="run_as" x-model="runAs" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
@@ -334,33 +376,14 @@
             </div>
         </div>
 
-        {{-- Summary: the whole job in one strip, so the operator confirms what
-             they are about to run before queueing it. --}}
-        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/60">
-            <p class="mb-2 text-theme-xs font-semibold uppercase tracking-wider text-gray-400">Summary</p>
-            <dl class="grid gap-x-6 gap-y-1.5 text-theme-sm sm:grid-cols-[8rem_1fr]">
-                <dt class="text-gray-500 dark:text-gray-400">Script</dt>
-                <dd class="font-medium text-gray-800 dark:text-gray-200" x-text="detectedType === 'binary' ? 'Binary — cannot be queued' : (detectedType === 'powershell' ? 'PowerShell' : 'CMD / Batch')"></dd>
-                <dt class="text-gray-500 dark:text-gray-400">File</dt>
-                <dd class="font-mono text-theme-xs text-gray-600 dark:text-gray-300" x-text="fileName"></dd>
-                <dt class="text-gray-500 dark:text-gray-400">Target</dt>
-                <dd class="font-medium text-gray-800 dark:text-gray-200" x-text="targetSummary"></dd>
-                <dt class="text-gray-500 dark:text-gray-400">Runs as</dt>
-                <dd class="text-gray-600 dark:text-gray-300" x-text="runAs === 'current-user' ? 'Current user' : (runAs === 'admin' ? 'Administrator' : 'System')"></dd>
-                <dt class="text-gray-500 dark:text-gray-400">Trigger</dt>
-                <dd class="text-gray-600 dark:text-gray-300" x-text="trigger === 'once' ? 'Once, on next poll' : 'At next reboot'"></dd>
-                <template x-if="notes.trim().length > 0">
-                    <dt class="text-gray-500 dark:text-gray-400">Purpose</dt>
-                </template>
-                <template x-if="notes.trim().length > 0">
-                    <dd class="text-gray-600 dark:text-gray-300" x-text="notes"></dd>
-                </template>
-            </dl>
-        </div>
-
-        <div class="flex justify-end gap-3">
-            <button type="button" @click="$dispatch('close-modal', 'push-script-modal')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
-            <x-button type="submit" variant="primary" x-bind:disabled="detectedType === 'binary'" x-bind:class="detectedType === 'binary' && 'opacity-50 cursor-not-allowed'">Queue script</x-button>
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <p class="text-theme-xs text-gray-400">Nothing runs immediately — the job starts on the agent's next poll.</p>
+            <div class="flex items-center gap-3">
+                <button type="button" @click="$dispatch('close-modal', 'push-script-modal')" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">Cancel</button>
+                <x-button type="submit" variant="primary" x-bind:disabled="detectedType === 'binary'" x-bind:class="detectedType === 'binary' && 'opacity-50 cursor-not-allowed'">
+                    <x-icon name="code" class="h-4 w-4" /> Queue script
+                </x-button>
+            </div>
         </div>
     </form>
 </x-modal>

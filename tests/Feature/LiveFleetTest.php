@@ -404,12 +404,12 @@ class LiveFleetTest extends TestCase
     }
 
     /**
-     * Every preset must survive the pipeline as a runnable batch script: detect
-     * as `cmd`, keep the matching `.bat` name, and queue as a pending command.
-     * A preset the server reads as binary or PowerShell would be a one-click
+     * Every preset must survive the pipeline as a runnable, silent script:
+     * detect as PowerShell, keep the matching `.ps1` name, and queue as a
+     * pending command. A preset the server reads as binary would be a one-click
      * button that quietly ships the wrong file to the fleet.
      */
-    public function test_presets_queue_as_runnable_batch_scripts(): void
+    public function test_presets_queue_as_runnable_silent_scripts(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
@@ -420,7 +420,7 @@ class LiveFleetTest extends TestCase
             'printer-clear-queue' => ScriptPresets::CLEAR_PRINT_QUEUE,
             'network-check' => ScriptPresets::NETWORK_QUICK_CHECK,
         ] as $key => $body) {
-            $this->assertSame('cmd', ScriptPayload::detectType($body), "preset {$key} must read as cmd");
+            $this->assertSame('powershell', ScriptPayload::detectType($body), "preset {$key} must read as powershell");
             $this->assertDoesNotMatchRegularExpression('/^\s*(?:pause|set\s+\/p|choice\s)/mi', $body, "preset {$key} must not wait for interactive input");
 
             $this->actingAs($admin)->post(route('agent.commands.script'), [
@@ -431,8 +431,8 @@ class LiveFleetTest extends TestCase
 
             $command = AgentCommand::where('command', 'script')->latest('id')->firstOrFail();
 
-            $this->assertSame('cmd', $command->payload['script_type']);
-            $this->assertSame('tracker-script.bat', $command->payload['script_name']);
+            $this->assertSame('powershell', $command->payload['script_type']);
+            $this->assertSame('tracker-script.ps1', $command->payload['script_name']);
             $this->assertSame(hash('sha256', $body), $command->payload['sha256']);
         }
     }
