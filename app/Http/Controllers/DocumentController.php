@@ -341,6 +341,49 @@ class DocumentController extends Controller
     }
 
     /**
+     * Edit an already generated document.
+     *
+     * A viewer may read but not change a signed document: the same policy that
+     * gates generation governs this form.
+     */
+    public function edit(Document $document)
+    {
+        $this->authorizeDocumentEdit($document);
+
+        $payload = (array) ($document->payload ?? []);
+
+        return view('documents.edit', [
+            'document' => $document,
+            'payload' => $payload,
+            'companies' => Company::orderBy('name')->get(['id', 'name']),
+            'types' => (array) config('documents.types', []),
+        ]);
+    }
+
+    public function update(Request $request, Document $document, DocumentGenerationService $documents)
+    {
+        $this->authorizeDocumentEdit($document);
+
+        $validated = $this->validateGenerationInput($request, allowTransfer: false);
+
+        $documents->regenerate($document, $validated, $request->user());
+
+        return redirect()->route('documents.preview', $document)
+            ->with('success', "Document {$document->document_number} updated.");
+    }
+
+    private function authorizeDocumentEdit(Document $document): void
+    {
+        if ($document->asset_id === null) {
+            $this->authorize('create', Asset::class);
+
+            return;
+        }
+
+        $this->authorize('generateDocument', $document->asset()->firstOrFail());
+    }
+
+    /**
      * Metadata the modal preview needs before it fetches the PDF itself.
      *
      * Split from the file response on purpose: the viewer renders into a canvas,
