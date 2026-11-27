@@ -1588,6 +1588,9 @@ class AgentFleetController extends Controller
     {
         $this->authorize('manage-agents');
 
+        $credentials = RemoteController::credentials($command);
+        $isRemote = str_contains((string) ($command->payload['script_name'] ?? ''), 'ultraviewer');
+
         return response()->json([
             'id' => $command->id,
             'command' => $command->command,
@@ -1609,14 +1612,17 @@ class AgentFleetController extends Controller
             // captures stdout). Remote uses this to read the live UltraViewer
             // credentials instead of asking the operator to type them.
             'stdout' => $command->result['stdout'] ?? null,
-            'credentials' => RemoteController::credentials($command),
+            'credentials' => $credentials,
+            'is_remote' => $isRemote,
+            // A successful script with empty UV_ID/UV_PASS is still a failure
+            // from the operator's point of view. Say why instead of showing the
+            // agent's generic "Script completed successfully."
+            'remote_message' => $isRemote && ! $credentials
+                ? RemoteController::diagnose($command)
+                : null,
             // Signed protocol URL for the operator's browser. The dialog tries
             // this first, then falls back to the downloadable .bat launcher.
-            'remote_url' => (static function () use ($command) {
-                $credentials = RemoteController::credentials($command);
-
-                return $credentials ? RemoteController::urlFor($credentials) : null;
-            })(),
+            'remote_url' => $credentials ? RemoteController::urlFor($credentials) : null,
             // The phases of this command, so the dialog can show the whole
             // journey as a checklist instead of a lone bar with no context.
             'steps' => $command->steps(),

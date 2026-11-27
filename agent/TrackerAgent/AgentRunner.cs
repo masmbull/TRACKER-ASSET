@@ -815,9 +815,15 @@ public static class AgentRunner
                 ? new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\"",
+                    // -NonInteractive only disables prompts; without the window
+                    // flags Windows still flashes a console on the user's desk.
+                    // The credential probe runs in the logged-in session, so
+                    // that flash was visible every time someone clicked Remote.
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File \"{scriptPath}\"",
                     WorkingDirectory = safeDirectory,
                     UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     StandardOutputEncoding = Encoding.UTF8,
@@ -829,6 +835,8 @@ public static class AgentRunner
                     Arguments = $"/c \"\"{scriptPath}\"\"",
                     WorkingDirectory = safeDirectory,
                     UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     StandardOutputEncoding = Encoding.UTF8,
@@ -967,7 +975,7 @@ public static class AgentRunner
             // the program it launched - so without this every elevated script would
             // look like it succeeded.
             var inner = scriptType is "powershell" or "ps1"
-                ? $"powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\""
+                ? $"powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File \"{scriptPath}\""
                 : $"call \"{scriptPath}\"";
 
             File.WriteAllText(wrapperPath,
@@ -1372,9 +1380,11 @@ public static class AgentRunner
             ? new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -File \"{scriptPath}\"",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File \"{scriptPath}\"",
                 WorkingDirectory = directory,
                 UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
             }
             : new ProcessStartInfo
             {
@@ -1382,6 +1392,8 @@ public static class AgentRunner
                 Arguments = $"/c \"\"{scriptPath}\"\"",
                 WorkingDirectory = directory,
                 UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
             };
 
         Api.ReportProgress(url, token, commandId, 40, "Running script (elevated)â€¦");

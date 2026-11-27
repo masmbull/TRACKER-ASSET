@@ -220,6 +220,32 @@ class RemoteController extends Controller
         return ['id' => $id, 'password' => $password];
     }
 
+    /**
+     * Why a remote command finished without credentials.
+     *
+     * The probe prints UV_ID=/UV_PASS= with empty values when UltraViewer is not
+     * running, and older agents do not capture stdout at all. Both still ack
+     * "done", so the dialog needs a reason instead of "Action complete".
+     */
+    public static function diagnose(AgentCommand $command): string
+    {
+        $stdout = (string) ($command->result['stdout'] ?? '');
+
+        if ($stdout === '') {
+            return 'Agent belum mengirim hasil pembacaan UltraViewer. Perbarui agent ke versi terbaru dari Live Fleet, lalu ulangi Remote.';
+        }
+
+        if (preg_match('/^UV_FOUND=(\d+)/m', $stdout, $m) && (int) $m[1] === 0) {
+            return 'UltraViewer tidak sedang berjalan di laptop ini. Buka UltraViewer di laptop target, lalu klik Remote lagi.';
+        }
+
+        if (! str_contains($stdout, 'UV_ID=')) {
+            return 'Agent belum mengirim hasil pembacaan UltraViewer. Perbarui agent ke versi terbaru, lalu ulangi Remote.';
+        }
+
+        return 'UltraViewer berjalan, tetapi ID/password belum berhasil dibaca. Restart UltraViewer di laptop target lalu ulangi Remote.';
+    }
+
     private function authorizeLauncher(AgentCommand $command): void
     {
         $assetId = $command->payload['asset_id'] ?? null;
