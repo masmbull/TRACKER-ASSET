@@ -90,7 +90,7 @@
 </x-card>
 
 @if($assets->count() > 0)
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 align-start">
+    <div class="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
         @foreach($assets as $asset)
             @php
                 $badgeMap = ['Active' => 'success', 'Available' => 'brand', 'Assigned' => 'warning', 'Repair' => 'orange', 'Retired' => 'gray', 'Disposed' => 'error'];
@@ -115,7 +115,9 @@
                         <p class="truncate text-theme-sm font-bold text-brand-600 dark:text-brand-400">{{ $asset->asset_id }}</p>
                         <p class="mt-0.5 truncate text-theme-xs text-gray-500 dark:text-gray-400">{{ $asset->category?->name ?? '—' }}</p>
                     </div>
-                    <x-badge :variant="$badgeMap[$asset->status?->name] ?? 'gray'">{{ $asset->status?->name ?? '—' }}</x-badge>
+                    @if($asset->status)
+                        <x-badge :variant="$badgeMap[$asset->status->name] ?? 'gray'">{{ $asset->status->name }}</x-badge>
+                    @endif
                 </div>
 
                 <p class="mt-3 truncate text-theme-sm font-semibold text-gray-800 dark:text-white">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) ?: '—' }}</p>
@@ -135,10 +137,14 @@
                     @endif
                 </div>
             </article>
+        @endforeach
+    </div>
 
-            {{-- Everything that used to live in the table's Actions and QR cells is
-                 now here, scoped to this one asset id. Opening the card never navigates. --}}
-            <x-modal id="asset-{{ $asset->id }}" title="{{ $asset->asset_id }} · {{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) }}" maxWidth="lg">
+    {{-- Dialogs live outside the card grid: x-modal's outer wrapper is a real
+         element, so leaving it inside the grid consumed a cell and pushed every
+         following card into the wrong column. --}}
+    @foreach($assets as $asset)
+        <x-modal id="asset-{{ $asset->id }}" title="{{ $asset->asset_id }} · {{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) }}" maxWidth="lg">
                 <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-theme-sm sm:grid-cols-2">
                     <div class="flex justify-between gap-3 border-b border-gray-100 py-1.5 dark:border-gray-800"><dt class="text-gray-500 dark:text-gray-400">Category</dt><dd class="text-right font-medium text-gray-800 dark:text-white">{{ $asset->category?->name ?: '—' }}</dd></div>
                     <div class="flex justify-between gap-3 border-b border-gray-100 py-1.5 dark:border-gray-800"><dt class="text-gray-500 dark:text-gray-400">Status</dt><dd class="text-right font-medium text-gray-800 dark:text-white">{{ $asset->status?->name ?: '—' }}</dd></div>
@@ -186,9 +192,8 @@
                                 onclick="window.trackerDeleteAsset && window.trackerDeleteAsset('delete-asset-{{ $asset->id }}')">Delete</button>
                     @endcan
                 </div>
-            </x-modal>
-        @endforeach
-    </div>
+        </x-modal>
+    @endforeach
 
     <div x-show="visible === 0" x-cloak class="mt-4 rounded-2xl border border-dashed border-gray-300 p-10 text-center text-theme-sm text-gray-400 dark:border-gray-700">
         No asset on this page matches the current search and filters.
