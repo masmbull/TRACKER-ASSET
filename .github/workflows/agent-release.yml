@@ -77,10 +77,16 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         shell: pwsh
         run: |
-          dotnet publish agent/TrackerAgent/TrackerAgent.csproj -c Release -r win-x64 `
-            --self-contained true -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -o agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish
+          $publishArgs = @(
+            'agent/TrackerAgent/TrackerAgent.csproj'
+            '-c' 'Release'
+            '-r' 'win-x64'
+            '--self-contained' 'true'
+            '-p:PublishSingleFile=true'
+            '-p:IncludeNativeLibrariesForSelfExtract=true'
+            '-o' 'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish'
+          )
+          dotnet publish @publishArgs
 
       - name: Hash the executable
         if: steps.check.outputs.skip != 'true'
@@ -105,10 +111,14 @@ jobs:
           $tag = "agent-$version"
           $sha = '${{ steps.hash.outputs.sha }}'
           $size = '${{ steps.hash.outputs.size }}'
-          gh release create $tag `
-            "agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe#TrackerAgent.exe" `
-            --title "TrackerAgent $version" `
-            --notes "Self-contained TrackerAgent.exe (SHA-256 $sha, $([math]::Round($size/1MB,1)) MB). Deploy on the server with: php artisan agent:pull $version"
+          $notes = 'Self-contained TrackerAgent.exe (SHA-256 ' + $sha + ', ' + [math]::Round($size / 1MB, 1) + ' MB). Deploy on the server with: php artisan agent:pull ' + $version
+          $releaseArgs = @(
+            'release' 'create' $tag
+            'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe#TrackerAgent.exe'
+            '--title' "TrackerAgent $version"
+            '--notes' $notes
+          )
+          gh @releaseArgs
 
       - name: Summary
         shell: pwsh
@@ -120,5 +130,6 @@ jobs:
             echo "Release agent-$version already exists - build skipped." >> $env:GITHUB_STEP_SUMMARY
           } else {
             echo "SHA-256: ${{ steps.hash.outputs.sha }}" >> $env:GITHUB_STEP_SUMMARY
-            echo "Deploy with: \`php artisan agent:pull $version\`" >> $env:GITHUB_STEP_SUMMARY
+            $deploy = 'php artisan agent:pull ' + $version
+            echo "Deploy with: $deploy" >> $env:GITHUB_STEP_SUMMARY
           }
