@@ -23,7 +23,12 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.37</Version><!-- 1.7.3: revoked token fix in registration (isUsable -> is_active check)
+          <Version>1.7.38</Version><!-- 1.7.38: tray menu now shows only Status (Check for Updates removed);
+               StatusWindow redesigned with Font Awesome icons, fade-in animation,
+               pulsing status dot, tooltips and wrapping so text is never clipped;
+               script commands capture stdout so the Remote button can read the
+               live UltraViewer credentials from the agent.
+               1.7.3: revoked token fix in registration (isUsable -> is_active check)
               1.7.4: futuristis UI redesign for StatusWindow and ScanWindow
               1.7.5: UI rebuild with correct version
               1.7.6: Fix is_elevated reporting - tray now checks IsSystemDaemonAlive()
