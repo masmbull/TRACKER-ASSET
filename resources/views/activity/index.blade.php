@@ -201,7 +201,7 @@
             </details>
         @endif
 
-        @if(empty($log->mismatches) && empty($log->new_value) && empty($log->old_value) && empty($log->metadata) && empty($log->field_changed))
+        @if(empty($mismatches) && empty($log->new_value) && empty($log->old_value) && empty($log->metadata) && empty($changes['fields']))
             <p class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                 This entry carries no payload — only the actor, the entity and the source.
             </p>
