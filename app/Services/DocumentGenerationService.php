@@ -392,9 +392,9 @@ class DocumentGenerationService
             'BAST' => 'documents.pdf.bast',
             'REPAIR' => 'documents.pdf.repair',
             'DISPOSAL' => 'documents.pdf.disposal',
-            'ASSIGNMENT' => 'documents.pdf.assignment',
             // FAT covers transfer, handover and return; a legacy document
-            // recorded under one of those old types still renders the same sheet.
+            // recorded under one of those retired types still renders the same
+            // sheet instead of naming a document type the office no longer uses.
             default => 'documents.pdf.fat',
         };
     }

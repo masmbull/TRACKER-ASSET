@@ -73,6 +73,28 @@
                 </select>
             </div>
 
+            @if(! $asset)
+                {{-- A blank FAT has no register to say who is handing over and who
+                     is receiving. The operator picks their own side; the fields
+                     for that side are filled from the signed-in profile (with the
+                     office defaults for fields Entra does not send). The other
+                     party stays empty for the operator to type. --}}
+                <div id="party-role-card" class="rounded-2xl border border-brand-100 bg-brand-50/60 p-4 dark:border-brand-500/20 dark:bg-brand-500/5" data-operator="{{ json_encode($operator ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}">
+                    <h3 class="mb-1 text-theme-base font-semibold text-gray-800 dark:text-white">Saya pada dokumen ini</h3>
+                    <p class="mb-3 text-theme-xs text-gray-600 dark:text-gray-400">Pilih peran Anda — data Anda akan terisi otomatis. Pihak satunya tetap diketik manual.</p>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+                            <input type="radio" name="operator_role" value="sender" checked class="h-4 w-4 accent-brand-600">
+                            <span class="text-theme-sm font-medium text-gray-700 dark:text-gray-200">Saya yang menyerahkan</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+                            <input type="radio" name="operator_role" value="receiver" class="h-4 w-4 accent-brand-600">
+                            <span class="text-theme-sm font-medium text-gray-700 dark:text-gray-200">Saya yang menerima</span>
+                        </label>
+                    </div>
+                </div>
+            @endif
+
             @if($asset)
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -109,9 +131,14 @@
                     // that fills the PDF. Everything here reads from that one
                     // answer - re-deriving it in the template is what let the form
                     // and the document disagree about who was signing.
-                    $defaultSenderName = $asset ? $senderName : '';
-                    $defaultSenderDepartment = $asset ? $senderDepartment : '';
-                    $defaultSenderEmail = $asset ? $senderEmail : '';
+                    $defaultSenderName = $asset ? $senderName : ($operator['name'] ?? '');
+                    $defaultSenderDepartment = $asset ? $senderDepartment : ($operator['division'] ?? '');
+                    $defaultSenderEmail = $asset ? $senderEmail : ($operator['email'] ?? '');
+                    // Server-side defaults mean the blank form is already filled
+                    // before JS runs; the role toggle then only swaps the other
+                    // party in when the operator changes their mind.
+                    $senderEmployeeId = $asset ? ($senderUser?->employee_id ?? '') : ($operator['employee_id'] ?? '');
+                    $senderEntityDefault = $asset ? ($asset?->company?->name ?? '') : ($operator['entity'] ?? '');
                 @endphp
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -120,7 +147,7 @@
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">NIK / ID Karyawan</label>
-                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id', $senderUser?->employee_id ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <input type="text" name="sender_employee_id" value="{{ old('sender_employee_id', $senderEmployeeId) }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                             {{-- Prefills from whichever person the sender turned out to be.
                                  Before users had an employee_id column this defaulted from
                                  Auth::user()?->employee_id, which was always empty - the
@@ -136,7 +163,7 @@
                         <select name="sender_entity" required class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                             <option value="">— pilih entitas —</option>
                             @foreach($companies as $company)
-                                <option value="{{ $company->name }}" {{ old('sender_entity', $asset?->company?->name ?? '') === $company->name ? 'selected' : '' }}>
+                                <option value="{{ $company->name }}" {{ old('sender_entity', $senderEntityDefault) === $company->name ? 'selected' : '' }}>
                                     {{ $company->name }}
                                 </option>
                             @endforeach
@@ -144,7 +171,7 @@
                                  one that is no longer in master data, must not
                                  silently disappear from its own document. --}}
                             @php
-                                $currentSender = old('sender_entity', $asset?->company?->name ?? '');
+                                $currentSender = old('sender_entity', $senderEntityDefault);
                             @endphp
                             @if($currentSender && ! $companies->contains('name', $currentSender))
                                 <option value="{{ $currentSender }}" selected>{{ $currentSender }} (tidak ada di master data)</option>
@@ -438,6 +465,56 @@
 
         typeSelect?.addEventListener('change', syncDocumentType);
         syncDocumentType();
+
+        // Blank document: the operator says which side of the FAT they are, and
+        // that side is filled from their profile. The other side stays blank so
+        // the other person is typed rather than silently copied from the admin.
+        const roleCard = document.getElementById('party-role-card');
+        if (roleCard) {
+            const operator = (() => {
+                try { return JSON.parse(roleCard.dataset.operator || '{}'); }
+                catch (e) { return {}; }
+            })();
+
+            const applyRole = (role, onlyEmpty) => {
+                const prefix = role === 'sender' ? 'sender' : 'receiver';
+                const nameField = role === 'sender' ? 'signatory_menyerahkan' : 'signatory_menerima';
+                const fields = {
+                    [nameField]: operator.name,
+                    [`${prefix}_employee_id`]: operator.employee_id,
+                    [`${prefix}_division`]: operator.division,
+                    [`${prefix}_email`]: operator.email,
+                };
+
+                Object.entries(fields).forEach(([name, value]) => {
+                    const input = document.querySelector(`[name="${name}"]`);
+                    if (input && value && (!onlyEmpty || !input.value.trim())) {
+                        input.value = value;
+                    }
+                });
+
+                const entity = document.querySelector(`[name="${prefix}_entity"]`);
+                if (entity && operator.entity) {
+                    let option = Array.from(entity.options).find((o) => o.value === operator.entity);
+                    if (!option) {
+                        option = new Option(operator.entity, operator.entity);
+                        entity.add(option);
+                    }
+                    if (!onlyEmpty || !entity.value) {
+                        entity.value = operator.entity;
+                    }
+                }
+            };
+
+            const checkedRole = () => roleCard.querySelector('input[name="operator_role"]:checked')?.value || 'sender';
+            applyRole(checkedRole(), true);
+
+            roleCard.querySelectorAll('input[name="operator_role"]').forEach((radio) => {
+                radio.addEventListener('change', () => {
+                    if (radio.checked) applyRole(radio.value, false);
+                });
+            });
+        }
 
         if (typeof window.flatpickr === 'function') {
             window.flatpickr('input[type="date"]', {

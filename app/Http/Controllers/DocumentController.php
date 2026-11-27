@@ -104,7 +104,29 @@ class DocumentController extends Controller
             'copy' => $this->copyFor($selectedType),
             'companies' => Company::orderBy('name')->get(['id', 'name']),
             'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
+            'operator' => $this->operatorProfile(),
         ]);
+    }
+
+    /**
+     * The signed-in person's identity for the blank-form role toggle.
+     *
+     * Entra supplies name/email/department but not employee id or legal entity,
+     * so those fall back to the office defaults in config. A profile value that
+     * is actually filled in always wins over a default.
+     */
+    private function operatorProfile(): array
+    {
+        $defaults = (array) config('documents.operator', []);
+        $user = Auth::user();
+
+        return [
+            'name' => filled($user?->name) ? $user->name : ($defaults['name'] ?? ''),
+            'employee_id' => filled($user?->employee_id) ? $user->employee_id : ($defaults['employee_id'] ?? ''),
+            'division' => filled($user?->department) ? $user->department : ($defaults['division'] ?? ''),
+            'entity' => filled($user?->company) ? $user->company : ($defaults['entity'] ?? ''),
+            'email' => filled($user?->email) ? $user->email : ($defaults['email'] ?? ''),
+        ];
     }
 
     /**
@@ -170,6 +192,7 @@ class DocumentController extends Controller
             // organisations on a signed document.
             'companies' => Company::orderBy('name')->get(['id', 'name']),
             'templates' => DocumentTemplate::where('is_active', true)->orderBy('document_type')->get(),
+            'operator' => $this->operatorProfile(),
         ]);
     }
 
