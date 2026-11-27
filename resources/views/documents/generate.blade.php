@@ -324,8 +324,15 @@
                         <input type="text" name="signatory_mengetahui" value="{{ old('signatory_mengetahui') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">IT / Nama Karyawan</label>
-                        <input type="text" name="signatory_it" value="{{ old('signatory_it', $defaultSenderName ?? '') }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">IT / Nama Karyawan <span class="font-normal text-gray-400">(opsional)</span></label>
+                        {{-- Left blank on purpose: the signature box follows
+                             "Nama Penyerah" in section A. Prefilling this field
+                             with the derived sender name made a typed change to
+                             that box invisible in the generated PDF - both
+                             signature cells ended up with the old default. Fill
+                             this only when the signer is a different person. --}}
+                        <input type="text" name="signatory_it" value="{{ old('signatory_it') }}" placeholder="{{ $defaultSenderName ? 'Sama dengan Nama Penyerah: '.$defaultSenderName : 'Isi hanya jika berbeda dengan Nama Penyerah' }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <p class="mt-1 text-theme-xs text-gray-500">Kosongkan untuk memakai nama di kolom “Nama Penyerah” pada tanda tangan.</p>
                     </div>
                 </div>
 
