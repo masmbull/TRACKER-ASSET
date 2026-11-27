@@ -35,6 +35,7 @@
                             </button>
                         </td>
                         <td class="py-3 px-4">
+                            <button type="button" @click="$dispatch('open-modal', 'preview-template-{{ $template->id }}')" class="mr-3 text-theme-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white">Preview</button>
                             @if($template->is_active)
                                 <button type="button" @click="$dispatch('open-modal', 'use-template-{{ $template->id }}')" class="text-theme-sm font-medium text-brand-600 hover:text-brand-700">Use template</button>
                             @endif
@@ -50,6 +51,10 @@
 </x-card>
 
 @foreach($templates as $template)
+    <x-modal id="preview-template-{{ $template->id }}" :title="$template->name" maxWidth="5xl">
+        @include('templates._preview', ['template' => $template])
+    </x-modal>
+
     @if($template->is_active)
         <x-modal id="use-template-{{ $template->id }}" title="Create document from template" maxWidth="md">
             <div class="space-y-4">
