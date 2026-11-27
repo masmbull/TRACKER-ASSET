@@ -16,9 +16,12 @@ use Illuminate\Support\Facades\Gate;
  *
  * The password shown by UltraViewer changes every time it starts, so it cannot
  * be stored in the register. One click queues a read-only script on the agent
- * that owns the asset; the agent reads the current ID/password and returns the
- * text. The tracker then offers a launcher that starts UltraViewer with those
- * credentials. Nothing is stored beyond the command result itself.
+ * that owns the device; the agent reads the current ID/password and returns the
+ * text. Nothing is stored beyond the command result itself.
+ *
+ * Live Fleet queues by agent token (a device may not be on the asset register
+ * yet); the asset page queues by asset. Both paths end in the same script and
+ * the same progress dialog.
  */
 class RemoteController extends Controller
 {
@@ -39,7 +42,44 @@ class RemoteController extends Controller
             ], 422);
         }
 
-        $command = AgentCommand::create([
+        $command = $this->queueCredentialRead($token, $asset);
+
+        ActivityLog::create([
+            'actor_id' => auth()->id(),
+            'action' => 'REMOTE',
+            'entity_type' => 'assets',
+            'entity_id' => $asset->id,
+            'entity_identifier' => $asset->asset_id,
+            'source' => 'Remote',
+        ]);
+
+        return $this->queued($command);
+    }
+
+    /** Live Fleet row action. The device does not need an asset record. */
+    public function remoteToken(AgentApiToken $token): JsonResponse
+    {
+        Gate::authorize('manage-agents');
+
+        abort_unless($token->isUsable(), 422, 'This agent is not active.');
+
+        $command = $this->queueCredentialRead($token, null);
+
+        ActivityLog::create([
+            'actor_id' => auth()->id(),
+            'action' => 'REMOTE',
+            'entity_type' => 'agent_tokens',
+            'entity_id' => $token->id,
+            'entity_identifier' => $token->name,
+            'source' => 'Live Fleet',
+        ]);
+
+        return $this->queued($command);
+    }
+
+    private function queueCredentialRead(AgentApiToken $token, ?Asset $asset): AgentCommand
+    {
+        return AgentCommand::create([
             'agent_token_id' => $token->id,
             'command' => 'script',
             'status' => 'pending',
@@ -52,20 +92,14 @@ class RemoteController extends Controller
                 'working_directory' => 'C:\\Temp\\Scripts',
                 'timeout_seconds' => 60,
                 'created_by' => auth()->user()?->name ?? 'system',
-                'asset_id' => $asset->id,
+                'asset_id' => $asset?->id,
                 'purpose' => 'Read the current UltraViewer ID and password for a remote session.',
             ],
         ]);
+    }
 
-        ActivityLog::create([
-            'actor_id' => auth()->id(),
-            'action' => 'REMOTE',
-            'entity_type' => 'assets',
-            'entity_id' => $asset->id,
-            'entity_identifier' => $asset->asset_id,
-            'source' => 'Remote',
-        ]);
-
+    private function queued(AgentCommand $command): JsonResponse
+    {
         return response()->json([
             'ok' => true,
             'message' => 'Asking the agent for the current UltraViewer credentials.',
@@ -76,32 +110,14 @@ class RemoteController extends Controller
     /** Download a silent launcher for the credentials the agent just reported. */
     public function launcher(AgentCommand $command): Response
     {
-        $assetId = $command->payload['asset_id'] ?? null;
+        $this->authorizeLauncher($command);
 
-        if ($assetId) {
-            $this->authorize('audit', Asset::findOrFail((int) $assetId));
-        } else {
-            Gate::authorize('manage-agents');
-        }
+        $credentials = self::credentials($command);
 
-        $stdout = (string) ($command->result['stdout'] ?? '');
-        $credentials = null;
-        foreach (preg_split('/\R/u', $stdout) ?: [] as $line) {
-            if (preg_match('/^UV_ID=(.+)$/', trim($line), $m)) {
-                $credentials['id'] = trim($m[1]);
-            } elseif (preg_match('/^UV_PASS=(.+)$/', trim($line), $m)) {
-                $credentials['password'] = trim($m[1]);
-            }
-        }
+        abort_unless($credentials !== null, 404, 'No UltraViewer credentials were returned by this command.');
 
-        abort_unless(
-            isset($credentials['id'], $credentials['password']) && $credentials['id'] !== '' && $credentials['password'] !== '',
-            404,
-            'No UltraViewer credentials were returned by this command.'
-        );
-
-        $id = $this->safeArgument($credentials['id']);
-        $password = $this->safeArgument($credentials['password']);
+        $id = self::safeArgument($credentials['id']);
+        $password = self::safeArgument($credentials['password']);
 
         $bat = "@echo off\r\n"
             ."rem UltraViewer one-click launcher generated by TRACKER-ASSET\r\n"
@@ -120,7 +136,104 @@ class RemoteController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
-    private function safeArgument(string $value): string
+    /**
+     * One-time setup for the operator's own browser machine.
+     *
+     * A web page cannot start a local .exe by itself. Registering a private
+     * URL protocol lets the browser hand a signed, one-use connection URL to a
+     * tiny PowerShell handler, which starts UltraViewer with -i/-p. Without it
+     * the flow still works - the dialog offers the .bat launcher instead.
+     */
+    public function protocol(): Response
+    {
+        Gate::authorize('manage-agents');
+
+        $secret = (string) config('app.key');
+        $psSecret = str_replace("'", "''", $secret);
+
+        $script = implode("\r\n", [
+            'param([string]$Url)',
+            '$ErrorActionPreference = "Stop"',
+            'try {',
+            '  $payload = $Url.Substring($Url.IndexOf(":") + 1).Trim("/")',
+            '  $parts = $payload.Split(".")',
+            '  if ($parts.Length -ne 2) { exit 1 }',
+            '  $hmac = New-Object System.Security.Cryptography.HMACSHA256',
+            '  $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes(\''.$psSecret.'\')',
+            '  $expected = [Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($parts[0])))',
+            '  if ($expected -ne $parts[1]) { exit 1 }',
+            '  $json = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[0]))',
+            '  $creds = $json | ConvertFrom-Json',
+            '  $uv = Join-Path ${env:ProgramFiles(x86)} "UltraViewer\\UltraViewer_Desktop.exe"',
+            '  if (-not (Test-Path $uv)) { $uv = Join-Path $env:ProgramFiles "UltraViewer\\UltraViewer_Desktop.exe" }',
+            '  if (Test-Path $uv) { Start-Process -FilePath $uv -ArgumentList @("-i:$($creds.id)", "-p:$($creds.password)") }',
+            '} catch { exit 1 }',
+        ]);
+
+        $encoded = base64_encode(mb_convert_encoding($script, 'UTF-16LE', 'UTF-8'));
+        $command = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand '.$encoded;
+
+        $reg = "Windows Registry Editor Version 5.00\r\n\r\n"
+            ."[HKEY_CURRENT_USER\\Software\\Classes\\tracker-remote]\r\n"
+            ."@=\"URL:TRACKER Remote\"\r\n"
+            ."\"URL Protocol\"=\"\"\r\n\r\n"
+            ."[HKEY_CURRENT_USER\\Software\\Classes\\tracker-remote\\shell\\open\\command]\r\n"
+            .'@="'.$command."\"\r\n";
+
+        return response($reg, 200)
+            ->header('Content-Type', 'application/regedit')
+            ->header('Content-Disposition', 'attachment; filename="tracker-remote-setup.reg"')
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** Signed URL handed to the browser's registered tracker-remote handler. */
+    public static function urlFor(array $credentials): string
+    {
+        $encoded = base64_encode(json_encode([
+            'id' => $credentials['id'],
+            'password' => $credentials['password'],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}');
+
+        $signature = base64_encode(hash_hmac('sha256', $encoded, (string) config('app.key'), true));
+
+        return 'tracker-remote:'.$encoded.'.'.$signature;
+    }
+
+    /** @return array{id: string, password: string}|null */
+    public static function credentials(AgentCommand $command): ?array
+    {
+        $id = null;
+        $password = null;
+
+        foreach (preg_split('/\R/u', (string) ($command->result['stdout'] ?? '')) ?: [] as $line) {
+            if (preg_match('/^UV_ID=(.+)$/', trim($line), $m)) {
+                $id = trim($m[1]);
+            } elseif (preg_match('/^UV_PASS=(.+)$/', trim($line), $m)) {
+                $password = trim($m[1]);
+            }
+        }
+
+        if (! $id || $id === '—' || ! $password || $password === '—') {
+            return null;
+        }
+
+        return ['id' => $id, 'password' => $password];
+    }
+
+    private function authorizeLauncher(AgentCommand $command): void
+    {
+        $assetId = $command->payload['asset_id'] ?? null;
+
+        if ($assetId) {
+            $this->authorize('audit', Asset::findOrFail((int) $assetId));
+
+            return;
+        }
+
+        Gate::authorize('manage-agents');
+    }
+
+    private static function safeArgument(string $value): string
     {
         // The value is embedded in a .bat command line: strip anything that
         // could break out of the argument (OWASP injection hygiene).

@@ -1609,34 +1609,17 @@ class AgentFleetController extends Controller
             // captures stdout). Remote uses this to read the live UltraViewer
             // credentials instead of asking the operator to type them.
             'stdout' => $command->result['stdout'] ?? null,
-            'credentials' => $this->remoteCredentials($command),
+            'credentials' => RemoteController::credentials($command),
+            // Signed protocol URL for the operator's browser. The dialog tries
+            // this first, then falls back to the downloadable .bat launcher.
+            'remote_url' => (static function () use ($command) {
+                $credentials = RemoteController::credentials($command);
+
+                return $credentials ? RemoteController::urlFor($credentials) : null;
+            })(),
             // The phases of this command, so the dialog can show the whole
             // journey as a checklist instead of a lone bar with no context.
             'steps' => $command->steps(),
         ]);
-    }
-
-    /**
-     * @return array{id: string, password: string}|null
-     */
-    private function remoteCredentials(AgentCommand $command): ?array
-    {
-        $stdout = (string) ($command->result['stdout'] ?? '');
-        $id = null;
-        $password = null;
-
-        foreach (preg_split('/\R/u', $stdout) ?: [] as $line) {
-            if (preg_match('/^UV_ID=(.+)$/', trim($line), $m)) {
-                $id = trim($m[1]);
-            } elseif (preg_match('/^UV_PASS=(.+)$/', trim($line), $m)) {
-                $password = trim($m[1]);
-            }
-        }
-
-        if (! $id || $id === '—' || ! $password || $password === '—') {
-            return null;
-        }
-
-        return ['id' => $id, 'password' => $password];
     }
 }
