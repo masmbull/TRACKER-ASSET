@@ -212,9 +212,8 @@ class DocumentGenerationTest extends TestCase
     }
 
     /**
-     * Each type renders only its own checklist. The form keeps every checklist
-     * section in the DOM for client-side switching, but hides the ones that do
-     * not belong to the selected type; a type without a checklist renders none.
+     * Only FAT has an acceptance checklist. The form keeps it in the DOM for
+     * client-side type switching, but hides it when another type is selected.
      */
     public function test_only_a_type_with_a_checklist_gets_one(): void
     {
@@ -225,37 +224,30 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee('Checklist FAT');
 
-        // TRANSFER now has its own condition/acceptance checklist.
-        $transfer = $this->actingAs($admin)
-            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'TRANSFER']))
-            ->assertOk();
-        $transfer->assertSee('data-checklist-type="TRANSFER"', false);
-        $this->assertMatchesRegularExpression(
-            '/<div\b(?=[^>]*\bdata-checklist-type="FAT")(?=[^>]*\bhidden\b)[^>]*>/s',
-            $transfer->getContent(),
-        );
-
-        // BAST has no checklist in config, so none is rendered for it.
-        $bast = $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']))
             ->assertOk();
-        $bast->assertDontSee('data-checklist-type="BAST"', false);
+
+        $this->assertMatchesRegularExpression(
+            '/<div\b(?=[^>]*\bdata-checklist-type="FAT")(?=[^>]*\bhidden\b)[^>]*>/s',
+            $response->getContent(),
+        );
+        $response->assertDontSee('data-checklist-type="BAST"', false);
     }
 
     /**
-     * A return is not a handover and an assignment is not a transfer, so the
-     * labels must not say "Serah Terima" on them. These strings are printed on a
-     * document people sign.
+     * An assignment is not a handover, so its date label and statement must not
+     * say "Serah Terima". These strings are printed on a document people sign.
      */
     public function test_labels_and_statement_follow_the_type(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
         $this->actingAs($admin)
-            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'RETURN']))
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'ASSIGNMENT']))
             ->assertOk()
-            ->assertSee('Tanggal Pengembalian')
-            ->assertSee('Aset ini dikembalikan oleh penerima kepada pihak penyerah dalam kondisi baik sesuai keadaan saat diterima');
+            ->assertSee('Tanggal Penyerahan')
+            ->assertSee('Aset ini diserahkan kepada penerima untuk dipergunakan dalam pelaksanaan tugas');
 
         $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']))

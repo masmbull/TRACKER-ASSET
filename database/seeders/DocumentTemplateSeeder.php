@@ -51,7 +51,7 @@ class DocumentTemplateSeeder extends Seeder
         // The wider document library follows the same field schema. Each type
         // gets a canonical template so the Templates page and the generation
         // form have a real definition to point at, not just FAT/BAST.
-        foreach (['TRANSFER', 'HANDOVER', 'RETURN', 'ASSIGNMENT', 'REPAIR', 'DISPOSAL'] as $type) {
+        foreach (['ASSIGNMENT', 'REPAIR', 'DISPOSAL'] as $type) {
             $label = config('documents.labels.'.$type, $type);
 
             DocumentTemplate::updateOrCreate(
@@ -65,7 +65,7 @@ class DocumentTemplateSeeder extends Seeder
             );
         }
 
-        $this->command?->info('FAT/BAST and 6 additional document templates seeded.');
+        $this->command?->info('FAT/BAST and 3 additional document templates seeded.');
     }
 
     /**
