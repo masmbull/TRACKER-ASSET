@@ -199,7 +199,18 @@ class ServiceHealthChecker
 
             if (! $e instanceof ProbeFailure) {
                 // The full error belongs in the log, where an admin can see it.
-                report($e);
+                // report() must never be able to turn a *down* row into a 500:
+                // on a deployment whose log channel or storage volume is not
+                // writable it throws, and the monitor page dies while trying to
+                // report that another service is merely down. Swallow that
+                // failure - the row below is still the truth the operator needs.
+                try {
+                    report($e);
+                } catch (Throwable) {
+                    // Logging is itself a service being monitored; if it is
+                    // broken, say so in the row instead of crashing the page.
+                    $detail = 'logging unavailable · '.class_basename($e);
+                }
             }
 
             return compact('name', 'purpose', 'ms', 'category') + [
