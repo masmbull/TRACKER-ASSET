@@ -34,14 +34,15 @@ mkdir -p \
     bootstrap/cache
 
 # The built agent is split into <100 MB parts because GitHub rejects files
-# larger than 100 MB. Reassemble it into the persistent storage path on boot
-# so /agent/download/latest works on a fresh deployment without an operator
-# having to run agent:pull by hand. Idempotent: skip when already assembled.
-if [ -f public/agent/TrackerAgent.exe.part00 ]; then
+# larger than 100 MB. The parts live outside public/ so nginx can never serve
+# or directory-list them. Reassemble into the persistent storage path on boot
+# so the agent download route works on a fresh deployment without an operator
+# running agent:pull by hand. Idempotent: skip when already assembled.
+if [ -f resources/agent-build/TrackerAgent.exe.part00 ]; then
     TARGET="storage/app/agent/TrackerAgent.exe"
     if [ ! -f "$TARGET" ] || [ "$(stat -c %s "$TARGET" 2>/dev/null || echo 0)" -lt 100000000 ]; then
         echo "[entrypoint] assembling TrackerAgent.exe from shipped parts..." >&2
-        cat public/agent/TrackerAgent.exe.part* > "$TARGET.tmp"
+        cat resources/agent-build/TrackerAgent.exe.part* > "$TARGET.tmp"
         mv "$TARGET.tmp" "$TARGET"
     fi
 fi
