@@ -458,6 +458,14 @@
         color: var(--qr-text);
     }
 
+    /* The five cards are siblings inside one .no-print wrapper, so the flex
+       gap on .asset-qr-page never applied between them and they touched. */
+    .asset-qr-page > .no-print > .qr-panel + .qr-panel,
+    .asset-qr-page > .no-print > .qr-panel + .qr-bar,
+    .asset-qr-page > .no-print > .qr-bar + .qr-bar {
+        margin-top: 16px;
+    }
+
     .dark .asset-qr-page {
         --qr-surface: #111827;
         --qr-surface-soft: #1f2937;

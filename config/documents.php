@@ -12,7 +12,21 @@ return [
     // same "serah terima" event with a different direction, so they share one
     // template rather than three near-identical ones. BAST is the signed legal
     // minute; the remaining types are genuinely different documents.
-    'types' => ['FAT', 'BAST', 'ASSIGNMENT', 'REPAIR', 'DISPOSAL'],
+    'types' => ['FAT', 'BAST', 'DISPOSAL', 'REPAIR'],
+
+    /*
+    | The signed-in operator, used to prefill the party fields on a blank FAT.
+    | Auth::user() wins wherever the profile is actually filled in; these are the
+    | office defaults for the fields Entra does not supply (employee id, unit,
+    | legal entity).
+    */
+    'operator' => [
+        'name' => 'SHOHIBUL ANWAR',
+        'employee_id' => '20250107',
+        'division' => 'IT / IT Support',
+        'entity' => 'PT. MAHAKARYA SUKSES INDONESIA',
+        'email' => 'shohibul.anwar@mito.co.id',
+    ],
 
     /*
     | Numbering format per type. Tokens: {year}, {seq:N} (N-digit, zero-padded).
@@ -22,7 +36,6 @@ return [
     'numbering' => [
         'FAT' => 'FAT/IT-{month}-{year}/{seq:4}',
         'BAST' => 'BAST/IT-{month}-{year}/{seq:4}',
-        'ASSIGNMENT' => 'AST/ASG-{month}-{year}/{seq:4}',
         'REPAIR' => 'AST/RPR-{month}-{year}/{seq:4}',
         'DISPOSAL' => 'AST/DSP-{month}-{year}/{seq:4}',
     ],
@@ -82,11 +95,6 @@ return [
             'received_date' => 'Tanggal Diterima',
             'statement' => 'Dengan ini pihak penyerah menyerahkan aset kepada penerima, dan penerima menyatakan telah menerima aset tersebut dalam kondisi baik serta lengkap sesuai daftar yang tercantum dalam dokumen ini. Penerima berkewajiban menggunakan aset semata-mata untuk keperluan pekerjaan, menjaga dan memeliharanya dengan baik, serta mengembalikannya dalam kondisi baik apabila tidak lagi digunakan atau sesuai dengan ketentuan yang berlaku.',
         ],
-        'ASSIGNMENT' => [
-            'handover_date' => 'Tanggal Penyerahan',
-            'received_date' => 'Tanggal Diterima',
-            'statement' => 'Aset ini diserahkan kepada penerima untuk dipergunakan dalam pelaksanaan tugas dan tanggung jawabnya. Penerima wajib menjaga, memelihara, dan menggunakan aset secara bertanggung jawab, serta mengembalikannya kepada pihak penyerah setelah tugas selesai atau sesuai dengan ketentuan yang berlaku.',
-        ],
         'REPAIR' => [
             'handover_date' => 'Tanggal Penyerahan ke IT',
             'received_date' => 'Tanggal Pengembalian',
@@ -127,7 +135,6 @@ return [
     'kelengkapan' => [
         'FAT' => ['Laptop/PC', 'Charger', 'Mouse', 'Tas', 'Accessories'],
         'BAST' => ['Laptop', 'Charger', 'Mouse', 'Tas Laptop', 'Keyboard External', 'Accessories Lain'],
-        'ASSIGNMENT' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
         'REPAIR' => ['Laptop/PC', 'Charger', 'Mouse', 'Tas', 'Accessories'],
         'DISPOSAL' => ['Unit', 'Charger', 'Mouse', 'Tas', 'Kabel', 'Accessories'],
     ],
@@ -138,7 +145,6 @@ return [
     'labels' => [
         'FAT' => 'Form Transfer Fixed Asset IT',
         'BAST' => 'Berita Acara Serah Terima Aset IT',
-        'ASSIGNMENT' => 'Form Penyerahan Aset IT',
         'REPAIR' => 'Form Serah Terima Perangkat untuk Perbaikan',
         'DISPOSAL' => 'Berita Acara Penghapusan Aset IT',
     ],
