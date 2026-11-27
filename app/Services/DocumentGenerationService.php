@@ -120,6 +120,135 @@ class DocumentGenerationService
     }
 
     /**
+     * Edit an already-generated document and overwrite its PDF in place.
+     *
+     * The number is deliberately untouched: the document already exists and its
+     * sequence must not advance just because somebody fixed a name on it.
+     */
+    public function regenerate(Document $document, array $input, ?User $actor = null): Document
+    {
+        $type = strtoupper((string) ($input['document_type'] ?? $document->document_type));
+        $payload = (array) ($document->payload ?? []);
+
+        if (filled($input['document_date'] ?? null)) {
+            $payload['date'] = $input['document_date'];
+            $payload['date_long'] = $this->longDate($input['document_date']);
+        }
+        if (filled($input['nomor_surat'] ?? null)) {
+            $payload['nomor_surat'] = $input['nomor_surat'];
+        }
+
+        foreach (['title', 'notes', 'statement', 'location'] as $key) {
+            if (array_key_exists($key, $input)) {
+                $payload[$key] = $input[$key];
+            }
+        }
+
+        $parties = $payload['parties'] ?? [];
+        foreach (['sender' => 'menyerahkan', 'receiver' => 'menerima'] as $side => $signatoryKey) {
+            $party = (array) ($parties[$side] ?? []);
+            $nameKey = $side === 'sender' ? 'signatory_menyerahkan' : 'signatory_menerima';
+
+            if (filled($input[$nameKey] ?? null)) {
+                $party['name'] = $input[$nameKey];
+            }
+            foreach (['employee_id', 'entity', 'division', 'email', 'phone'] as $field) {
+                $inputKey = "{$side}_{$field}";
+                if (array_key_exists($inputKey, $input)) {
+                    $party[$field] = $input[$inputKey];
+                }
+            }
+            $parties[$side] = $party;
+        }
+        $payload['parties'] = $parties;
+
+        $signatories = (array) ($payload['signatories'] ?? []);
+        foreach (['menyerahkan', 'menerima', 'mengetahui', 'it'] as $role) {
+            if (filled($input["signatory_{$role}"] ?? null)) {
+                $signatories[$role] = $input["signatory_{$role}"];
+            }
+            if (filled($input["signatory_{$role}_date"] ?? null)) {
+                $signatories["{$role}_date"] = $this->longDate($input["signatory_{$role}_date"]);
+            }
+        }
+        $payload['signatories'] = $signatories;
+
+        $handover = (array) ($payload['handover'] ?? []);
+        foreach (['handover_date' => 'date', 'received_date' => 'received_date'] as $inputKey => $key) {
+            if (filled($input[$inputKey] ?? null)) {
+                $handover[$key] = $input[$inputKey];
+                $handover[$key === 'date' ? 'date_long' : 'received_long'] = $this->longDate($input[$inputKey]);
+            }
+        }
+        if (array_key_exists('purpose', $input)) {
+            $handover['purpose'] = $input['purpose'];
+        }
+        $payload['handover'] = $handover;
+
+        $payload['checklist'] = $this->checklistFor($type, $input);
+        $payload['kelengkapan'] = $this->kelengkapanFor($type, $input);
+
+        // A blank document has no register to fall back to, so its asset block
+        // lives entirely in the payload and must be editable there.
+        $assetData = (array) ($payload['asset'] ?? []);
+        foreach (['type', 'brand_model', 'serial', 'tag', 'processor', 'ram', 'storage', 'os_version'] as $field) {
+            $inputKey = 'asset_'.$field;
+            if (array_key_exists($inputKey, $input)) {
+                $assetData[$field === 'os_version' ? 'os_version' : ($field === 'type' ? 'type' : $field)] = $input[$inputKey];
+                if ($field === 'processor') {
+                    $assetData['processor_detail'] = $input[$inputKey];
+                } elseif ($field === 'ram') {
+                    $assetData['ram_detail'] = $input[$inputKey];
+                } elseif ($field === 'storage') {
+                    $assetData['storage_detail'] = $input[$inputKey];
+                } elseif ($field === 'tag') {
+                    $assetData['tag'] = $input[$inputKey];
+                }
+            }
+        }
+        $payload['asset'] = $assetData;
+
+        foreach ([
+            ['signatory_image', 'signature_image', 'signature_image_data'],
+            ['signatory_receiver_image', 'receiver_signature_image', 'receiver_signature_image_data'],
+        ] as [$field, $pathKey, $dataKey]) {
+            $image = $input[$field] ?? null;
+            if (! $image instanceof UploadedFile) {
+                continue;
+            }
+            $path = 'signatures/'.Str::slug($document->document_number).'-'.$pathKey.'-'.Str::random(8).'.'.$image->extension();
+            Storage::put($path, $image);
+            $payload[$pathKey] = $path;
+            $payload[$dataKey] = 'data:'.$image->getMimeType().';base64,'.base64_encode($image->get());
+            if ($pathKey === 'signature_image') {
+                $document->signature_image = $path;
+            }
+        }
+
+        $pdf = $this->renderPdf($type, $payload, $document->document_number, $payload['signature_image_data'] ?? null);
+        abort_unless(Storage::put($document->file_path, $pdf), 500, 'Could not write the regenerated PDF.');
+
+        $document->document_type = $type;
+        $document->payload = $payload;
+        $document->title = $payload['title'] ?? $document->title;
+        $document->template_id = $input['template_id'] ?? $document->template_id;
+        $document->nomor_surat = $payload['nomor_surat'] ?? null;
+        $document->generated_by = $actor?->id ?? Auth::id();
+        $document->save();
+
+        ActivityLog::create([
+            'actor_id' => $actor?->id ?? Auth::id(),
+            'action' => 'UPDATE_DOCUMENT',
+            'entity_type' => 'documents',
+            'entity_id' => $document->id,
+            'entity_identifier' => $document->document_number,
+            'source' => 'Document',
+        ]);
+
+        return $document;
+    }
+
+    /**
      * Everything the document needs, filled from the register or form input.
      */
     public function buildPayload(?Asset $asset, string $type, array $input, ?AssetTransfer $transfer): array
@@ -392,9 +521,9 @@ class DocumentGenerationService
             'BAST' => 'documents.pdf.bast',
             'REPAIR' => 'documents.pdf.repair',
             'DISPOSAL' => 'documents.pdf.disposal',
-            'ASSIGNMENT' => 'documents.pdf.assignment',
             // FAT covers transfer, handover and return; a legacy document
-            // recorded under one of those old types still renders the same sheet.
+            // recorded under one of those retired types still renders the same
+            // sheet instead of naming a document type the office no longer uses.
             default => 'documents.pdf.fat',
         };
     }

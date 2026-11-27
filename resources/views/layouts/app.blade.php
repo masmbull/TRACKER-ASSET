@@ -81,7 +81,7 @@
             $activeRouteAliases = [
                 'assets.index' => ['assets.show', 'assets.edit', 'assets.audit', 'assets.audit.device', 'assets.transfer', 'assets.repair.create'],
                 'assets.qr.sheet' => ['assets.qr'],
-                'documents.index' => ['documents.preview', 'documents.download'],
+                'documents.index' => ['documents.preview', 'documents.download', 'documents.edit', 'documents.update'],
                 'reports.index' => ['reports.export'],
             ];
             $navGroups = [
@@ -783,6 +783,8 @@
                             // the command result. Show them with a launcher, and
                             // never silently drop them into a generic toast.
                             let resultHtml;
+                            let heading = state.failed ? 'Action failed' : 'Action complete';
+                            let body = state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.');
                             if (state.credentials && state.credentials.id && state.credentials.password) {
                                 // Hand the signed URL to the browser. When the
                                 // operator has run the one-time registry setup,
@@ -816,13 +818,18 @@
                                     + '</div>'
                                     + '<p class="mt-3 text-xs text-gray-400">“Buka UltraViewer” membuka jendela koneksi otomatis setelah setup sekali dijalankan. Tanpa setup, unduh launcher lalu jalankan. Kredensial berubah saat UltraViewer restart.</p>'
                                     + '</div>';
+                                heading = 'UltraViewer credentials ready';
+                            } else if (state.is_remote && state.remote_message) {
+                                // The script succeeded but found no credentials.
+                                // "Script completed successfully." is technically
+                                // true and completely useless to the operator.
+                                heading = 'Remote tidak tersedia';
+                                body = state.remote_message;
+                                resultHtml = '<div class="tracker-remote-result rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">'
+                                    + escapeHtml(state.remote_message)
+                                    + '</div>';
                             }
-                            finishWithAlert(
-                                state.failed ? 'Action failed' : (resultHtml ? 'UltraViewer credentials ready' : 'Action complete'),
-                                state.message || (state.failed ? 'The device reported a failure.' : 'The device finished this action.'),
-                                state.failed ? 'error' : 'success',
-                                resultHtml
-                            );
+                            finishWithAlert(heading, body, state.failed ? 'error' : 'success', resultHtml);
                             return;
                         }
 

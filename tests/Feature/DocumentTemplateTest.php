@@ -84,6 +84,8 @@ class DocumentTemplateTest extends TestCase
             ->assertSee('FAT Pakem')
             ->assertSee('BAST Pakem')
             ->assertSee('Use template')
+            ->assertSee('Preview')
+            ->assertSee('preview-template-', false)
             ->assertSee('Create document from template')
             ->assertSee($this->asset->asset_id);
     }

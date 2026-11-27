@@ -51,7 +51,7 @@ class DocumentTemplateSeeder extends Seeder
         // The wider document library follows the same field schema. Each type
         // gets a canonical template so the Templates page and the generation
         // form have a real definition to point at, not just FAT/BAST.
-        foreach (['ASSIGNMENT', 'REPAIR', 'DISPOSAL'] as $type) {
+        foreach (['DISPOSAL', 'REPAIR'] as $type) {
             $label = config('documents.labels.'.$type, $type);
 
             DocumentTemplate::updateOrCreate(
@@ -65,7 +65,12 @@ class DocumentTemplateSeeder extends Seeder
             );
         }
 
-        $this->command?->info('FAT/BAST and 3 additional document templates seeded.');
+        // updateOrCreate cannot remove rows from an older seed. Without this the
+        // Templates page keeps offering TRANSFER/HANDOVER/RETURN/ASSIGNMENT long
+        // after those document types were consolidated into FAT.
+        DocumentTemplate::whereIn('document_type', ['TRANSFER', 'HANDOVER', 'RETURN', 'ASSIGNMENT'])->delete();
+
+        $this->command?->info('FAT, BAST, DISPOSAL and REPAIR templates seeded.');
     }
 
     /**

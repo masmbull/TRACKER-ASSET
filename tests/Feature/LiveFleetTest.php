@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AgentApiToken;
 use App\Models\AgentCommand;
+use App\Models\AgentRelease;
 use App\Models\AgentTelemetry;
 use App\Models\Asset;
 use App\Models\AssetAudit;
@@ -15,6 +16,7 @@ use App\Models\User;
 use App\Services\ScriptPayload;
 use App\Support\ScriptPresets;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -1144,50 +1146,42 @@ class LiveFleetTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin']);
 
-        // CI checkouts have no built exe (storage/app is gitignored) and a real
-        // 70 MB binary must not be streamed through memory, so the shipped
-        // binary is parked for the duration of the test and a stub served.
-        $exePath = storage_path('app/agent/TrackerAgent.exe');
-        $backupPath = $exePath.'.testbak';
-        $hadRealBinary = file_exists($exePath);
+        // Serve a stub through the current release rather than parking the
+        // shared exe: the download route now prefers the release's own file and
+        // reassembles the shipped parts only when that file is missing. A test
+        // that overwrote the shared path would silently be replaced by the
+        // 160 MB build from resources/agent-build on CI.
+        Storage::fake('local');
 
-        if (! is_dir(dirname($exePath))) {
-            mkdir(dirname($exePath), 0755, true);
-        }
+        $release = AgentRelease::ship('test-download');
+        $path = 'agent/releases/test-download.exe';
+        $stub = "MZ\x90\x00stub";
+        Storage::disk('local')->put($path, $stub);
+        $release->update([
+            'file_path' => $path,
+            'file_size' => strlen($stub),
+            'sha256' => hash('sha256', $stub),
+        ]);
 
-        if ($hadRealBinary) {
-            rename($exePath, $backupPath);
-        }
+        $response = $this->actingAs($admin)->get(route('agent.download', $this->agentToken));
 
-        file_put_contents($exePath, "MZ\x90\x00stub");
+        $response->assertOk()
+            ->assertDownload('TrackerAgent.exe')
+            ->assertHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
 
-        try {
-            $response = $this->actingAs($admin)->get(route('agent.download', $this->agentToken));
+        $body = $response->streamedContent();
 
-            $response->assertOk()
-                ->assertDownload('TrackerAgent.exe')
-                ->assertHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+        $this->assertStringStartsWith($stub, $body);
 
-            $body = $response->streamedContent();
+        preg_match('/<<<TRACKER-AGENT-CONFIG:([A-Za-z0-9+\/=]+):END>>>/', $body, $matches);
+        $this->assertNotEmpty($matches, 'The served binary must carry a config trailer.');
 
-            $this->assertStringStartsWith("MZ\x90\x00stub", $body);
+        // The trailer sits at the very end so the installer can read it from
+        // the tail of its own executable.
+        $this->assertStringContainsString($matches[0], substr($body, -1024));
 
-            preg_match('/<<<TRACKER-AGENT-CONFIG:([A-Za-z0-9+\/=]+):END>>>/', $body, $matches);
-            $this->assertNotEmpty($matches, 'The served binary must carry a config trailer.');
-
-            // The trailer sits at the very end so the installer can read it from
-            // the tail of its own executable.
-            $this->assertStringContainsString($matches[0], substr($body, -1024));
-
-            $config = json_decode(base64_decode($matches[1]), true);
-            $this->assertContains(rtrim((string) config('app.url'), '/'), $config['server_urls']);
-            $this->assertNotEmpty($config['issued_at']);
-        } finally {
-            unlink($exePath);
-
-            if ($hadRealBinary) {
-                rename($backupPath, $exePath);
-            }
-        }
+        $config = json_decode(base64_decode($matches[1]), true);
+        $this->assertContains(rtrim((string) config('app.url'), '/'), $config['server_urls']);
+        $this->assertNotEmpty($config['issued_at']);
     }
 }

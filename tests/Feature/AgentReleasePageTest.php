@@ -244,6 +244,9 @@ class AgentReleasePageTest extends TestCase
 
         $response = $this->get(route('agent.download.latest'))->assertOk()->assertDownload('TrackerAgent.exe');
 
+        // The agent verifies this header before swapping. Without it a stale
+        // file on the persistent volume could be installed as an "update".
+        $response->assertHeader('X-Agent-Version', '1.0.0');
         $this->assertSame('MZ', substr($this->capturedStream($response, 2), 0, 2));
     }
 
