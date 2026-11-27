@@ -59,11 +59,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "agent-${{ steps.version.outputs.version }}"
-          gh release view $tag --repo ${{ github.repository }} 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          # `gh release view` exits non-zero (and writes to stderr) when the
+          # release does not exist yet. PowerShell on Actions uses
+          # $ErrorActionPreference = 'stop', so that stderr kills the step.
+          # `gh release list` always succeeds, even with zero releases.
+          $json = gh release list --repo ${{ github.repository }} --json tagName
+          $releases = $json | ConvertFrom-Json
+          if ($releases.tagName -contains $tag) {
             Write-Host "Release $tag already exists - skipping build."
             "skip=true" >> $env:GITHUB_OUTPUT
           } else {
+            Write-Host "Release $tag not found - building."
             "skip=false" >> $env:GITHUB_OUTPUT
           }
 
