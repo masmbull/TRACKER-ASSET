@@ -79,12 +79,16 @@ jobs:
         run: |
           $publishArgs = @(
             'agent/TrackerAgent/TrackerAgent.csproj'
-            '-c' 'Release'
-            '-r' 'win-x64'
-            '--self-contained' 'true'
+            '-c'
+            'Release'
+            '-r'
+            'win-x64'
+            '--self-contained'
+            'true'
             '-p:PublishSingleFile=true'
             '-p:IncludeNativeLibrariesForSelfExtract=true'
-            '-o' 'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish'
+            '-o'
+            'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish'
           )
           dotnet publish @publishArgs
 
@@ -113,10 +117,14 @@ jobs:
           $size = '${{ steps.hash.outputs.size }}'
           $notes = 'Self-contained TrackerAgent.exe (SHA-256 ' + $sha + ', ' + [math]::Round($size / 1MB, 1) + ' MB). Deploy on the server with: php artisan agent:pull ' + $version
           $releaseArgs = @(
-            'release' 'create' $tag
+            'release'
+            'create'
+            $tag
             'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe#TrackerAgent.exe'
-            '--title' "TrackerAgent $version"
-            '--notes' $notes
+            '--title'
+            "TrackerAgent $version"
+            '--notes'
+            $notes
           )
           gh @releaseArgs
 
