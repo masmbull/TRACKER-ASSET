@@ -490,7 +490,7 @@ public partial class App : System.Windows.Application
                                 {
                                     ["message"] = ok
                                         ? "Update downloaded; the agent is restarting on the new build."
-                                        : "The update download failed. Check network reachability to the server.",
+                                        : "Update failed: "+AutoUpdater.LastError,
                                 });
 
                             if (ok)
