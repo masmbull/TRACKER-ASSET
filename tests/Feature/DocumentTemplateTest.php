@@ -39,14 +39,14 @@ class DocumentTemplateTest extends TestCase
         $this->asset = Asset::factory()->create();
     }
 
-    public function test_seeder_creates_fat_and_bast_pakem_templates(): void
+    public function test_seeder_creates_all_pakem_document_templates(): void
     {
         User::factory()->create(['role' => 'admin']);
 
         $this->seed(DocumentTemplateSeeder::class);
         $this->seed(DocumentTemplateSeeder::class); // idempotent
 
-        $this->assertSame(2, DocumentTemplate::count());
+        $this->assertSame(count((array) config('documents.types')), DocumentTemplate::count());
 
         $fat = DocumentTemplate::where('document_type', 'FAT')->firstOrFail();
         $bast = DocumentTemplate::where('document_type', 'BAST')->firstOrFail();

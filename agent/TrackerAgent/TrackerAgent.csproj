@@ -23,7 +23,10 @@
              where case-insensitive matching still cannot bridge the underscore,
              so every multi-word field came back null and was posted as
              "driver_name": null. Software lost installed_at the same way. -->
-          <Version>1.7.38</Version><!-- 1.7.38: tray menu now shows only Status (Check for Updates removed);
+          <Version>1.7.39</Version><!-- 1.7.39: update progress advances without Content-Length and keeps a
+               heartbeat so a slow download is not marked stalled; swap status
+               file prevents acking success when the old exe had to be kept.
+               1.7.38: tray menu now shows only Status (Check for Updates removed);
                StatusWindow redesigned with Font Awesome icons, fade-in animation,
                pulsing status dot, tooltips and wrapping so text is never clipped;
                script commands capture stdout so the Remote button can read the

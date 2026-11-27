@@ -212,9 +212,9 @@ class DocumentGenerationTest extends TestCase
     }
 
     /**
-     * Only the FAT has an acceptance checklist. The form keeps the FAT section in
-     * the DOM for client-side type switching, but it must be hidden when TRANSFER
-     * is selected and no active TRANSFER checklist may be rendered.
+     * Each type renders only its own checklist. The form keeps every checklist
+     * section in the DOM for client-side switching, but hides the ones that do
+     * not belong to the selected type; a type without a checklist renders none.
      */
     public function test_only_a_type_with_a_checklist_gets_one(): void
     {
@@ -225,15 +225,21 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee('Checklist FAT');
 
-        $response = $this->actingAs($admin)
+        // TRANSFER now has its own condition/acceptance checklist.
+        $transfer = $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'TRANSFER']))
             ->assertOk();
-
+        $transfer->assertSee('data-checklist-type="TRANSFER"', false);
         $this->assertMatchesRegularExpression(
             '/<div\b(?=[^>]*\bdata-checklist-type="FAT")(?=[^>]*\bhidden\b)[^>]*>/s',
-            $response->getContent(),
+            $transfer->getContent(),
         );
-        $response->assertDontSee('data-checklist-type="TRANSFER"', false);
+
+        // BAST has no checklist in config, so none is rendered for it.
+        $bast = $this->actingAs($admin)
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'BAST']))
+            ->assertOk();
+        $bast->assertDontSee('data-checklist-type="BAST"', false);
     }
 
     /**

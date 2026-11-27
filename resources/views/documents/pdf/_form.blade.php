@@ -1,30 +1,16 @@
 {{--
-    Sections A–F of the official paper form, rendered as a generated document.
+    Shared body of every generated asset document.
 
-    One partial, shared by FAT, BAST and generic documents, because all of them
-    reproduce the same sheet: the sender, the receiver, the asset (with its
-    specification and completeness), when it was handed over, the statement, and
-    the two signature blocks. Copying this into three templates is how FAT and
-    BAST drifted apart - one grew a row the other never got, and there was no
-    single place that represented "the form".
+    The office's official sheets (FAT SERAH/TERIMA and BAST BARU) are sectioned
+    A-F; the wider IT document library (transfer, handover, return, assignment,
+    repair, disposal) uses the same skeleton with different party roles, section
+    letters and checklists. One partial keeps those differences in one table so
+    a document type cannot drift into another's wording.
 
-    Two people, not four. The old documents printed a "Penghantar/Penerima" dump
-    of raw English key:value pairs and ISO dates on top of a second,
-    differently-shaped handover table - the same facts twice, in two vocabularies,
-    neither reading like the sheet people sign. Here the parties appear once, in
-    the form's own words and order.
-
-    The two official forms genuinely differ, so the partial does too, off $variant:
-      - fat  (sheets SERAH/TERIMA): A Yang Menyerahkan, B Yang Menerima,
-             C Aset, D Waktu Penyerahan, E Pernyataan, F Persetujuan.
-      - bast (sheet "Template BAST - BARU"): receiver first, IT as the giver,
-             then the asset, completeness, time, and the long klausul.
-
-    @param string $variant  'fat' (default) or 'bast'.
+    @param string $variant  fat|bast|transfer|handover|return|assignment|repair|disposal
 --}}
 @php
     $variant = $variant ?? 'fat';
-    $isBast = $variant === 'bast';
 
     $parties = $document['parties'] ?? [];
     $sender = (array) ($parties['sender'] ?? []);
@@ -33,39 +19,72 @@
     $handover = $document['handover'] ?? [];
     $sign = $document['signatories'] ?? [];
     $kelengkapan = (array) ($document['kelengkapan'] ?? []);
+    $copyView = (array) ($copy ?? []);
 
     $blank = static fn ($v) => filled($v) ? $v : '-';
 
-    // The form puts the employee it went to first on a BAST, and the IT giver
-    // first on a transfer form. Same two blocks, ordered as the sheet orders them.
-    $firstRole = $isBast
-        ? ['A. INFORMASI PENERIMA ASET', $receiver]
-        : ['A. INFORMASI YANG MENYERAHKAN', $sender];
-    $secondRole = $isBast
-        ? ['B. INFORMASI PENYERAH ASET (IT)', $sender]
-        : ['B. INFORMASI YANG MENERIMA', $receiver];
-    $nameLabel = $isBast ? 'Nama Karyawan' : null;
+    // Which party is introduced first, and how each is named on the sheet.
+    $roles = [
+        'fat' => [
+            ['A. INFORMASI YANG MENYERAHKAN', 'Nama Penyerah', $sender],
+            ['B. INFORMASI YANG MENERIMA', 'Nama Penerima', $receiver],
+            'C', 'D', 'E',
+        ],
+        'bast' => [
+            ['A. INFORMASI PENERIMA ASET', 'Nama Karyawan', $receiver],
+            ['B. INFORMASI PENYERAH ASET (IT)', 'Nama PIC IT', $sender],
+            'D', 'E', 'F',
+        ],
+        'transfer' => [
+            ['A. PIHAK PENYERAH', 'Nama Penyerah', $sender],
+            ['B. PIHAK PENERIMA', 'Nama Penerima', $receiver],
+            'C', 'D', 'E',
+        ],
+        'handover' => [
+            ['A. INFORMASI KARYAWAN / PENERIMA', 'Nama Karyawan', $receiver],
+            ['B. INFORMASI PENYERAH (IT)', 'Nama PIC IT', $sender],
+            'D', 'E', 'F',
+        ],
+        'return' => [
+            ['A. PIHAK PENGEMBALI', 'Nama Pemegang', $sender],
+            ['B. PIHAK PENERIMA (IT)', 'Nama PIC IT', $receiver],
+            'C', 'D', 'E',
+        ],
+        'assignment' => [
+            ['A. INFORMASI YANG MENYERAHKAN', 'Nama Penyerah', $sender],
+            ['B. INFORMASI PENERIMA', 'Nama Penerima', $receiver],
+            'C', 'D', 'E',
+        ],
+        'repair' => [
+            ['A. USER / PEMILIK PERANGKAT', 'Nama User', $receiver],
+            ['B. PENERIMA PERANGKAT (IT)', 'Nama PIC IT', $sender],
+            'C', 'D', 'E',
+        ],
+        'disposal' => [
+            ['A. PIHAK PENGAJU', 'Nama Pengaju', $sender],
+            ['B. PIHAK PENERIMA / VERIFIKATOR', 'Nama Verifikator', $receiver],
+            'C', 'D', 'E',
+        ],
+    ];
+
+    [$firstRole, $secondRole, $assetLetter, $timeLetter, $statementLetter] = $roles[$variant] ?? $roles['fat'];
 @endphp
 
-@foreach([$firstRole, $secondRole] as [$heading, $party])
+@foreach([$firstRole, $secondRole] as [$heading, $nameLabel, $party])
 <table>
     <tr><th class="section-head" colspan="2">{{ $heading }}</th></tr>
-    @if($nameLabel)
-        <tr><td class="label">{{ $loop->first ? $nameLabel : 'Nama PIC IT' }}</td><td>{{ $blank($party['name'] ?? null) }}</td></tr>
-    @else
-        <tr><td class="label">Nama Penyerah / Penerima</td><td>{{ $blank($party['name'] ?? null) }}</td></tr>
-    @endif
+    <tr><td class="label">{{ $nameLabel }}</td><td>{{ $blank($party['name'] ?? null) }}</td></tr>
     <tr><td class="label">NIK / ID Karyawan</td><td>{{ $blank($party['employee_id'] ?? null) }}</td></tr>
-    <tr><td class="label">Entitas</td><td>{{ $blank($party['entity'] ?? null) }}</td></tr>
+    <tr><td class="label">Entitas / Cabang</td><td>{{ $blank($party['entity'] ?? null) }}</td></tr>
     <tr><td class="label">Divisi / Jabatan</td><td>{{ $blank($party['division'] ?? null) }}</td></tr>
     <tr><td class="label">Email</td><td>{{ $blank($party['email'] ?? null) }}</td></tr>
     <tr><td class="label">No. Telepon</td><td>{{ $blank($party['phone'] ?? null) }}</td></tr>
 </table>
 @endforeach
 
-{{-- C. Informasi Aset --}}
+{{-- Asset identity + specification --}}
 <table>
-    <tr><th class="section-head" colspan="2">C. INFORMASI ASET</th></tr>
+    <tr><th class="section-head" colspan="2">{{ $assetLetter }}. INFORMASI ASET</th></tr>
     <tr><td class="label">Jenis Aset</td><td>{{ $blank(($asset['type'] ?? null) ?: ($asset['category'] ?? null)) }}</td></tr>
     <tr><td class="label">Brand &amp; Model</td><td>{{ $blank($asset['brand_model'] ?? null) }}</td></tr>
     <tr><td class="label">Serial Number</td><td>{{ $blank($asset['serial'] ?? null) }}</td></tr>
@@ -73,12 +92,6 @@
     <tr><td class="label">Processor</td><td>{{ $blank($asset['processor_detail'] ?? null) }}</td></tr>
     <tr><td class="label">RAM</td><td>{{ $blank($asset['ram_detail'] ?? null) }}</td></tr>
     <tr><td class="label">Storage</td><td>{{ $blank($asset['storage_detail'] ?? null) }}</td></tr>
-    @if(filled($asset['storage_type_detail'] ?? null))
-        <tr><td class="label">Storage Type</td><td>{{ $asset['storage_type_detail'] }}</td></tr>
-    @endif
-    @if(filled($asset['storage_capacity_detail'] ?? null))
-        <tr><td class="label">Storage Capacity</td><td>{{ $asset['storage_capacity_detail'] }}</td></tr>
-    @endif
     @if(filled($asset['os_version'] ?? null))
         <tr><td class="label">Sistem Operasi</td><td>{{ $asset['os_version'] }}</td></tr>
     @endif
@@ -88,12 +101,10 @@
     <tr><td class="label">Lain-Lain</td><td class="extra-room"></td></tr>
 </table>
 
-{{-- Completeness, item by item, exactly as the paper form asks.
-     Two items per row: the paper form is one page and a full-width row per
-     accessory is what pushed the signature block onto a second sheet. --}}
+{{-- Physical completeness, two items per row to keep the sheet compact --}}
 @if($kelengkapan)
 <table>
-    <tr><th class="section-head" colspan="4">{{ $isBast ? 'D' : 'C' }}. KELENGKAPAN ASSET</th></tr>
+    <tr><th class="section-head" colspan="4">{{ $assetLetter }}. KELENGKAPAN ASET</th></tr>
     @foreach(collect($kelengkapan)->chunk(2) as $chunk)
         <tr>
             @foreach($chunk as $item => $answer)
@@ -108,17 +119,17 @@
 </table>
 @endif
 
-{{-- Checklist FAT, when this type has one. Also two per row for height. --}}
+{{-- Type-specific acceptance / setup / condition checklist --}}
 @if(!empty($document['checklist']))
 <table>
-    <tr><th class="section-head" colspan="4">CHECKLIST PENERIMAAN</th></tr>
+    <tr><th class="section-head" colspan="4">CHECKLIST {{ strtoupper($variant) }}</th></tr>
     @foreach(collect($document['checklist'])->chunk(2) as $chunk)
         <tr>
             @foreach($chunk as $check)
                 @php($result = $check['result'] ?? 'na')
                 <td>{{ $check['item'] }}</td>
                 <td class="{{ $result === 'fail' ? 'fail' : ($result === 'pass' ? 'pass' : '') }}" style="width:14%">
-                    {{ ['pass' => 'PASS', 'fail' => 'FAIL', 'na' => 'N/A'][$result] ?? 'N/A' }}
+                    {{ ['pass' => 'YA / PASS', 'fail' => 'TIDAK / FAIL', 'na' => 'N/A'][$result] ?? 'N/A' }}
                 </td>
             @endforeach
             @if($chunk->count() === 1)
@@ -130,27 +141,24 @@
 </table>
 @endif
 
-{{-- Waktu Penyerahan --}}
+{{-- Timing --}}
 <table>
-    <tr><th class="section-head" colspan="2">{{ $isBast ? 'E' : 'D' }}. WAKTU PENYERAHAN</th></tr>
-    <tr><td class="label">{{ $copy['handover_date'] ?? 'Tanggal Penyerahan' }}</td><td>{{ $blank($handover['date_long'] ?? ($handover['date'] ?? null)) }}</td></tr>
-    @unless($isBast)
-        <tr><td class="label">{{ $copy['received_date'] ?? 'Tanggal Diterima' }}</td><td>{{ $blank($handover['received_long'] ?? ($handover['received_date'] ?? null)) }}</td></tr>
-    @endunless
+    <tr><th class="section-head" colspan="2">{{ $timeLetter }}. WAKTU</th></tr>
+    <tr><td class="label">{{ $copyView['handover_date'] ?? 'Tanggal Penyerahan' }}</td><td>{{ $blank($handover['date_long'] ?? ($handover['date'] ?? null)) }}</td></tr>
+    <tr><td class="label">{{ $copyView['received_date'] ?? 'Tanggal Diterima' }}</td><td>{{ $blank($handover['received_long'] ?? ($handover['received_date'] ?? null)) }}</td></tr>
     <tr><td class="label">Keperluan</td><td>{{ $blank($handover['purpose'] ?? null) }}</td></tr>
-    @if($isBast)
-        <tr><td class="label">Lokasi Penyerahan</td><td>{{ $blank($document['location'] ?? null) }}</td></tr>
+    @if(filled($document['location'] ?? null))
+        <tr><td class="label">Lokasi</td><td>{{ $document['location'] }}</td></tr>
     @endif
 </table>
 
-{{-- Statement / klausul --}}
+{{-- Statement / legal clause --}}
 <table>
-    <tr><th class="section-head">{{ $isBast ? 'F. KLAUSUL' : 'E. PERNYATAAN' }}</th></tr>
-    <tr><td class="statement">{{ $document['statement'] ?? ($copy['statement'] ?? '-') }}</td></tr>
+    <tr><th class="section-head">{{ $statementLetter }}. PERNYATAAN / KLAUSUL</th></tr>
+    <tr><td class="statement">{{ $document['statement'] ?? ($copyView['statement'] ?? '-') }}</td></tr>
 </table>
 
- {{-- Signatures. Satu kolom: "Diperiksa dan Diterima Oleh". USER dan IT
-     masing-masing punya area tanda tangan, dengan nama tercetak di bawahnya. --}}
+{{-- Signatures: typed names printed under the line, wet signatures as images --}}
 <style>
     .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
     .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px 6px; }
