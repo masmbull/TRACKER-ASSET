@@ -20,7 +20,29 @@ class ServiceMonitorController extends Controller
 
     public function index(): View
     {
-        return view('services.index', $this->health->check());
+        return view('services.index', $this->safeReport());
+    }
+
+    /**
+     * The monitor must remain renderable even when the environment it inspects
+     * is broken. A probe failure is data ("down"), never an HTTP 500 - and a
+     * fatal error inside the checker itself must still produce a page that says
+     * the check could not be completed.
+     */
+    private function safeReport(): array
+    {
+        try {
+            return $this->health->check();
+        } catch (\Throwable $e) {
+            return [
+                'services' => [],
+                'total' => 0,
+                'healthy' => 0,
+                'down' => 0,
+                'skipped' => 0,
+                'error' => 'Health check could not run: '.class_basename($e),
+            ];
+        }
     }
 
     /**
@@ -38,8 +60,8 @@ class ServiceMonitorController extends Controller
      */
     public function json(): JsonResponse
     {
-        $report = $this->health->check();
+        $report = $this->safeReport();
 
-        return response()->json($report, $report['down'] > 0 ? 503 : 200);
+        return response()->json($report, ($report['error'] ?? null) || ($report['down'] ?? 0) > 0 ? 503 : 200);
     }
 }
