@@ -40,7 +40,11 @@ mkdir -p \
 # running agent:pull by hand. Idempotent: skip when already assembled.
 if [ -f resources/agent-build/TrackerAgent.exe.part00 ]; then
     TARGET="storage/app/agent/TrackerAgent.exe"
-    if [ ! -f "$TARGET" ] || [ "$(stat -c %s "$TARGET" 2>/dev/null || echo 0)" -lt 100000000 ]; then
+    EXPECTED=$(cat resources/agent-build/TrackerAgent.exe.part* | sha256sum | cut -d' ' -f1)
+    ACTUAL=$(sha256sum "$TARGET" 2>/dev/null | cut -d' ' -f1 || true)
+    # Compare content, not just size: a stale 160 MB exe from an older image
+    # has the right size and was never replaced, so agents kept installing it.
+    if [ "$EXPECTED" != "$ACTUAL" ]; then
         echo "[entrypoint] assembling TrackerAgent.exe from shipped parts..." >&2
         cat resources/agent-build/TrackerAgent.exe.part* > "$TARGET.tmp"
         mv "$TARGET.tmp" "$TARGET"
