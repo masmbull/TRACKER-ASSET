@@ -270,6 +270,7 @@ class DocumentController extends Controller
             'signatory_mengetahui' => 'nullable|string|max:150',
             'signatory_it' => 'nullable|string|max:150',
             'signatory_image' => 'nullable|file|mimes:png,jpg,jpeg|max:2048',
+            'signatory_receiver_image' => 'nullable|file|mimes:png,jpg,jpeg|max:2048',
             'checklist' => 'nullable|array',
             'checklist.*' => 'nullable|in:pass,fail,na',
             'notes' => 'nullable|string',

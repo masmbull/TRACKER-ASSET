@@ -1,0 +1,72 @@
+name: Agent Release
+
+# Builds the self-contained TrackerAgent.exe and publishes it as a GitHub
+# Release asset. The production server then runs `php artisan agent:pull`
+# to download it into storage/app/agent, which is what the public agent
+# download route serves. This keeps the ~160 MB binary out of git while
+# making it available to every deployment without a local dotnet SDK.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Agent version (must match <Version> in TrackerAgent.csproj)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify version matches the project
+        shell: pwsh
+        run: |
+          $csproj = Get-Content agent/TrackerAgent/TrackerAgent.csproj -Raw
+          if ($csproj -notmatch '<Version>([^<]+)</Version>') { throw 'No <Version> in csproj' }
+          if ($Matches[1] -ne '${{ inputs.version }}') {
+            throw "csproj version $($Matches[1]) does not match requested ${{ inputs.version }}"
+          }
+
+      - name: Publish self-contained agent
+        shell: pwsh
+        run: |
+          dotnet publish agent/TrackerAgent/TrackerAgent.csproj -c Release -r win-x64 `
+            --self-contained true -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish
+
+      - name: Hash the executable
+        id: hash
+        shell: pwsh
+        run: |
+          $file = 'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe'
+          $sha = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "size=$((Get-Item $file).Length)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "agent-${{ inputs.version }}"
+          gh release create $tag `
+            "agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe#TrackerAgent.exe" `
+            --title "TrackerAgent ${{ inputs.version }}" `
+            --notes "Self-contained TrackerAgent.exe (SHA-256 ${{ steps.hash.outputs.sha }}, $([math]::Round(${{ steps.hash.outputs.size }}/1MB,1)) MB). Deploy with: php artisan agent:pull ${{ inputs.version }}"
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          echo "### Agent ${{ inputs.version }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "SHA-256: ${{ steps.hash.outputs.sha }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "Deploy: \`php artisan agent:pull ${{ inputs.version }}\`" >> $env:GITHUB_STEP_SUMMARY
