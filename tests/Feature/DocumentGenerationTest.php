@@ -394,6 +394,37 @@ class DocumentGenerationTest extends TestCase
         ]);
     }
 
+    /**
+     * The signature box on the right is labelled "IT / Penyerah Aset". Its name
+     * must follow "Nama Penyerah", the field on the form people actually edit.
+     * When both boxes showed the derived default, changing the sender on the
+     * form still produced a PDF signed by the administrator for both parties.
+     */
+    public function test_signature_box_follows_the_sender_name_unless_overridden(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
+            'document_type' => 'FAT',
+            'signatory_menyerahkan' => 'Andi Penyerah',
+            'signatory_menerima' => 'Budi Penerima',
+        ]);
+
+        $signatories = Document::firstOrFail()->payload['signatories'];
+        $this->assertSame('Andi Penyerah', $signatories['it']);
+        $this->assertSame('Budi Penerima', $signatories['menerima']);
+
+        // An explicit IT signer still wins when the two people differ.
+        $this->actingAs($support)->post(route('documents.generate.store', $this->asset), [
+            'document_type' => 'FAT',
+            'signatory_menyerahkan' => 'Andi Penyerah',
+            'signatory_menerima' => 'Budi Penerima',
+            'signatory_it' => 'Deni IT',
+        ]);
+
+        $this->assertSame('Deni IT', Document::latest('id')->firstOrFail()->payload['signatories']['it']);
+    }
+
     public function test_second_document_gets_next_number(): void
     {
         $support = User::factory()->create(['role' => 'support']);
