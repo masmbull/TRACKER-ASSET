@@ -1,13 +1,11 @@
 {{--
-    Shared body of every generated asset document.
+    Body of every generated asset document.
 
-    The office's official sheets (FAT SERAH/TERIMA and BAST BARU) are sectioned
-    A-F; the wider IT document library (transfer, handover, return, assignment,
-    repair, disposal) uses the same skeleton with different party roles, section
-    letters and checklists. One partial keeps those differences in one table so
-    a document type cannot drift into another's wording.
-
-    @param string $variant  fat|bast|transfer|handover|return|assignment|repair|disposal
+    Two people, not four. The office's paper form names the sender and receiver
+    once each; the old renderer printed a second differently-shaped party table
+    on top of it. The role order and section letters follow the sheet for each
+    variant, and the shared visual language lives in layout.blade.php so this
+    partial only decides *what* is printed, never how it looks.
 --}}
 @php
     $variant = $variant ?? 'fat';
@@ -23,7 +21,7 @@
 
     $blank = static fn ($v) => filled($v) ? $v : '-';
 
-    // Which party is introduced first, and how each is named on the sheet.
+    // [heading, name label, party data, asset letter, time letter, statement letter]
     $roles = [
         'fat' => [
             ['A. INFORMASI YANG MENYERAHKAN', 'Nama Penyerah', $sender],
@@ -34,21 +32,6 @@
             ['A. INFORMASI PENERIMA ASET', 'Nama Karyawan', $receiver],
             ['B. INFORMASI PENYERAH ASET (IT)', 'Nama PIC IT', $sender],
             'D', 'E', 'F',
-        ],
-        'transfer' => [
-            ['A. PIHAK PENYERAH', 'Nama Penyerah', $sender],
-            ['B. PIHAK PENERIMA', 'Nama Penerima', $receiver],
-            'C', 'D', 'E',
-        ],
-        'handover' => [
-            ['A. INFORMASI KARYAWAN / PENERIMA', 'Nama Karyawan', $receiver],
-            ['B. INFORMASI PENYERAH (IT)', 'Nama PIC IT', $sender],
-            'D', 'E', 'F',
-        ],
-        'return' => [
-            ['A. PIHAK PENGEMBALI', 'Nama Pemegang', $sender],
-            ['B. PIHAK PENERIMA (IT)', 'Nama PIC IT', $receiver],
-            'C', 'D', 'E',
         ],
         'assignment' => [
             ['A. INFORMASI YANG MENYERAHKAN', 'Nama Penyerah', $sender],
@@ -71,7 +54,7 @@
 @endphp
 
 @foreach([$firstRole, $secondRole] as [$heading, $nameLabel, $party])
-<table>
+<table class="form">
     <tr><th class="section-head" colspan="2">{{ $heading }}</th></tr>
     <tr><td class="label">{{ $nameLabel }}</td><td>{{ $blank($party['name'] ?? null) }}</td></tr>
     <tr><td class="label">NIK / ID Karyawan</td><td>{{ $blank($party['employee_id'] ?? null) }}</td></tr>
@@ -82,8 +65,8 @@
 </table>
 @endforeach
 
-{{-- Asset identity + specification --}}
-<table>
+{{-- Asset identity and specification --}}
+<table class="form">
     <tr><th class="section-head" colspan="2">{{ $assetLetter }}. INFORMASI ASET</th></tr>
     <tr><td class="label">Jenis Aset</td><td>{{ $blank(($asset['type'] ?? null) ?: ($asset['category'] ?? null)) }}</td></tr>
     <tr><td class="label">Brand &amp; Model</td><td>{{ $blank($asset['brand_model'] ?? null) }}</td></tr>
@@ -98,12 +81,11 @@
     @if(filled($document['notes'] ?? null))
         <tr><td class="label">Catatan</td><td>{{ $document['notes'] }}</td></tr>
     @endif
-    <tr><td class="label">Lain-Lain</td><td class="extra-room"></td></tr>
 </table>
 
-{{-- Physical completeness, two items per row to keep the sheet compact --}}
+{{-- Physical completeness, two items per row to keep the sheet to one page --}}
 @if($kelengkapan)
-<table>
+<table class="form">
     <tr><th class="section-head" colspan="4">{{ $assetLetter }}. KELENGKAPAN ASET</th></tr>
     @foreach(collect($kelengkapan)->chunk(2) as $chunk)
         <tr>
@@ -119,16 +101,16 @@
 </table>
 @endif
 
-{{-- Type-specific acceptance / setup / condition checklist --}}
+{{-- Acceptance / setup / condition checklist, two per row --}}
 @if(!empty($document['checklist']))
-<table>
+<table class="form">
     <tr><th class="section-head" colspan="4">CHECKLIST {{ strtoupper($variant) }}</th></tr>
     @foreach(collect($document['checklist'])->chunk(2) as $chunk)
         <tr>
             @foreach($chunk as $check)
                 @php($result = $check['result'] ?? 'na')
                 <td>{{ $check['item'] }}</td>
-                <td class="{{ $result === 'fail' ? 'fail' : ($result === 'pass' ? 'pass' : '') }}" style="width:14%">
+                <td class="check-cell {{ $result === 'fail' ? 'fail' : ($result === 'pass' ? 'pass' : '') }}">
                     {{ ['pass' => 'YA / PASS', 'fail' => 'TIDAK / FAIL', 'na' => 'N/A'][$result] ?? 'N/A' }}
                 </td>
             @endforeach
@@ -137,12 +119,11 @@
             @endif
         </tr>
     @endforeach
-    <tr><td class="label">Lain-Lain</td><td colspan="3" class="extra-room"></td></tr>
 </table>
 @endif
 
 {{-- Timing --}}
-<table>
+<table class="form">
     <tr><th class="section-head" colspan="2">{{ $timeLetter }}. WAKTU</th></tr>
     <tr><td class="label">{{ $copyView['handover_date'] ?? 'Tanggal Penyerahan' }}</td><td>{{ $blank($handover['date_long'] ?? ($handover['date'] ?? null)) }}</td></tr>
     <tr><td class="label">{{ $copyView['received_date'] ?? 'Tanggal Diterima' }}</td><td>{{ $blank($handover['received_long'] ?? ($handover['received_date'] ?? null)) }}</td></tr>
@@ -153,22 +134,12 @@
 </table>
 
 {{-- Statement / legal clause --}}
-<table>
-    <tr><th class="section-head">{{ $statementLetter }}. PERNYATAAN / KLAUSUL</th></tr>
-    <tr><td class="statement">{{ $document['statement'] ?? ($copyView['statement'] ?? '-') }}</td></tr>
+<table class="form">
+    <tr><th class="section-head" colspan="2">{{ $statementLetter }}. PERNYATAAN / KLAUSUL</th></tr>
+    <tr><td class="statement" colspan="2">{{ $document['statement'] ?? ($copyView['statement'] ?? '-') }}</td></tr>
 </table>
 
-{{-- Signatures: typed names printed under the line, wet signatures as images --}}
-<style>
-    .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
-    .sign-grid th { border: 1px solid #9ca3af; background: #e2e8f0; font-weight: bold; text-align: center; font-size: 8px; text-transform: uppercase; letter-spacing: .04em; color: #334155; padding: 3px 6px; }
-    .sign-grid td { border: 1px solid #9ca3af; width: 50%; height: 72px; vertical-align: top; padding: 5px; }
-    .sign-cell-role { font-size: 8px; font-weight: 700; color: #344054; margin-bottom: 2px; }
-    .sign-cell-dashed { border-bottom: 1px dashed #6b7280; margin: 3px 0; height: 1px; }
-    .sign-cell-name { font-size: 8.5px; font-weight: 700; text-align: center; margin-top: 2px; color: #111827; }
-    .sign-cell-date { font-size: 7px; color: #475569; text-align: center; }
-    .sign-cell-image { display: block; height: 30px; max-width: 100%; margin: 2px auto; }
-</style>
+{{-- Signatures --}}
 <table class="sign-grid">
     <tr>
         <th colspan="2">Diperiksa dan Diterima Oleh</th>

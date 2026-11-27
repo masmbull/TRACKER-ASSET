@@ -16,6 +16,13 @@
     $slow = collect($services)->where('status', 'ok')->where('ms', '>=', 500)->count();
 @endphp
 
+@if(!empty($error ?? null))
+    <x-card class="mb-4 border-error-200 bg-error-50 dark:border-error-500/20 dark:bg-error-500/10">
+        <p class="text-theme-sm font-semibold text-error-700 dark:text-error-300">{{ $error }}</p>
+        <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">The checks could not run. This page is still available so the failure is visible rather than a 500.</p>
+    </x-card>
+@endif
+
 <section data-live-region="services" aria-label="Service and engine health">
     <div class="services-summary-grid mb-4">
         <div class="services-summary-item"><x-icon name="services.index" class="h-5 w-5 text-gray-500" /><span class="services-summary-label">Services</span><strong>{{ $total }}</strong></div>

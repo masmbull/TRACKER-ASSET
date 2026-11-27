@@ -121,4 +121,69 @@ class RemoteTest extends TestCase
             ->assertJsonPath('credentials.id', '87654321')
             ->assertJsonPath('credentials.password', 'Pass123');
     }
+
+    public function test_fleet_remote_queues_a_credential_read_for_one_device(): void
+    {
+        $token = $this->enrollAgent();
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('agent.remote', $token))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $command = AgentCommand::findOrFail($response->json('command_ids.0'));
+        $this->assertSame($token->id, $command->agent_token_id);
+        $this->assertSame(ScriptPresets::READ_ULTRAVIEWER_CREDENTIALS, $command->payload['script_body']);
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'REMOTE',
+            'entity_type' => 'agent_tokens',
+            'entity_id' => $token->id,
+        ]);
+    }
+
+    public function test_command_status_exposes_a_signed_protocol_url(): void
+    {
+        $token = $this->enrollAgent();
+        $command = AgentCommand::create([
+            'agent_token_id' => $token->id,
+            'command' => 'script',
+            'status' => 'done',
+            'payload' => [],
+            'result' => ['stdout' => "UV_ID=12345678\nUV_PASS=Abc123\n"],
+        ]);
+
+        $url = $this->actingAs($this->admin)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->json('remote_url');
+
+        $this->assertStringStartsWith('tracker-remote:', $url);
+        [$encoded, $signature] = explode('.', substr($url, strlen('tracker-remote:')));
+        $this->assertSame(
+            base64_encode(hash_hmac('sha256', $encoded, config('app.key'), true)),
+            $signature
+        );
+    }
+
+    public function test_protocol_setup_registers_the_browser_handler(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('agent.remote.protocol'));
+
+        $response->assertOk()
+            ->assertHeader('Content-Disposition', 'attachment; filename="tracker-remote-setup.reg"');
+        $response->assertSee('[HKEY_CURRENT_USER\\Software\\Classes\\tracker-remote]', false);
+        $response->assertSee('"URL Protocol"=""', false);
+        $response->assertSee('-EncodedCommand', false);
+    }
+
+    public function test_fleet_page_offers_remote_on_each_device_row(): void
+    {
+        $token = $this->enrollAgent();
+
+        $this->actingAs($this->admin)
+            ->get(route('agent.fleet'))
+            ->assertOk()
+            ->assertSee('action="'.route('agent.remote', $token).'"', false)
+            ->assertSee('data-modal-action', false);
+    }
 }
