@@ -54,23 +54,13 @@ class AgentTokenController extends Controller
 
     private function streamBinary(Request $request)
     {
-        // The current release owns its own file; fall back to the legacy shared
-        // binary for any release row that predates per-release storage, so an
-        // environment mid-migration still serves what it did before.
-        $current = AgentRelease::current();
-        $exePath = ($current && $current->hasBinary())
-            ? $current->absolutePath()
-            : storage_path('app/agent/TrackerAgent.exe');
+        // Never silently serve the legacy shared binary: it is a persistent
+        // volume and can be any old build (the observed case was 1.7.32 while
+        // the shipped build was 1.7.39). That made "Update from Live Fleet"
+        // install an older exe and still ack success.
+        [$exePath, $version] = $this->resolveBinary();
 
-        // Last resort: a binary shipped with the application image. Storage is
-        // a persistent volume and is empty on a fresh deployment, so without
-        // this fallback every new server answers 404 until an operator
-        // manually runs agent:pull - even though the build is right there.
-        if (! is_file($exePath) && is_file(public_path('agent/TrackerAgent.exe'))) {
-            $exePath = public_path('agent/TrackerAgent.exe');
-        }
-
-        if (! is_file($exePath)) {
+        if ($exePath === null) {
             return response('Agent executable not found. Build and ship the agent first.', 404);
         }
 
@@ -87,7 +77,74 @@ class AgentTokenController extends Controller
         }, 'TrackerAgent.exe', [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
             'Content-Length' => $size,
+            // Lets the agent reject a stale download before it swaps. A HEAD
+            // request is cheap; installing the wrong build is not.
+            'X-Agent-Version' => $version ?? '',
         ]);
+    }
+
+    /**
+     * @return array{0: string|null, 1: string|null} path and release version
+     */
+    private function resolveBinary(): array
+    {
+        $current = AgentRelease::current();
+
+        if ($current && $current->hasBinary() && is_file($current->absolutePath())) {
+            return [$current->absolutePath(), $current->version];
+        }
+
+        // The build shipped with this image is authoritative when a release row
+        // exists but its file was never uploaded. Reassemble it into storage so
+        // the streaming path stays identical for every source.
+        $parts = glob(resource_path('agent-build/TrackerAgent.exe.part*')) ?: [];
+        sort($parts);
+
+        if ($parts !== []) {
+            $target = storage_path('app/agent/TrackerAgent.exe');
+            $expectedSize = array_sum(array_map('filesize', $parts));
+
+            if (! is_file($target) || filesize($target) !== $expectedSize) {
+                $tmp = $target.'.tmp';
+                $out = fopen($tmp, 'wb');
+
+                if ($out !== false) {
+                    foreach ($parts as $part) {
+                        $in = fopen($part, 'rb');
+                        if ($in === false) {
+                            continue;
+                        }
+                        while (! feof($in)) {
+                            fwrite($out, fread($in, 1024 * 1024));
+                        }
+                        fclose($in);
+                    }
+                    fclose($out);
+                    rename($tmp, $target);
+                }
+            }
+
+            if (is_file($target)) {
+                return [$target, $this->shippedVersion()];
+            }
+        }
+
+        // Last resort for an environment with neither a release file nor the
+        // packaged parts. No version is advertised, so the agent can refuse it.
+        $legacy = storage_path('app/agent/TrackerAgent.exe');
+
+        return [is_file($legacy) ? $legacy : null, null];
+    }
+
+    private function shippedVersion(): ?string
+    {
+        $csproj = base_path('agent/TrackerAgent/TrackerAgent.csproj');
+
+        if (is_file($csproj) && preg_match('/<Version>([^<]+)<\/Version>/', (string) file_get_contents($csproj), $m)) {
+            return trim($m[1]);
+        }
+
+        return null;
     }
 
     /**

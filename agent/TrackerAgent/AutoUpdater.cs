@@ -191,6 +191,20 @@ public static class AutoUpdater
                 return false;
             }
 
+            // A stale file on the server's persistent volume used to be served
+            // without complaint: the agent swapped in an older build, acked
+            // "done", and the tray still showed the old version. Refuse anything
+            // that is not newer than the running exe.
+            var downloadedVersion = FileVersionInfo.GetVersionInfo(tempNewExe).ProductVersion;
+            var installedVersion = FileVersionInfo.GetVersionInfo(currentExe).ProductVersion;
+            if (! IsNewerBuild(downloadedVersion, installedVersion))
+            {
+                Console.Error.WriteLine(
+                    $"[X] Server served build {downloadedVersion ?? "unknown"}, not newer than installed {installedVersion ?? "unknown"}. Refusing to swap.");
+                try { File.Delete(tempNewExe); } catch { }
+                return false;
+            }
+
             // Download is the whole wait (160 MB), so report it complete before
             // the near-instant swap: an operator watching the bar sees it move
             // through download and finish, instead of sitting at 5% until the
@@ -298,5 +312,25 @@ del /f /q ""%~f0"" >nul 2>&1
             Console.Error.WriteLine($"[X] Auto-update failed: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// ProductVersion carries a "+git hash" suffix. Compare only the numeric
+    /// part. An unreadable version leaves the old behaviour intact rather than
+    /// blocking an update on a machine whose exe lacks version metadata.
+    /// </summary>
+    private static bool IsNewerBuild(string? candidate, string? installed)
+    {
+        static Version? Parse(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            return Version.TryParse(value.Split('+')[0].Trim(), out var parsed) ? parsed : null;
+        }
+
+        var downloaded = Parse(candidate);
+        var running = Parse(installed);
+
+        return downloaded is null || running is null || downloaded > running;
     }
 }
