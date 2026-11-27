@@ -159,6 +159,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/agent/releases/{release}/push', [AgentReleaseController::class, 'push'])->name('agent.releases.push');
         Route::delete('/agent/releases/{release}', [AgentReleaseController::class, 'destroy'])->name('agent.releases.destroy');
 
+        // One-time browser setup for remote: a .reg that registers the signed
+        // tracker-remote: protocol. Declared before token-scoped GETs so the
+        // literal "remote" can never be read as a token id.
+        Route::get('/agent/remote/protocol', [RemoteController::class, 'protocol'])->name('agent.remote.protocol');
+
         Route::get('/agent/fleet', [AgentFleetController::class, 'index'])->name('agent.fleet');
         Route::get('/agent/fleet/refresh', [AgentFleetController::class, 'refresh'])->name('agent.fleet.refresh');
         Route::get('/agent/commands', [AgentFleetController::class, 'commands'])->name('agent.commands');
@@ -183,6 +188,9 @@ Route::middleware('auth')->group(function () {
         // be prefetched or crawled should not be able to power a laptop on.
         Route::post('/agent/{token}/wake', [AgentFleetController::class, 'wake'])->name('agent.wake');
         Route::post('/agent/{token}/power', [AgentFleetController::class, 'power'])->name('agent.power');
+        // Reads the live UltraViewer credentials from this laptop and opens the
+        // same progress dialog the asset page used to own.
+        Route::post('/agent/{token}/remote', [RemoteController::class, 'remoteToken'])->name('agent.remote');
 
         // A .rdp file the browser hands to the operator. It only reads, so it
         // is a GET - the browser downloads it and Windows opens it.

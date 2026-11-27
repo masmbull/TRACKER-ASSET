@@ -198,7 +198,15 @@ class DocumentGenerationService
                 'menyerahkan' => $input['signatory_menyerahkan'] ?? null,
                 'menerima' => filled($input['signatory_menerima'] ?? null) ? $input['signatory_menerima'] : ($parties['receiver']['name'] ?? null),
                 'mengetahui' => $input['signatory_mengetahui'] ?? null,
-                'it' => filled($input['signatory_it'] ?? null) ? $input['signatory_it'] : ($parties['sender']['name'] ?? null),
+                // The signature box is the IT/Penyerah box. Its name must follow
+                // "Nama Penyerah" from section A - that is the field people edit.
+                // "IT / Nama Karyawan" in section F is an override for the case
+                // where the person signing is not the person handing over, and
+                // is deliberately left blank by default so it cannot shadow the
+                // name they just typed.
+                'it' => filled($input['signatory_it'] ?? null)
+                    ? $input['signatory_it']
+                    : ($input['signatory_menyerahkan'] ?? ($parties['sender']['name'] ?? null)),
                 'menyerahkan_date' => $this->longDate($input['signatory_menyerahkan_date'] ?? null),
                 'menerima_date' => $this->longDate($input['signatory_menerima_date'] ?? null),
                 'it_date' => $this->longDate($input['signatory_it_date'] ?? null),
@@ -381,14 +389,13 @@ class DocumentGenerationService
     private function viewFor(string $type): string
     {
         return match ($type) {
-            'FAT' => 'documents.pdf.fat',
             'BAST' => 'documents.pdf.bast',
-            'HANDOVER' => 'documents.pdf.handover',
-            'TRANSFER' => 'documents.pdf.transfer',
-            'RETURN' => 'documents.pdf.return',
             'REPAIR' => 'documents.pdf.repair',
             'DISPOSAL' => 'documents.pdf.disposal',
-            default => 'documents.pdf.assignment',
+            'ASSIGNMENT' => 'documents.pdf.assignment',
+            // FAT covers transfer, handover and return; a legacy document
+            // recorded under one of those old types still renders the same sheet.
+            default => 'documents.pdf.fat',
         };
     }
 

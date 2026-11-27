@@ -11,6 +11,13 @@
                 <x-button type="submit" variant="secondary" size="sm">Scan All Devices</x-button>
             </form>
             <x-button type="button" variant="primary" size="sm" @click="$dispatch('open-modal', 'confirm-update-all-agents')">Update All Agents</x-button>
+            {{-- One-time setup on the operator's own PC: lets the browser open
+                 UltraViewer straight from the Remote result dialog. --}}
+            <a href="{{ route('agent.remote.protocol') }}" download
+               title="Install the tracker-remote protocol once on this PC so Remote opens UltraViewer automatically"
+               class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-theme-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <x-icon name="remote" class="h-4 w-4" /> Remote setup
+            </a>
         </div>
     </x-slot:actions>
 </x-page-header>
@@ -242,8 +249,20 @@
                                 <span class="text-gray-400">—</span>
                             @endif
                         </td>
-                        <td class="py-3 px-3 text-theme-sm text-gray-500 dark:text-gray-400">
-                            —
+                        <td class="py-3 px-3">
+                            @if($device->isUsable())
+                                <form method="POST" action="{{ route('agent.remote', $device) }}" data-modal-action class="inline-flex">
+                                    @csrf
+                                    {{-- Reads this laptop's live UltraViewer ID/password and opens the
+                                         UltraViewer window on the operator's machine. --}}
+                                    <x-row-action type="submit" variant="info" icon="remote"
+                                                  title="Read the current UltraViewer ID and password from this laptop, then open a remote session">
+                                        Remote
+                                    </x-row-action>
+                                </form>
+                            @else
+                                <span class="text-gray-400">—</span>
+                            @endif
                         </td>
                         <td class="py-3 px-3 text-theme-sm text-gray-700 dark:text-gray-300" data-fleet-admin-elevated>
                             @php
