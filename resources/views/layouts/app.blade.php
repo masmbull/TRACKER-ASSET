@@ -784,12 +784,37 @@
                             // never silently drop them into a generic toast.
                             let resultHtml;
                             if (state.credentials && state.credentials.id && state.credentials.password) {
+                                // Hand the signed URL to the browser. When the
+                                // operator has run the one-time registry setup,
+                                // this opens UltraViewer with -i/-p immediately.
+                                // The buttons below remain as fallbacks: a browser
+                                // may ask for confirmation, or the setup may not
+                                // have been installed on this machine yet.
+                                if (state.remote_url) {
+                                    try {
+                                        const remoteLink = document.createElement('a');
+                                        remoteLink.href = state.remote_url;
+                                        remoteLink.style.display = 'none';
+                                        document.body.appendChild(remoteLink);
+                                        remoteLink.click();
+                                        remoteLink.remove();
+                                    } catch (ignored) {
+                                        // The explicit button still works.
+                                    }
+                                }
+
                                 resultHtml = '<div class="tracker-remote-result">'
                                     + '<p class="mb-2 text-sm text-gray-600 dark:text-gray-300">UltraViewer reported these credentials for this laptop:</p>'
                                     + '<p class="mb-1 text-sm"><strong>ID:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.id) + '</code></p>'
                                     + '<p class="mb-3 text-sm"><strong>Password:</strong> <code class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">' + escapeHtml(state.credentials.password) + '</code></p>'
-                                    + '<a href="/agent/commands/' + commandId + '/launcher" class="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Download one-click launcher</a>'
-                                    + '<p class="mt-3 text-xs text-gray-400">The launcher starts UltraViewer with these credentials. They change on the next restart.</p>'
+                                    + '<div class="flex flex-wrap gap-2">'
+                                    + (state.remote_url
+                                        ? '<a href="' + escapeHtml(state.remote_url) + '" class="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Buka UltraViewer</a>'
+                                        : '')
+                                    + '<a href="/agent/commands/' + commandId + '/launcher" class="inline-flex items-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Download launcher</a>'
+                                    + '<a href="/agent/remote/protocol" download class="inline-flex items-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">Setup sekali</a>'
+                                    + '</div>'
+                                    + '<p class="mt-3 text-xs text-gray-400">“Buka UltraViewer” membuka jendela koneksi otomatis setelah setup sekali dijalankan. Tanpa setup, unduh launcher lalu jalankan. Kredensial berubah saat UltraViewer restart.</p>'
                                     + '</div>';
                             }
                             finishWithAlert(
