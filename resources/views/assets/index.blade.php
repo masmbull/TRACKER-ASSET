@@ -90,7 +90,7 @@
 </x-card>
 
 @if($assets->count() > 0)
-    <div class="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         @foreach($assets as $asset)
             @php
                 $badgeMap = ['Active' => 'success', 'Available' => 'brand', 'Assigned' => 'warning', 'Repair' => 'orange', 'Retired' => 'gray', 'Disposed' => 'error'];
@@ -101,7 +101,7 @@
                     $asset->category?->name, $asset->status?->name,
                 ])));
             @endphp
-            <article class="asset-card group cursor-pointer min-h-[360px] rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-md dark:border-gray-800 dark:bg-gray-900 flex flex-col"
+            <article class="asset-card group cursor-pointer rounded-xl border border-gray-200 bg-white p-3 shadow-theme-xs transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-md dark:border-gray-800 dark:bg-gray-900 flex flex-col"
                      role="button" tabindex="0"
                      data-search="{{ $searchText }}"
                      data-status="{{ $asset->status?->id }}"
@@ -120,20 +120,19 @@
                     @endif
                 </div>
 
-                <p class="mt-3 truncate text-theme-sm font-semibold text-gray-800 dark:text-white">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) ?: '—' }}</p>
-                <dl class="mt-2 space-y-1 text-theme-xs">
-                    <div class="flex justify-between gap-2"><dt class="text-gray-400">Serial</dt><dd class="truncate font-mono text-gray-600 dark:text-gray-300">{{ $asset->serial_number ?: '—' }}</dd></div>
-                    <div class="flex justify-between gap-2"><dt class="text-gray-400">Hostname</dt><dd class="truncate font-mono text-gray-600 dark:text-gray-300">{{ $asset->hostname ?: '—' }}</dd></div>
-                    <div class="flex justify-between gap-2"><dt class="text-gray-400">User</dt><dd class="truncate text-gray-600 dark:text-gray-300">{{ $asset->currentUser?->name ?: '—' }}</dd></div>
-                    <div class="flex justify-between gap-2"><dt class="text-gray-400">Location</dt><dd class="truncate text-gray-600 dark:text-gray-300">{{ $asset->location?->name ?: '—' }}</dd></div>
+                <p class="mt-2 truncate text-theme-sm font-semibold text-gray-800 dark:text-white">{{ trim(($asset->brand ?? '').' '.($asset->model ?? '')) ?: '—' }}</p>
+                <dl class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-theme-xs">
+                    <dt class="text-gray-400">S/N</dt><dd class="truncate font-mono text-gray-600 dark:text-gray-300">{{ $asset->serial_number ?: '—' }}</dd>
+                    <dt class="text-gray-400">Host</dt><dd class="truncate font-mono text-gray-600 dark:text-gray-300">{{ $asset->hostname ?: '—' }}</dd>
+                    <dt class="text-gray-400">User</dt><dd class="truncate text-gray-600 dark:text-gray-300">{{ $asset->currentUser?->name ?: '—' }}</dd>
                 </dl>
 
-                <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800">
-                    <span class="text-theme-xs font-medium text-brand-500 group-hover:text-brand-600">Open details →</span>
+                <div class="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-800">
+                    <span class="text-theme-xs font-medium text-brand-500 group-hover:text-brand-600">Details →</span>
                     @if($asset->hasQr())
-                        <x-badge variant="success">QR ready</x-badge>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-success-50 px-1.5 py-0.5 text-[10px] font-medium text-success-700 dark:bg-success-500/10 dark:text-success-300"><span class="h-1.5 w-1.5 rounded-full bg-success-500"></span> QR</span>
                     @else
-                        <x-badge variant="gray">No QR</x-badge>
+                        <span class="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">No QR</span>
                     @endif
                 </div>
             </article>

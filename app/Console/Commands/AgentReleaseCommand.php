@@ -120,6 +120,12 @@ class AgentReleaseCommand extends Command
 
             Storage::disk('local')->put($stored, fopen($file, 'rb'));
 
+            // Also keep the shared path current. Older deployments (and the
+            // download route's fallback) look for storage/app/agent/TrackerAgent.exe;
+            // without this copy those environments answer "executable not found"
+            // even though a versioned release row exists in the database.
+            Storage::disk('local')->put('agent/TrackerAgent.exe', fopen($file, 'rb'));
+
             $release = AgentRelease::ship($version, $this->option('notes'));
             $release->update(['file_path' => $stored, 'file_size' => $size, 'sha256' => $sha]);
 
