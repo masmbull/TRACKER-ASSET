@@ -62,6 +62,14 @@ class AgentTokenController extends Controller
             ? $current->absolutePath()
             : storage_path('app/agent/TrackerAgent.exe');
 
+        // Last resort: a binary shipped with the application image. Storage is
+        // a persistent volume and is empty on a fresh deployment, so without
+        // this fallback every new server answers 404 until an operator
+        // manually runs agent:pull - even though the build is right there.
+        if (! is_file($exePath) && is_file(public_path('agent/TrackerAgent.exe'))) {
+            $exePath = public_path('agent/TrackerAgent.exe');
+        }
+
         if (! is_file($exePath)) {
             return response('Agent executable not found. Build and ship the agent first.', 404);
         }
