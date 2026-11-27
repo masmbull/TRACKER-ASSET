@@ -74,11 +74,19 @@ class AgentTokenController extends Controller
             return response('Agent executable not found. Build and ship the agent first.', 404);
         }
 
-        return response()->streamDownload(function () use ($exePath, $request) {
+        // Build the trailer once so the response can carry a real Content-Length.
+        // Without it the agent's progress loop (which divides bytes copied by
+        // Content-Length) never advances past its initial 5% and the command
+        // looks stalled even though the 160 MB transfer is healthy.
+        $trailer = self::buildConfigTrailer($request);
+        $size = filesize($exePath) + strlen($trailer);
+
+        return response()->streamDownload(function () use ($exePath, $trailer) {
             self::streamBinaryFile($exePath);
-            echo self::buildConfigTrailer($request);
+            echo $trailer;
         }, 'TrackerAgent.exe', [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
+            'Content-Length' => $size,
         ]);
     }
 

@@ -2,12 +2,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 
 namespace TrackerAgent;
 
 public static class AutoUpdater
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(2) };
+    // A 160 MB single-file build takes well over two minutes on a slow link.
+    // The old timeout aborted the transfer and left the command stuck at 5%.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
 
     public static bool CheckForUpdate(string serverUrl, string token, out string message)
     {
@@ -148,6 +151,7 @@ public static class AutoUpdater
                 var buffer = new byte[81920];
                 long copied = 0;
                 var lastReport = 0;
+                var lastReportAt = DateTime.UtcNow;
 
                 int read;
                 while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
@@ -155,15 +159,24 @@ public static class AutoUpdater
                     fs.Write(buffer, 0, read);
                     copied += read;
 
-                    if (total > 0 && onProgress != null)
+                    if (onProgress != null)
                     {
-                        // 5%..85% spans the transfer; the rest is the swap. Only
-                        // every ~5% so we are not posting a request per 80 KB.
-                        var pct = 5 + (int)(copied * 80 / total);
-                        if (pct >= lastReport + 5)
+                        // 5%..85% spans the transfer. When the server streams
+                        // without Content-Length (Laravel streamDownload), fall
+                        // back to a byte-based estimate and a time heartbeat so
+                        // the bar and the command's updated_at keep moving.
+                        var pct = total > 0
+                            ? 5 + (int)(copied * 80 / total)
+                            : 5 + (int)Math.Min(80, copied / (2L * 1024 * 1024));
+                        var now = DateTime.UtcNow;
+                        if (pct >= lastReport + 5 || now - lastReportAt > TimeSpan.FromSeconds(10))
                         {
-                            lastReport = pct;
-                            onProgress(pct, $"Downloading the new version… ({pct}%)");
+                            lastReport = Math.Max(lastReport, pct);
+                            lastReportAt = now;
+                            var detail = total > 0
+                                ? $"{pct}%"
+                                : $"{copied / 1024 / 1024} MB";
+                            onProgress(pct, $"Downloading the new version… ({detail})");
                         }
                     }
                 }
@@ -210,10 +223,12 @@ public static class AutoUpdater
                 ? $"schtasks /Run /TN \"{AgentRunner.SystemTaskNameForRestart}\" >nul 2>&1"
                 : "if exist \"%TARGET%\" start \"\" \"%TARGET%\"";
 
+            var statusPath = Path.Combine(currentDir, $"_update_status_{Guid.NewGuid():N}.txt");
             var scriptContent = $@"@echo off
 timeout /t 3 /nobreak >nul
 set ""TARGET={currentExe}""
 set ""NEW={tempNewExe}""
+set ""STATUS={statusPath}""
 set /a tries=0
 
 :retry
@@ -226,12 +241,14 @@ goto retry
 
 :install
 move /y ""%NEW%"" ""%TARGET%"" >nul 2>&1
+if exist ""%TARGET%"" (echo swapped > ""%STATUS%"") else (echo failed > ""%STATUS%"")
 goto launch
 
 :fallback
-rem Could not replace the exe. Leave the working one in place and start it, so
-rem the machine keeps its agent rather than going dark.
+rem Could not replace the exe. Keep the working one, but record the failure so
+rem the caller does NOT ack this update as done while still running the old build.
 if exist ""%NEW%"" del /f /q ""%NEW%"" >nul 2>&1
+echo fallback > ""%STATUS%""
 
 :launch
 {restartLine}
@@ -248,8 +265,32 @@ del /f /q ""%~f0"" >nul 2>&1
             };
 
             Process.Start(startInfo);
-            Console.WriteLine("[OK] Update runner spawned. Exiting current process for swap.");
-            return true;
+
+            // Wait briefly for the helper to report whether the swap actually
+            // happened. The old code acked "done" even when the helper had to
+            // fall back and left the previous build in place - which is why the
+            // fleet showed a successful update while the laptop kept its old
+            // version.
+            var status = string.Empty;
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                if (File.Exists(statusPath))
+                {
+                    status = File.ReadAllText(statusPath).Trim();
+                    break;
+                }
+                Thread.Sleep(500);
+            }
+            try { File.Delete(statusPath); } catch { }
+
+            if (status == "swapped")
+            {
+                Console.WriteLine("[OK] Update runner swapped the executable successfully.");
+                return true;
+            }
+
+            Console.Error.WriteLine($"[X] Update swap did not complete (status: '{status}'). Keeping the current build; update reported as failed.");
+            return false;
         }
         catch (Exception ex)
         {
