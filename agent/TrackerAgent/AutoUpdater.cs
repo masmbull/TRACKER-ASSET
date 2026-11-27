@@ -173,10 +173,11 @@ public static class AutoUpdater
                         {
                             lastReport = Math.Max(lastReport, pct);
                             lastReportAt = now;
-                            var detail = total > 0
-                                ? $"{pct}%"
-                                : $"{copied / 1024 / 1024} MB";
-                            onProgress(pct, $"Downloading the new version… ({detail})");
+                            // Clean stage: the server's progressLabel() adds the
+                            // percentage itself. Including it here produced
+                            // "…(15%) (15%) · 20s" in the dialog.
+                            var detail = total > 0 ? null : $" ({copied / 1024 / 1024} MB)";
+                            onProgress(pct, "Downloading the new version…" + detail);
                         }
                     }
                 }

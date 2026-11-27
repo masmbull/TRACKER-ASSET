@@ -5,8 +5,14 @@
  */
 return [
 
-    // Document types that can be generated automatically.
-    'types' => ['FAT', 'BAST', 'TRANSFER', 'RETURN', 'ASSIGNMENT'],
+    // Document types that can be generated automatically. The library follows
+    // the office's official FAT/BAST sheets and common IT asset forms used
+    // elsewhere: transfer, handover/issue, return/offboarding, internal
+    // transfer, assignment, repair intake and disposal/retirement.
+    'types' => [
+        'FAT', 'BAST', 'TRANSFER', 'HANDOVER', 'RETURN',
+        'ASSIGNMENT', 'REPAIR', 'DISPOSAL',
+    ],
 
     /*
     | Numbering format per type. Tokens: {year}, {seq:N} (N-digit, zero-padded).
@@ -17,8 +23,11 @@ return [
         'FAT' => 'FAT/IT-{month}-{year}/{seq:4}',
         'BAST' => 'BAST/IT-{month}-{year}/{seq:4}',
         'TRANSFER' => 'AST/TRF-{month}-{year}/{seq:4}',
+        'HANDOVER' => 'AST/HDO-{month}-{year}/{seq:4}',
         'RETURN' => 'AST/RET-{month}-{year}/{seq:4}',
         'ASSIGNMENT' => 'AST/ASG-{month}-{year}/{seq:4}',
+        'REPAIR' => 'AST/RPR-{month}-{year}/{seq:4}',
+        'DISPOSAL' => 'AST/DSP-{month}-{year}/{seq:4}',
     ],
 
     /*
@@ -39,6 +48,50 @@ return [
             'Processor/RAM/Storage sesuai data terdaftar',
             'OS terinstal dan berjalan normal',
             'Aksesoris lengkap sesuai catatan serah terima',
+        ],
+        'TRANSFER' => [
+            'Aset dalam kondisi operasional',
+            'Kerusakan/cacat yang diketahui telah didokumentasikan',
+            'Status servis/pemeliharaan terkonfirmasi',
+            'Foto kondisi terkini diambil',
+            'Semua aksesoris dan lampiran tercantum',
+            'Kunci, manual, dan dokumen disertakan',
+            'Penerima menyetujui kondisi yang tercantum',
+            'Register aset diperbarui (dari lokasi asal)',
+            'Register aset diperbarui (ke lokasi tujuan)',
+        ],
+        'HANDOVER' => [
+            'Perangkat terdaftar di device management (MDM)',
+            'Full-disk encryption aktif',
+            'OS & patch keamanan terinstal',
+            'Endpoint protection aktif dan melapor',
+            'Akun user dibuat dengan hak akses minimum',
+            'Lisensi dan akun aplikasi ditugaskan',
+            'Multi-factor authentication diaktifkan',
+            'Backup / sinkronisasi dikonfigurasi',
+            'Kebijakan acceptable use disampaikan ke penerima',
+        ],
+        'RETURN' => [
+            'Semua item dan aksesoris dikembalikan',
+            'Data dicadangkan lalu perangkat dihapus/data dihapus',
+            'Akun user dinonaktifkan dan lisensi dilepas',
+            'Register diperbarui: pemegang dikosongkan',
+            'Kondisi perangkat dicatat saat pengembalian',
+        ],
+        'REPAIR' => [
+            'User telah mencadangkan data sebelum perbaikan',
+            'Keluhan/permasalahan dicatat lengkap',
+            'Diagnosa awal dilakukan',
+            'Perangkat diterima oleh IT',
+            'Perbaikan selesai / status akhir dicatat',
+            'Perangkat dikembalikan ke user',
+        ],
+        'DISPOSAL' => [
+            'Nilai buku dan alasan pemusnahan tercantum',
+            'Persetujuan atasan diperoleh',
+            'Data dihapus permanen / perangkat dihapus aman',
+            'Aset dihapus dari register',
+            'Bukti pemusnahan/penjualan dilampirkan',
         ],
     ],
 
@@ -70,6 +123,26 @@ return [
             'handover_date' => 'Tanggal Penyerahan',
             'received_date' => 'Tanggal Diterima',
             'statement' => 'Aset ini diserahkan kepada penerima untuk dipergunakan dalam pelaksanaan tugas dan tanggung jawabnya. Penerima wajib menjaga, memelihara, dan menggunakan aset secara bertanggung jawab, serta mengembalikannya kepada pihak penyerah setelah tugas selesai atau sesuai dengan ketentuan yang berlaku.',
+        ],
+        'TRANSFER' => [
+            'handover_date' => 'Tanggal Transfer',
+            'received_date' => 'Tanggal Diterima',
+            'statement' => 'Dengan ditandatanganinya dokumen ini, kedua pihak menyatakan bahwa aset beserta kelengkapannya telah ditransfer dalam kondisi yang tercantum. Penerima bertanggung jawab atas keutuhan dan penggunaan aset sejak tanggal transfer.',
+        ],
+        'HANDOVER' => [
+            'handover_date' => 'Tanggal Penyerahan',
+            'received_date' => 'Tanggal Diterima',
+            'statement' => 'Saya telah menerima perangkat yang tercantum dalam kondisi baik dan lengkap. Saya akan menggunakan perangkat sesuai kebijakan penggunaan dan keamanan informasi perusahaan, menjaga keamanannya, tidak memasang perangkat lunak yang tidak disetujui, serta melaporkan kehilangan atau kerusakan dalam waktu 24 jam. Perangkat tetap milik perusahaan dan wajib dikembalikan bersama aksesorisnya apabila diminta atau saat hubungan kerja berakhir.',
+        ],
+        'REPAIR' => [
+            'handover_date' => 'Tanggal Penyerahan ke IT',
+            'received_date' => 'Tanggal Pengembalian',
+            'statement' => 'Perangkat diserahkan kepada IT untuk didiagnosa dan diperbaiki. User telah mencadangkan data penting sebelum penyerahan. IT tidak bertanggung jawab atas data yang tidak dicadangkan.',
+        ],
+        'DISPOSAL' => [
+            'handover_date' => 'Tanggal Pemusnahan',
+            'received_date' => 'Tanggal Pencatatan',
+            'statement' => 'Aset dinyatakan tidak dapat digunakan lagi / tidak economically repairable dan diusulkan untuk dihapus dari register setelah data dihapus permanen dan persetujuan diperoleh.',
         ],
     ],
 
@@ -104,6 +177,10 @@ return [
         'TRANSFER' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
         'RETURN' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
         'ASSIGNMENT' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+        'HANDOVER' => ['Laptop/PC', 'Charger', 'Mouse', 'Tas', 'Keyboard', 'Kabel LAN', 'Dokumen/Manual', 'Accessories Lain'],
+        'TRANSFER' => ['Laptop', 'Charger', 'Mouse', 'Tas', 'Kunci', 'Manual', 'Accessories'],
+        'REPAIR' => ['Laptop/PC', 'Charger', 'Mouse', 'Tas', 'Accessories'],
+        'DISPOSAL' => ['Unit', 'Charger', 'Mouse', 'Tas', 'Kabel', 'Accessories'],
     ],
 
     // Wording carried on the face of the document, per type. The generic
@@ -115,6 +192,10 @@ return [
         'TRANSFER' => 'Berita Acara Transfer Aset IT',
         'RETURN' => 'Berita Acara Pengembalian Aset IT',
         'ASSIGNMENT' => 'Form Penyerahan Aset IT',
+        'HANDOVER' => 'Form Serah Terima Aset IT (Handover)',
+        'TRANSFER' => 'Berita Acara Transfer Aset IT',
+        'REPAIR' => 'Form Serah Terima Perangkat untuk Perbaikan',
+        'DISPOSAL' => 'Berita Acara Penghapusan Aset IT',
     ],
 
     // Generated PDFs live here (local MVP; SharePoint later, PRD §37).

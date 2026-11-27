@@ -48,7 +48,24 @@ class DocumentTemplateSeeder extends Seeder
             ]
         );
 
-        $this->command?->info('FAT/BAST pakem templates seeded.');
+        // The wider document library follows the same field schema. Each type
+        // gets a canonical template so the Templates page and the generation
+        // form have a real definition to point at, not just FAT/BAST.
+        foreach (['TRANSFER', 'HANDOVER', 'RETURN', 'ASSIGNMENT', 'REPAIR', 'DISPOSAL'] as $type) {
+            $label = config('documents.labels.'.$type, $type);
+
+            DocumentTemplate::updateOrCreate(
+                ['name' => $label.' — Pakem'],
+                [
+                    'document_type' => $type,
+                    'template_content' => $this->standardFields($type),
+                    'is_active' => true,
+                    'created_by' => $createdBy,
+                ]
+            );
+        }
+
+        $this->command?->info('FAT/BAST and 6 additional document templates seeded.');
     }
 
     /**
@@ -189,5 +206,73 @@ class DocumentTemplateSeeder extends Seeder
             'signatory_it' => $f('Penyerah Aset (IT) — Nama', 'text', $sig),
             'signatory_it_date' => $f('Penyerah Aset (IT) — Tanggal', 'date', $sig),
         ];
+    }
+
+    /**
+     * Canonical fields for the non-office-sheet document types. Sections follow
+     * the same A-F shape so an operator can move between document types without
+     * learning a different form, while the labels carry the type's own wording.
+     */
+    private function standardFields(string $type): array
+    {
+        $f = static fn (string $label, string $fieldType, string $section): array => [
+            'label' => $label,
+            'type' => $fieldType,
+            'section' => $section,
+        ];
+
+        $a = 'A. Informasi Pihak Pertama';
+        $b = 'B. Informasi Pihak Kedua';
+        $c = 'C. Informasi Aset';
+        $d = 'D. Kelengkapan Aset';
+        $e = 'E. Waktu';
+        $g = 'F. Pernyataan / Tanda Tangan';
+
+        $fields = [
+            'sender_name' => $f('Nama Pihak Pertama', 'text', $a),
+            'sender_employee_id' => $f('NIK / ID', 'text', $a),
+            'sender_entity' => $f('Entitas', 'text', $a),
+            'sender_division' => $f('Divisi / Jabatan', 'text', $a),
+            'sender_email' => $f('Email', 'email', $a),
+            'sender_phone' => $f('No. Telepon', 'tel', $a),
+
+            'receiver_name' => $f('Nama Pihak Kedua', 'text', $b),
+            'receiver_employee_id' => $f('NIK / ID', 'text', $b),
+            'receiver_entity' => $f('Entitas', 'text', $b),
+            'receiver_division' => $f('Divisi / Jabatan', 'text', $b),
+            'receiver_email' => $f('Email', 'email', $b),
+            'receiver_phone' => $f('No. Telepon', 'tel', $b),
+
+            'asset_type' => $f('Jenis Aset', 'text', $c),
+            'asset_brand_model' => $f('Brand & Model', 'text', $c),
+            'asset_serial_number' => $f('Serial Number', 'text', $c),
+            'asset_tag' => $f('Asset Tag / Inventory Code', 'text', $c),
+            'asset_processor' => $f('Processor', 'text', $c),
+            'asset_ram' => $f('RAM', 'text', $c),
+            'asset_storage' => $f('Storage', 'text', $c),
+            'asset_os_version' => $f('Sistem Operasi', 'text', $c),
+            'notes' => $f('Catatan', 'textarea', $c),
+        ];
+
+        foreach ((array) config('documents.kelengkapan.'.$type, []) as $index => $item) {
+            $fields['kelengkapan_'.$index] = $f($item, 'ada_tidak', $d);
+        }
+
+        $fields['handover_date'] = $f(config('documents.copy.'.$type.'.handover_date', 'Tanggal Penyerahan'), 'date', $e);
+        $fields['received_date'] = $f(config('documents.copy.'.$type.'.received_date', 'Tanggal Diterima'), 'date', $e);
+        $fields['purpose'] = $f('Keperluan', 'text', $e);
+        $fields['statement'] = $f('Pernyataan / Klausul', 'textarea', $g);
+        $fields['signatory_menerima'] = $f('Penerima — Nama', 'text', $g);
+        $fields['signatory_menerima_date'] = $f('Penerima — Tanggal', 'date', $g);
+        $fields['signatory_menyerahkan'] = $f('Penyerah — Nama', 'text', $g);
+        $fields['signatory_menyerahkan_date'] = $f('Penyerah — Tanggal', 'date', $g);
+        $fields['signatory_it'] = $f('IT — Nama', 'text', $g);
+        $fields['signatory_it_date'] = $f('IT — Tanggal', 'date', $g);
+
+        foreach ((array) config('documents.checklists.'.$type, []) as $index => $item) {
+            $fields['checklist_'.$index] = $f($item, 'pass_fail_na', 'Checklist '.strtoupper($type));
+        }
+
+        return $fields;
     }
 }

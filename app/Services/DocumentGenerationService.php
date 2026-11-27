@@ -360,10 +360,20 @@ class DocumentGenerationService
 
     private function renderPdf(string $type, array $payload, string $number, ?string $signatureImageData): string
     {
+        // Copy (date labels, statement) is type-specific and must reach the PDF;
+        // it used to be read in the Blade but never passed, so RETURN and
+        // ASSIGNMENT documents silently printed FAT wording.
+        $copy = array_merge(
+            (array) config('documents.copy.FAT', []),
+            (array) config('documents.copy.'.$type, [])
+        );
+
         return Pdf::loadView($this->viewFor($type), [
             'document' => $payload + [
                 'number' => $number,
+                'nomor_surat' => $payload['nomor_surat'] ?? $number,
                 'signature_image_data' => $signatureImageData,
+                'copy' => $copy,
             ],
         ])->setPaper('a4')->output();
     }
@@ -373,7 +383,12 @@ class DocumentGenerationService
         return match ($type) {
             'FAT' => 'documents.pdf.fat',
             'BAST' => 'documents.pdf.bast',
-            default => 'documents.pdf.generic',
+            'HANDOVER' => 'documents.pdf.handover',
+            'TRANSFER' => 'documents.pdf.transfer',
+            'RETURN' => 'documents.pdf.return',
+            'REPAIR' => 'documents.pdf.repair',
+            'DISPOSAL' => 'documents.pdf.disposal',
+            default => 'documents.pdf.assignment',
         };
     }
 
