@@ -51,16 +51,31 @@ class DocumentGenerationService
 
             $signaturePath = null;
             $signatureImageData = null;
-            if (($input['signatory_image'] ?? null) instanceof UploadedFile) {
-                $signatureImage = $input['signatory_image'];
-                $signaturePath = 'signatures/'.Str::slug($number).'-'.Str::random(8).'.'.$signatureImage->extension();
+            $receiverSignatureData = null;
+            $receiverSignaturePath = null;
 
-                if (! Storage::put($signaturePath, $signatureImage)) {
-                    throw new \RuntimeException('Unable to store the uploaded signature image.');
+            // Two signatories, two images. The IT signature stays in the
+            // document's `signature_image` column for backwards compatibility;
+            // the receiver's is kept in the payload so older documents still
+            // render exactly as they did before this field existed.
+            foreach ([
+                ['signatory_image', &$signaturePath, &$signatureImageData, 'it'],
+                ['signatory_receiver_image', &$receiverSignaturePath, &$receiverSignatureData, 'penerima'],
+            ] as [$field, &$pathRef, &$dataRef, $role]) {
+                if (($input[$field] ?? null) instanceof UploadedFile) {
+                    $image = $input[$field];
+                    $pathRef = 'signatures/'.Str::slug($number).'-'.$role.'-'.Str::random(8).'.'.$image->extension();
+
+                    if (! Storage::put($pathRef, $image)) {
+                        throw new \RuntimeException('Unable to store the uploaded signature image.');
+                    }
+
+                    $dataRef = 'data:'.$image->getMimeType().';base64,'.base64_encode($image->get());
                 }
-
-                $signatureImageData = 'data:'.$signatureImage->getMimeType().';base64,'.base64_encode($signatureImage->get());
             }
+
+            $payload['signature_image_data'] = $signatureImageData;
+            $payload['receiver_signature_image_data'] = $receiverSignatureData;
 
             if (! Storage::put($relativePath, $this->renderPdf($type, $payload, $number, $signatureImageData))) {
                 throw new \RuntimeException('Unable to store the generated document.');
@@ -74,7 +89,11 @@ class DocumentGenerationService
                 'nomor_surat' => $number,
                 'title' => $payload['title'],
                 'template_id' => $payload['template_id'],
-                'payload' => $payload + ['signature_image' => $signaturePath, 'nomor_surat' => $number],
+                'payload' => $payload + [
+                    'signature_image' => $signaturePath,
+                    'receiver_signature_image' => $receiverSignaturePath,
+                    'nomor_surat' => $number,
+                ],
                 'file_path' => $relativePath,
                 'file_type' => 'pdf',
                 'generated_date' => now()->toDateString(),

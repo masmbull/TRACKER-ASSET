@@ -1,0 +1,143 @@
+name: Agent Release
+
+# Builds the self-contained TrackerAgent.exe whenever agent source/version
+# changes on main, and publishes it as a GitHub Release asset. The production
+# server then runs `php artisan agent:pull <version>` to download it into
+# storage/app/agent, which is what the public agent download route serves.
+#
+# The version is ALWAYS read from <Version> in TrackerAgent.csproj. There is no
+# manual input to get wrong, and a release is only published when the version
+# actually changed - an unchanged build is skipped.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/TrackerAgent/**'
+      - '.github/workflows/agent-release.yml'
+  # Also run after CI passes on main, so a version bump that lands with other
+  # changes still ships an exe even if the path filter above did not fire.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need history to compare the previous csproj version
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read version from csproj
+        id: version
+        shell: pwsh
+        run: |
+          $csproj = Get-Content agent/TrackerAgent/TrackerAgent.csproj -Raw
+          if ($csproj -notmatch '<Version>([^<]+)</Version>') { throw 'No <Version> in csproj' }
+          $version = $Matches[1].Trim()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Agent version: $version"
+
+      - name: Skip when this version is already released
+        id: check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "agent-${{ steps.version.outputs.version }}"
+          # `gh release view` exits non-zero (and writes to stderr) when the
+          # release does not exist yet. PowerShell on Actions uses
+          # $ErrorActionPreference = 'stop', so that stderr kills the step.
+          # `gh release list` always succeeds, even with zero releases.
+          $json = gh release list --repo ${{ github.repository }} --json tagName
+          $releases = $json | ConvertFrom-Json
+          if ($releases.tagName -contains $tag) {
+            Write-Host "Release $tag already exists - skipping build."
+            "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Release $tag not found - building."
+            "skip=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Publish self-contained agent
+        if: steps.check.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $publishArgs = @(
+            'agent/TrackerAgent/TrackerAgent.csproj'
+            '-c'
+            'Release'
+            '-r'
+            'win-x64'
+            '--self-contained'
+            'true'
+            '-p:PublishSingleFile=true'
+            '-p:IncludeNativeLibrariesForSelfExtract=true'
+            '-o'
+            'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish'
+          )
+          dotnet publish @publishArgs
+
+      - name: Hash the executable
+        if: steps.check.outputs.skip != 'true'
+        id: hash
+        shell: pwsh
+        run: |
+          $file = 'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe'
+          if (-not (Test-Path $file)) { throw "Build did not produce $file" }
+          $sha = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
+          $size = (Get-Item $file).Length
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "size=$size" >> $env:GITHUB_OUTPUT
+          Write-Host "SHA-256: $sha ($size bytes)"
+
+      - name: Publish GitHub Release
+        if: steps.check.outputs.skip != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $tag = "agent-$version"
+          $sha = '${{ steps.hash.outputs.sha }}'
+          $size = '${{ steps.hash.outputs.size }}'
+          $notes = 'Self-contained TrackerAgent.exe (SHA-256 ' + $sha + ', ' + [math]::Round($size / 1MB, 1) + ' MB). Deploy on the server with: php artisan agent:pull ' + $version
+          $releaseArgs = @(
+            'release'
+            'create'
+            $tag
+            'agent/TrackerAgent/bin/Release/net8.0-windows/win-x64/publish/TrackerAgent.exe#TrackerAgent.exe'
+            '--title'
+            "TrackerAgent $version"
+            '--notes'
+            $notes
+          )
+          gh @releaseArgs
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $skip = '${{ steps.check.outputs.skip }}'
+          echo "### Agent $version" >> $env:GITHUB_STEP_SUMMARY
+          if ($skip -eq 'true') {
+            echo "Release agent-$version already exists - build skipped." >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            echo "SHA-256: ${{ steps.hash.outputs.sha }}" >> $env:GITHUB_STEP_SUMMARY
+            $deploy = 'php artisan agent:pull ' + $version
+            echo "Deploy with: $deploy" >> $env:GITHUB_STEP_SUMMARY
+          }

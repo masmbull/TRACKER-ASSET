@@ -331,9 +331,14 @@
 
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanda Tangan Basah Penyerah (PNG/JPG, max 2MB)</label>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanda Tangan User / Penerima (PNG/JPG, max 2MB)</label>
+                        <input type="file" name="signatory_receiver_image" accept="image/png,image/jpeg" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        <p class="mt-1 text-theme-xs text-gray-500">Dicetak di kotak kiri: User / Penerima Aset.</p>
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Tanda Tangan IT / Penyerah (PNG/JPG, max 2MB)</label>
                         <input type="file" name="signatory_image" accept="image/png,image/jpeg" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                        <p class="mt-1 text-theme-xs text-gray-500">Gambar akan dicetak pada kolom tanda tangan penyerah.</p>
+                        <p class="mt-1 text-theme-xs text-gray-500">Dicetak di kotak kanan: IT / Penyerah Aset.</p>
                     </div>
                 </div>
             </div>

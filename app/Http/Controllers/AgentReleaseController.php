@@ -213,11 +213,18 @@ class AgentReleaseController extends Controller
             return response("Release {$release->version} has no stored binary.", 404);
         }
 
-        return response()->streamDownload(function () use ($path, $request) {
+        // A fixed Content-Length keeps the agent's download bar moving; without
+        // it the update command reports 5% for the whole 160 MB transfer and
+        // the server's stall detector eventually declares it dead.
+        $trailer = AgentTokenController::buildConfigTrailer($request);
+        $size = filesize($path) + strlen($trailer);
+
+        return response()->streamDownload(function () use ($path, $trailer) {
             AgentTokenController::streamBinaryFile($path);
-            echo AgentTokenController::buildConfigTrailer($request);
+            echo $trailer;
         }, 'TrackerAgent.exe', [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
+            'Content-Length' => $size,
         ]);
     }
 

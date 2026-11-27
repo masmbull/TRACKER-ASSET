@@ -176,7 +176,11 @@
     <tr>
         <td>
             <div class="sign-cell-role">User / Penerima Aset</div>
-            <div class="sign-cell-dashed"></div>
+            @if(!empty($document['receiver_signature_image_data']))
+                <img class="sign-cell-image" src="{{ $document['receiver_signature_image_data'] }}" alt="">
+            @else
+                <div class="sign-cell-dashed"></div>
+            @endif
             <div class="sign-cell-name">{{ $blank($sign['menerima'] ?? null) }}</div>
             <div class="sign-cell-date">{{ $blank($sign['menerima_date'] ?? null) }}</div>
         </td>
