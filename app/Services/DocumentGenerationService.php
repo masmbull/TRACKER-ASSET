@@ -112,6 +112,11 @@ class DocumentGenerationService
         $handoverDate = $input['handover_date'] ?? $input['document_date'] ?? now()->toDateString();
         $receivedDate = $input['received_date'] ?? null;
 
+        // Resolved once: the signature block falls back to the same people the
+        // rest of the document uses, so an untouched form still prints real
+        // names instead of a bare "-".
+        $parties = $this->partiesForPayload($asset, $input, $transfer, $type);
+
         return [
             'type' => $type,
             'title' => $this->titleFor($type, $asset, $input),
@@ -147,7 +152,7 @@ class DocumentGenerationService
             'company_logo' => $asset?->company?->logo,
             'location' => $input['receiver_location'] ?? $transfer?->toLocation?->name ?? $asset?->location?->name,
             'current_user' => $asset?->currentUser?->name,
-            'parties' => $this->partiesForPayload($asset, $input, $transfer, $type),
+            'parties' => $parties,
             'transfer' => $transfer ? [
                 'number' => $transfer->transfer_number,
                 'date' => $transfer->transfer_date?->format('Y-m-d'),
@@ -172,9 +177,9 @@ class DocumentGenerationService
             'signature_date' => $this->longDate($input['received_date'] ?? $handoverDate),
             'signatories' => [
                 'menyerahkan' => $input['signatory_menyerahkan'] ?? null,
-                'menerima' => $input['signatory_menerima'] ?? null,
+                'menerima' => filled($input['signatory_menerima'] ?? null) ? $input['signatory_menerima'] : ($parties['receiver']['name'] ?? null),
                 'mengetahui' => $input['signatory_mengetahui'] ?? null,
-                'it' => $input['signatory_it'] ?? null,
+                'it' => filled($input['signatory_it'] ?? null) ? $input['signatory_it'] : ($parties['sender']['name'] ?? null),
                 'menyerahkan_date' => $this->longDate($input['signatory_menyerahkan_date'] ?? null),
                 'menerima_date' => $this->longDate($input['signatory_menerima_date'] ?? null),
                 'it_date' => $this->longDate($input['signatory_it_date'] ?? null),

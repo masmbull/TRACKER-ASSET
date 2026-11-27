@@ -79,13 +79,19 @@
                                         <div class="h-full rounded-full {{ $stalled ? 'bg-error-500' : 'bg-gradient-to-r from-brand-600 to-brand-400' }} {{ $cmd->status === 'in_progress' ? 'progress-stripes' : '' }}"
                                              style="width: {{ $stalled ? $percent : max(3, $percent) }}%"></div>
                                     </div>
-                                    <p class="mt-1 truncate text-theme-xs {{ $stalled ? 'text-error-500' : 'text-gray-400' }}" title="{{ $cmd->progressLabel() }}">{{ $cmd->progressLabel() ?? 'queued' }}</p>
+                                    <p class="mt-1 truncate text-theme-xs {{ $stalled ? 'text-error-500' : 'text-gray-400' }}" title="{{ $cmd->progressLabel() }}">{{ $cmd->progress !== null ? $cmd->progress.'%' : 'queued' }}</p>
                                 </div>
                             @else
                                 <span class="text-theme-xs text-gray-400">{{ $cmd->status === 'done' ? '100% · done' : ($cmd->result ? 'failed' : '—') }}</span>
                             @endif
                         </td>
-                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->result ? json_encode($cmd->result) : '—' }}</td>
+                        <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">
+                            @if($cmd->result)
+                                <span class="block max-w-[10rem] truncate" title="{{ json_encode($cmd->result) }}">{{ json_encode($cmd->result) }}</span>
+                            @else
+                                —
+                            @endif
+                        </td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->created_at?->diffForHumans() ?? '—' }}</td>
                         <td class="py-2 px-2 text-theme-sm text-gray-600 dark:text-gray-400">{{ $cmd->executed_at?->diffForHumans() ?? '—' }}</td>
                     </tr>
