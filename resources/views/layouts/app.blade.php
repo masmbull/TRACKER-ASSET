@@ -81,7 +81,7 @@
             $activeRouteAliases = [
                 'assets.index' => ['assets.show', 'assets.edit', 'assets.audit', 'assets.audit.device', 'assets.transfer', 'assets.repair.create'],
                 'assets.qr.sheet' => ['assets.qr'],
-                'documents.index' => ['documents.preview', 'documents.download'],
+                'documents.index' => ['documents.preview', 'documents.download', 'documents.edit', 'documents.update'],
                 'reports.index' => ['reports.export'],
             ];
             $navGroups = [

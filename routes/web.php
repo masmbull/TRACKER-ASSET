@@ -123,6 +123,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/documents/create', [DocumentController::class, 'createFromIndex'])->name('documents.create-new');
     Route::get('/documents/create/blank', [DocumentController::class, 'generateBlank'])->name('documents.generate.blank');
     Route::post('/documents/create/blank', [DocumentController::class, 'storeBlank'])->name('documents.generate.blank.store');
+    Route::get('/documents/{document}/edit', [DocumentController::class, 'edit'])->name('documents.edit');
+    Route::put('/documents/{document}', [DocumentController::class, 'update'])->name('documents.update');
     Route::get('/documents/{document}', [DocumentController::class, 'preview'])->name('documents.preview');
     Route::get('/documents/{document}/preview-data', [DocumentController::class, 'previewData'])->name('documents.preview.data');
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');

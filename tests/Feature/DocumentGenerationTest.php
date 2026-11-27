@@ -425,6 +425,41 @@ class DocumentGenerationTest extends TestCase
         $this->assertSame('Deni IT', Document::latest('id')->firstOrFail()->payload['signatories']['it']);
     }
 
+    public function test_a_generated_document_can_be_edited_and_regenerated_in_place(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('documents.generate.blank.store'), [
+            'document_type' => 'FAT',
+            'sender_entity' => 'Test Co',
+            'receiver_entity' => 'Test Co',
+            'signatory_menyerahkan' => 'Andi',
+            'signatory_menerima' => 'Budi',
+        ]);
+
+        $document = Document::firstOrFail();
+        $number = $document->document_number;
+        $path = $document->file_path;
+
+        $this->actingAs($support)->put(route('documents.update', $document), [
+            'document_type' => 'FAT',
+            'signatory_menyerahkan' => 'Andi Fixed',
+            'signatory_menerima' => 'Budi Fixed',
+        ])->assertRedirect(route('documents.preview', $document));
+
+        $document->refresh();
+        $this->assertSame(1, Document::count());
+        $this->assertSame($number, $document->document_number);
+        $this->assertSame($path, $document->file_path);
+        $this->assertSame('Andi Fixed', $document->payload['parties']['sender']['name']);
+        $this->assertSame('Budi Fixed', $document->payload['parties']['receiver']['name']);
+        $this->assertStringStartsWith('%PDF', Storage::get($path));
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'UPDATE_DOCUMENT',
+            'entity_identifier' => $number,
+        ]);
+    }
+
     public function test_second_document_gets_next_number(): void
     {
         $support = User::factory()->create(['role' => 'support']);

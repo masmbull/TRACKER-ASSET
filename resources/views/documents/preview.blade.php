@@ -35,6 +35,11 @@
         <x-icon name="download" class="h-4 w-4" /> Download PDF
     </a>
 
+    <a href="{{ route('documents.edit', $document) }}"
+       class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-brand-700">
+        Edit &amp; regenerate
+    </a>
+
     <a href="{{ $document->asset_id ? route('assets.show', $document->asset_id) : route('documents.index') }}"
        class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-theme-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
         Back
