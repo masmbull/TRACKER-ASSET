@@ -99,8 +99,13 @@ public static class AutoUpdater
     /// boot task instead of launching a tray. A tray started from session 0 has no
     /// desktop and exits, which is how an updated machine went silent.
     /// </param>
+    /// <summary>Why the last PerformUpdate returned false. Shown in the fleet dialog.</summary>
+    public static string LastError { get; private set; } = string.Empty;
+
     public static bool PerformUpdate(string serverUrl, string token, string? payloadUrl = null, Action<int, string>? onProgress = null, bool resumeAsDaemon = false)
     {
+        LastError = string.Empty;
+
         try
         {
             var currentExe = Environment.ProcessPath
@@ -108,7 +113,8 @@ public static class AutoUpdater
 
             if (!File.Exists(currentExe))
             {
-                Console.Error.WriteLine("[!] Current executable not found for update.");
+                LastError = "Installed executable not found.";
+                Console.Error.WriteLine($"[!] {LastError}");
                 return false;
             }
 
@@ -135,7 +141,8 @@ public static class AutoUpdater
                 using var resp = Http.Send(req, HttpCompletionOption.ResponseHeadersRead);
                 if (!resp.IsSuccessStatusCode)
                 {
-                    Console.Error.WriteLine($"[X] Failed to download update: HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}");
+                    LastError = $"Download HTTP {(int) resp.StatusCode} {resp.ReasonPhrase}.";
+                    Console.Error.WriteLine($"[X] {LastError}");
                     return false;
                 }
 
@@ -186,7 +193,8 @@ public static class AutoUpdater
             var fi = new FileInfo(tempNewExe);
             if (fi.Length < 1024 * 50) // sanity check: at least 50KB
             {
-                Console.Error.WriteLine("[X] Downloaded file is too small or corrupt. Aborting update.");
+                LastError = "Downloaded file is too small or corrupt.";
+                Console.Error.WriteLine($"[X] {LastError}. Aborting update.");
                 try { File.Delete(tempNewExe); } catch { }
                 return false;
             }
@@ -199,8 +207,8 @@ public static class AutoUpdater
             var installedVersion = FileVersionInfo.GetVersionInfo(currentExe).ProductVersion;
             if (! IsNewerBuild(downloadedVersion, installedVersion))
             {
-                Console.Error.WriteLine(
-                    $"[X] Server served build {downloadedVersion ?? "unknown"}, not newer than installed {installedVersion ?? "unknown"}. Refusing to swap.");
+                LastError = $"Server build {downloadedVersion ?? "unknown"} is not newer than installed {installedVersion ?? "unknown"}.";
+                Console.Error.WriteLine($"[X] {LastError} Refusing to swap.");
                 try { File.Delete(tempNewExe); } catch { }
                 return false;
             }
@@ -239,8 +247,11 @@ public static class AutoUpdater
                 : "if exist \"%TARGET%\" start \"\" \"%TARGET%\"";
 
             var statusPath = Path.Combine(currentDir, $"_update_status_{Guid.NewGuid():N}.txt");
+            // ping is used instead of `timeout`: with no console attached (the
+            // launcher is hidden) `timeout` fails immediately with an input
+            // redirection error, so the delete raced the still-running agent.
             var scriptContent = $@"@echo off
-timeout /t 3 /nobreak >nul
+ping -n 4 127.0.0.1 >nul 2>&1
 set ""TARGET={currentExe}""
 set ""NEW={tempNewExe}""
 set ""STATUS={statusPath}""
@@ -251,7 +262,7 @@ del /f /q ""%TARGET%"" >nul 2>&1
 if not exist ""%TARGET%"" goto install
 set /a tries+=1
 if %tries% geq 30 goto fallback
-timeout /t 1 /nobreak >nul
+ping -n 2 127.0.0.1 >nul 2>&1
 goto retry
 
 :install
@@ -281,35 +292,22 @@ del /f /q ""%~f0"" >nul 2>&1
 
             Process.Start(startInfo);
 
-            // Wait briefly for the helper to report whether the swap actually
-            // happened. The old code acked "done" even when the helper had to
-            // fall back and left the previous build in place - which is why the
-            // fleet showed a successful update while the laptop kept its old
-            // version.
-            var status = string.Empty;
-            for (var attempt = 0; attempt < 20; attempt++)
-            {
-                if (File.Exists(statusPath))
-                {
-                    status = File.ReadAllText(statusPath).Trim();
-                    break;
-                }
-                Thread.Sleep(500);
-            }
-            try { File.Delete(statusPath); } catch { }
-
-            if (status == "swapped")
-            {
-                Console.WriteLine("[OK] Update runner swapped the executable successfully.");
-                return true;
-            }
-
-            Console.Error.WriteLine($"[X] Update swap did not complete (status: '{status}'). Keeping the current build; update reported as failed.");
-            return false;
+            // Do NOT wait for the swap here. The running agent holds its own exe
+            // open, so the helper cannot delete it until this process exits -
+            // and this process only exits after PerformUpdate reports success.
+            // Waiting for the status file was a deadlock: every update acked
+            // "failed" while the helper quietly kept the old build.
+            // Returning now lets the caller ack and exit; the helper's initial
+            // delay gives it time, then it swaps and launches the new build.
+            // The fleet still sees the truth: the next heartbeat carries the
+            // version that is actually running.
+            Console.WriteLine("[OK] New build downloaded; swap runner started.");
+            return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[X] Auto-update failed: {ex.Message}");
+            LastError = ex.Message;
+            Console.Error.WriteLine($"[X] Auto-update failed: {LastError}");
             return false;
         }
     }

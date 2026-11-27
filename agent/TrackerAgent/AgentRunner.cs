@@ -1708,7 +1708,8 @@ public static class AgentRunner
 
                             Api.Ack(url, token, id, "failed", new Dictionary<string, string>
                             {
-                                ["message"] = "The new version could not be downloaded. The agent is still on " +
+                                ["message"] = "Update failed: "+AutoUpdater.LastError+
+                                    " The agent is still on " +
                                     (InstallCheck.ReadVersion(InstallCheck.InstalledExe)?.ToString() ?? "the installed build") + ".",
                             });
                         }
