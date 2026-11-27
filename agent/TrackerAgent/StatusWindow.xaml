@@ -1,234 +1,425 @@
 <Window x:Class="TrackerAgent.StatusWindow"
-         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-         Title="TRACKER-ASSET — Status"
-         Icon="pack://application:,,,/TrackerAgent;component/mito-icon.png"
-         Width="560"
-         Height="Auto"
-         SizeToContent="Height"
-         WindowStartupLocation="CenterScreen"
-         ResizeMode="NoResize"
-         FontFamily="Segoe UI"
-         UseLayoutRounding="True"
-         TextOptions.TextFormattingMode="Display"
-         WindowStyle="None"
-         AllowsTransparency="True"
-         Background="Transparent">
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TRACKER-ASSET — Status"
+        Icon="pack://application:,,,/TrackerAgent;component/mito-icon.png"
+        Width="580"
+        Height="Auto"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        FontFamily="Segoe UI"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
 
     <Window.Resources>
-        <!-- Font Awesome 6 Free Solid -->
+        <!-- Font Awesome 6 Free Solid, bundled with the agent. -->
         <FontFamily x:Key="FontAwesome">pack://application:,,,/TrackerAgent;component/Fonts/fa-solid-900.ttf#Font Awesome 6 Free Solid</FontFamily>
 
-        <!-- Fade-in animation for the whole window -->
-        <Storyboard x:Key="FadeIn">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.35"/>
+        <LinearGradientBrush x:Key="HeaderBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#111827" Offset="0"/>
+            <GradientStop Color="#1F2937" Offset="0.55"/>
+            <GradientStop Color="#7F1D1D" Offset="1"/>
+        </LinearGradientBrush>
+
+        <SolidColorBrush x:Key="InkBrush" Color="#111827"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#9CA3AF"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#E5E7EB"/>
+
+        <!-- The whole card fades and lifts in instead of snapping onto screen. -->
+        <Storyboard x:Key="CardIn">
+            <DoubleAnimation Storyboard.TargetName="Card" Storyboard.TargetProperty="Opacity"
+                             From="0" To="1" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Card"
+                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                             From="18" To="0" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
         </Storyboard>
 
-        <!-- Subtle pulse for the status dot -->
-        <Storyboard x:Key="StatusPulse" RepeatBehavior="Forever">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.4" Duration="0:0:2" AutoReverse="True"/>
+        <!-- A soft highlight travelling across the header, like a live signal. -->
+        <Storyboard x:Key="HeaderShimmer" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="ShimmerBar"
+                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                             From="-220" To="700" Duration="0:0:4.5">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
         </Storyboard>
+
+        <!-- Status dot: gentle breathing with a halo, not a harsh blink. -->
+        <Storyboard x:Key="StatusPulse" RepeatBehavior="Forever" AutoReverse="True">
+            <DoubleAnimation Storyboard.TargetName="StatusDot" Storyboard.TargetProperty="Opacity"
+                             From="1" To="0.45" Duration="0:0:1.2"/>
+            <DoubleAnimation Storyboard.TargetName="StatusHalo" Storyboard.TargetProperty="Opacity"
+                             From="0.35" To="0.05" Duration="0:0:1.2"/>
+        </Storyboard>
+
+        <!-- Shared look for every label/value row. -->
+        <Style x:Key="RowCard" TargetType="Border">
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="BorderBrush" Value="#EEF2F6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style x:Key="IconBadge" TargetType="Border">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Background" Value="#EEF2FF"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#9CA3AF"/>
+        </Style>
+
+        <Style x:Key="RowValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="MaxWidth" Value="200"/>
+        </Style>
     </Window.Resources>
 
     <Window.Triggers>
         <EventTrigger RoutedEvent="Window.Loaded">
-            <BeginStoryboard Storyboard="{StaticResource FadeIn}"/>
+            <BeginStoryboard Storyboard="{StaticResource CardIn}"/>
+            <BeginStoryboard Storyboard="{StaticResource HeaderShimmer}"/>
             <BeginStoryboard Storyboard="{StaticResource StatusPulse}"/>
         </EventTrigger>
     </Window.Triggers>
 
-    <Border CornerRadius="16" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1"
-            Padding="24" Margin="20">
+    <Border x:Name="Card" CornerRadius="18" Background="#FFFFFF"
+            BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Margin="22">
+        <Border.RenderTransform>
+            <TranslateTransform X="0" Y="0"/>
+        </Border.RenderTransform>
         <Border.Effect>
-            <DropShadowEffect ShadowDepth="0" BlurRadius="32" Opacity="0.12" Color="#101828"/>
+            <DropShadowEffect ShadowDepth="0" BlurRadius="36" Opacity="0.18" Color="#0F172A"/>
         </Border.Effect>
 
         <StackPanel>
-            <!-- Header -->
-            <Grid Margin="0,0,0,24">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+            <!-- ================= HEADER ================= -->
+            <Border CornerRadius="18,18,0,0" Background="{StaticResource HeaderBrush}" Padding="24,22">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="12" Background="#F3F4F6"
-                        VerticalAlignment="Center">
-                    <Image Source="pack://application:,,,/TrackerAgent;component/mito-logo-white.png"
-                           Width="28" Height="28" Stretch="Uniform" HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
-                </Border>
+                    <!-- Animated sheen, clipped by the header. -->
+                    <Rectangle x:Name="ShimmerBar" Grid.ColumnSpan="3" Width="90" Height="120"
+                               HorizontalAlignment="Left" VerticalAlignment="Center" Opacity="0.08"
+                               Fill="#FFFFFF" IsHitTestVisible="False">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform X="-220" Y="0"/>
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
 
-                <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="TRACKER-ASSET Agent" FontSize="18" FontWeight="Bold"
-                               Foreground="#111827"/>
-                    <TextBlock Text="MITO Electronic · IT Operations" FontSize="12.5"
-                               Foreground="#6B7280" Margin="0,3,0,0"/>
-                </StackPanel>
-            </Grid>
+                    <Border Grid.Column="0" Width="52" Height="52" CornerRadius="14"
+                            Background="#FFFFFF" BorderBrush="#FFFFFF" BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/TrackerAgent;component/mito-logo-white.png"
+                               Width="34" Height="34" Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
 
-            <Border Height="1" Background="#E5E7EB" Margin="0,0,0,20"/>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="TRACKER-ASSET" FontSize="19" FontWeight="Bold"
+                                   Foreground="#FFFFFF"/>
+                        <TextBlock Text="Status agen · MITO Electronic" FontSize="12"
+                                   Foreground="#CBD5E1" Margin="0,3,0,0"/>
+                    </StackPanel>
 
-            <!-- Info grid: two columns of label/value rows -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1*"/>
-                    <ColumnDefinition Width="20"/>
-                    <ColumnDefinition Width="1*"/>
-                </Grid.ColumnDefinitions>
+                    <!-- Live pill -->
+                    <Border Grid.Column="2" CornerRadius="20" Padding="10,5"
+                            Background="#22C55E" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="StatusHalo" Width="8" Height="8" Fill="#FFFFFF" Opacity="0.35"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="LIVE" FontSize="10" FontWeight="Bold"
+                                       Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
 
-                <StackPanel Grid.Column="0">
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=ServerText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf233;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="SERVER" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="ServerText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=InstalledText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf017;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="TERPASANG" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="InstalledText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=DeviceText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf390;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="PERANGKAT" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="DeviceText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=UserText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf007;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="PENGGUNA" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="UserText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=IpText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf6ff;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="IP LOKAL" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="IpText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
-                        </StackPanel>
-                    </StackPanel>
+            <!-- ================= BODY ================= -->
+            <StackPanel Margin="24,20,24,8">
+
+                <!-- Section: Sistem -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="&#xf085;" FontFamily="{StaticResource FontAwesome}"
+                               FontSize="13" Foreground="#DC2626" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="SISTEM" FontSize="11" FontWeight="Bold" Foreground="#334155"/>
+                    <Rectangle Height="1" Fill="{StaticResource LineBrush}" Margin="12,0,0,0"
+                               VerticalAlignment="Center" Stretch="Fill"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2">
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=VersionText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf0e7;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="VERSI AGENT" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="VersionText" Text="—" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="1*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+
+                    <!-- SERVER -->
+                    <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=ServerText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}">
+                                <TextBlock Text="&#xf233;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#4F46E5"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="SERVER" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="ServerText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="Agent aktif dan siap menerima perintah"
-                                Margin="0,0,0,10">
-                        <Ellipse Width="10" Height="10" Fill="#10B981" VerticalAlignment="Center"
-                                 Margin="0,0,10,0">
-                            <Ellipse.Triggers>
-                                <EventTrigger RoutedEvent="Ellipse.Loaded">
-                                    <BeginStoryboard Storyboard="{StaticResource StatusPulse}"/>
-                                </EventTrigger>
-                            </Ellipse.Triggers>
-                        </Ellipse>
-                        <StackPanel>
-                            <TextBlock Text="STATUS AGENT" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="StatusText" Text="Berjalan" FontSize="13.5"
-                                       FontWeight="SemiBold" Foreground="#047857"/>
+                    </Border>
+
+                    <!-- VERSI AGENT -->
+                    <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=VersionText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#FEF2F2">
+                                <TextBlock Text="&#xf0e7;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#DC2626"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="VERSI AGENT" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="VersionText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="Hak akses ditentukan oleh role user"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf3ed;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="ROLE" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="RoleText" Text="Pengguna" FontSize="13.5" Foreground="#111827"
-                                       TextWrapping="Wrap" MaxWidth="220"/>
+                    </Border>
+
+                    <!-- TERPASANG -->
+                    <Border Grid.Column="0" Grid.Row="2" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=InstalledText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#FFF7ED">
+                                <TextBlock Text="&#xf017;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#EA580C"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="TERPASANG" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="InstalledText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" ToolTip="{Binding ElementName=PublicIpText, Path=Text}"
-                                Margin="0,0,0,10">
-                        <TextBlock Text="&#xf0ac;" FontFamily="{StaticResource FontAwesome}" FontSize="14"
-                                   Foreground="#4B5563" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel>
-                            <TextBlock Text="IP PUBLIK" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF"/>
-                            <TextBlock x:Name="PublicIpText" Text="memeriksa…" FontSize="13.5"
-                                       Foreground="#111827" TextWrapping="Wrap" MaxWidth="220"/>
+                    </Border>
+
+                    <!-- STATUS AGEN -->
+                    <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource RowCard}"
+                            ToolTip="Agen aktif dan siap menerima perintah">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#ECFDF5">
+                                <Grid>
+                                    <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#10B981"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Ellipse Width="18" Height="18" Stroke="#10B981" StrokeThickness="1"
+                                             Opacity="0.25" HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="STATUS AGEN" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="StatusText" Text="Berjalan" FontSize="13"
+                                           FontWeight="Bold" Foreground="#047857"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Border>
+
+                    <!-- PERANGKAT -->
+                    <Border Grid.Column="0" Grid.Row="4" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=DeviceText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#F0FDF4">
+                                <TextBlock Text="&#xf390;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#16A34A"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="PERANGKAT" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="DeviceText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ROLE -->
+                    <Border Grid.Column="2" Grid.Row="4" Style="{StaticResource RowCard}"
+                            ToolTip="Hak akses ditentukan oleh role pengguna">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#FFF7ED">
+                                <TextBlock Text="&#xf3ed;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#EA580C"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="ROLE" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="RoleText" Text="Pengguna" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Section: Pengguna & Jaringan -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="&#xf0c0;" FontFamily="{StaticResource FontAwesome}"
+                               FontSize="13" Foreground="#DC2626" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="PENGGUNA &amp; JARINGAN" FontSize="11" FontWeight="Bold"
+                               Foreground="#334155"/>
+                    <Rectangle Height="1" Fill="{StaticResource LineBrush}" Margin="12,0,0,0"
+                               VerticalAlignment="Center" Stretch="Fill"/>
                 </StackPanel>
-            </Grid>
 
-            <Border Height="1" Background="#E5E7EB" Margin="0,20,0,0"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="1*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
 
-            <!-- Footer -->
-            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                <TextBlock Text="Untuk bantuan teknis, hubungi tim IT." FontSize="11.5"
-                           Foreground="#9CA3AF"/>
-                <Rectangle Width="1" Height="12" Fill="#E5E7EB" Margin="12,0,12,0" VerticalAlignment="Center"/>
-                <TextBlock Text="TRACKER-ASSET v1.7.37" FontSize="11.5" Foreground="#9CA3AF"/>
+                    <!-- PENGGUNA -->
+                    <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=UserText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#F5F3FF">
+                                <TextBlock Text="&#xf007;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#7C3AED"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="PENGGUNA" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="UserText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- IP LOKAL -->
+                    <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=IpText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#EFF6FF">
+                                <TextBlock Text="&#xf6ff;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#2563EB"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="IP LOKAL" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="IpText" Text="—" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- IP PUBLIK -->
+                    <Border Grid.Column="0" Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource RowCard}"
+                            ToolTip="{Binding Text, ElementName=PublicIpText}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource IconBadge}" Background="#ECFEFF">
+                                <TextBlock Text="&#xf0ac;" FontFamily="{StaticResource FontAwesome}"
+                                           FontSize="14" Foreground="#0891B2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="IP PUBLIK" Style="{StaticResource RowLabel}"/>
+                                <TextBlock x:Name="PublicIpText" Text="memeriksa…" Style="{StaticResource RowValue}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </StackPanel>
 
-            <Button x:Name="CloseBtn" Content="Tutup"
-                    HorizontalAlignment="Right" Margin="0,20,0,0"
-                    Height="40" Width="110"
-                    FontSize="13" FontWeight="SemiBold"
-                    Foreground="White" Background="#DC2626"
-                    Cursor="Hand" BorderThickness="0"
-                    Click="CloseButton_Click">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="Bg" Background="{TemplateBinding Background}"
-                                            CornerRadius="10">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bg" Property="Background" Value="#B91C1C"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter TargetName="Bg" Property="Background" Value="#991B1B"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Button.Style>
-            </Button>
+            <!-- ================= FOOTER ================= -->
+            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="24,14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                ToolTip="Dokumen ini dihasilkan otomatis oleh TRACKER-ASSET">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xf05a;" FontFamily="{StaticResource FontAwesome}"
+                                       FontSize="11" Foreground="#9CA3AF" VerticalAlignment="Center"
+                                       Margin="0,0,7,0"/>
+                            <TextBlock Text="Untuk bantuan teknis, hubungi tim IT." FontSize="11"
+                                       Foreground="{StaticResource MutedBrush}"/>
+                        </StackPanel>
+                        <TextBlock FontSize="10.5" Foreground="#CBD5E1" Margin="18,3,0,0"
+                                   Text="{Binding Text, ElementName=VersionText, StringFormat='TRACKER-ASSET v{0}'}"/>
+                    </StackPanel>
+
+                    <Button x:Name="CloseBtn" Grid.Column="1" HorizontalAlignment="Right"
+                            Height="38" Width="108" Cursor="Hand" BorderThickness="0"
+                            FontSize="12.5" FontWeight="SemiBold" Foreground="#FFFFFF"
+                            Background="#DC2626" Click="CloseButton_Click">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                                    CornerRadius="9">
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="&#xf00d;" FontFamily="{StaticResource FontAwesome}"
+                                                               FontSize="12" Foreground="White"
+                                                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                                    <ContentPresenter VerticalAlignment="Center"
+                                                                      RecognizesAccessKey="True"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bg" Property="Background" Value="#B91C1C"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="Bg" Property="Background" Value="#991B1B"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                        Tutup
+                    </Button>
+                </Grid>
+            </Border>
         </StackPanel>
     </Border>
 </Window>
