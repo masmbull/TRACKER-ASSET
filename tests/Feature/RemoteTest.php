@@ -176,6 +176,26 @@ class RemoteTest extends TestCase
         $response->assertSee('-EncodedCommand', false);
     }
 
+    public function test_remote_reports_why_no_credentials_were_found(): void
+    {
+        $token = $this->enrollAgent();
+        $command = AgentCommand::create([
+            'agent_token_id' => $token->id,
+            'command' => 'script',
+            'status' => 'done',
+            'payload' => ['script_name' => 'tracker-ultraviewer-read.ps1'],
+            'result' => ['stdout' => "UV_ID=\nUV_PASS=\nUV_FOUND=0 UltraViewer process(es)\n", 'message' => 'Script completed successfully.'],
+        ]);
+
+        $this->actingAs($this->admin)
+            ->getJson(route('agent.commands.status', $command))
+            ->assertOk()
+            ->assertJsonPath('is_remote', true)
+            ->assertJsonPath('credentials', null)
+            ->assertJsonPath('remote_url', null)
+            ->assertJsonPath('remote_message', 'UltraViewer tidak sedang berjalan di laptop ini. Buka UltraViewer di laptop target, lalu klik Remote lagi.');
+    }
+
     public function test_fleet_page_offers_remote_on_each_device_row(): void
     {
         $token = $this->enrollAgent();
