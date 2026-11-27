@@ -22,22 +22,47 @@
         margin: 0;
     }
 
-    /* ---- Letterhead ---- */
-    .letterhead { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    /* ---- Letterhead ----
+       One compact band: red hairline, logo tile, a clear hierarchy for the four
+       legal entities, and a right-aligned title with its own meta card. Kept
+       deliberately shallow so the whole form still fits on one A4 sheet. */
+    .letterhead {
+        width: 100%; border-collapse: collapse;
+        border-top: 3px solid #b91c1c;
+        border-bottom: 1px solid #cbd5e1;
+        padding: 4px 0 5px;
+        margin-bottom: 6px;
+    }
     .letterhead td { border: 0; padding: 0; vertical-align: middle; }
-    .logo-cell { width: 56px; padding: 5px; background: #b91c1c; text-align: center; }
-    .logo-cell img { width: 44px; height: auto; display: block; margin: 0 auto; }
+    .logo-cell { width: 54px; padding: 4px; background: #b91c1c; text-align: center; }
+    .logo-cell img { width: 42px; height: auto; display: block; margin: 0 auto; }
     .entities { padding-left: 9px; }
-    .entities .legal { font-size: 7.4px; line-height: 1.28; color: #475569; }
-    .entities .legal-primary { font-size: 9.5px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: .02em; }
+    .entities .entity-primary {
+        font-size: 9.5px; font-weight: 800; color: #111827;
+        text-transform: uppercase; letter-spacing: .02em; line-height: 1.2;
+    }
+    .entities .legal { font-size: 7.4px; font-weight: 600; line-height: 1.28; color: #475569; }
+    .entities .legal::before { content: "• "; color: #b91c1c; font-weight: 800; }
+    .entities .tagline {
+        margin-top: 2px; font-size: 6.6px; color: #94a3b8;
+        text-transform: uppercase; letter-spacing: .06em;
+    }
     .doc-title { text-align: right; width: 40%; }
+    .doc-title .badge {
+        display: inline-block; margin-bottom: 2px; padding: 0 5px;
+        border: 1px solid #fecaca; background: #fef2f2;
+        font-size: 6.4px; font-weight: 800; color: #b91c1c;
+        text-transform: uppercase; letter-spacing: .08em;
+    }
     .doc-title h1 {
-        margin: 0 0 2px; padding-bottom: 3px; border-bottom: 2px solid #b91c1c;
-        font-size: 10.5px; font-weight: 800; color: #991b1b;
+        margin: 0 0 3px; padding-bottom: 2px; border-bottom: 2px solid #b91c1c;
+        font-size: 10.5px; font-weight: 800; color: #111827;
         text-transform: uppercase; letter-spacing: .03em;
     }
-    .doc-title .sub { font-size: 7.4px; line-height: 1.35; color: #475569; }
-    .doc-title .sub strong { color: #111827; }
+    .doc-meta { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; background: #f8fafc; }
+    .doc-meta td { border: 0; padding: 0.5px 5px; font-size: 7.2px; line-height: 1.25; }
+    .doc-meta td.meta-label { width: 26%; color: #94a3b8; text-align: left; font-weight: 600; }
+    .doc-meta td.meta-value { color: #1e293b; text-align: right; font-weight: 700; }
 
     .intro {
         font-size: 7.6px; color: #475569; text-align: justify;
@@ -97,16 +122,29 @@
         <td class="logo-cell"><img src="{{ $logoUri }}" alt="MITO Electronic"></td>
         <td class="entities">
             @foreach((array) config('documents.entities', []) as $entity)
-                <div class="{{ $loop->first ? 'legal legal-primary' : 'legal' }}">{{ $entity }}</div>
+                <div class="{{ $loop->first ? 'entity-primary' : 'legal' }}">{{ $entity }}</div>
             @endforeach
+            <div class="tagline">IT Asset Management · Formulir Terkendali</div>
         </td>
         <td class="doc-title">
+            <span class="badge">Formulir Resmi</span>
             <h1>@yield('title')</h1>
-            <div class="sub">No. <strong>{{ $document['number'] }}</strong></div>
-            <div class="sub">Tanggal: {{ $document['date_long'] ?? $document['date'] }}</div>
-            @if(filled($document['nomor_surat'] ?? null) && $document['nomor_surat'] !== $document['number'])
-                <div class="sub">Nomor Surat: {{ $document['nomor_surat'] }}</div>
-            @endif
+            <table class="doc-meta">
+                <tr>
+                    <td class="meta-label">No.</td>
+                    <td class="meta-value">{{ $document['number'] }}</td>
+                </tr>
+                <tr>
+                    <td class="meta-label">Tanggal</td>
+                    <td class="meta-value">{{ $document['date_long'] ?? $document['date'] }}</td>
+                </tr>
+                @if(filled($document['nomor_surat'] ?? null) && $document['nomor_surat'] !== $document['number'])
+                    <tr>
+                        <td class="meta-label">No. Surat</td>
+                        <td class="meta-value">{{ $document['nomor_surat'] }}</td>
+                    </tr>
+                @endif
+            </table>
         </td>
     </tr>
 </table>
