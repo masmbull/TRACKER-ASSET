@@ -153,6 +153,22 @@ jobs:
             exit 1
           fi
 
+          # The agent binary is NOT part of the web image (~160 MB). Pull it
+          # from the GitHub Release published by agent-release.yml so the
+          # public /agent/download/latest route never answers "executable not
+          # found". Non-fatal: a deploy must not fail when no agent release
+          # has been published yet.
+          agent_version=$(docker compose -f docker-compose.prod.yml exec -T app \
+            php artisan tinker --execute='echo App\Models\AgentRelease::current()?->version ?? "";' 2>/dev/null | tail -n 1 | tr -d '\r')
+          if [ -n "$agent_version" ]; then
+            echo "Pulling TrackerAgent ${agent_version} from GitHub Release..."
+            GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' docker compose -f docker-compose.prod.yml exec -T \
+              -e GITHUB_TOKEN app php artisan agent:pull "$agent_version" || \
+              echo "::warning::agent:pull failed; the download route will keep serving the previous binary."
+          else
+            echo "::warning::no agent release recorded; skipping agent:pull."
+          fi
+
           actual=$(docker inspect --format '{{.Config.Image}}' "$running")
           if [ "$actual" != "${IMAGE_REPOSITORY}:${IMAGE_TAG}" ]; then
             echo "::error::app is running ${actual}, expected ${IMAGE_REPOSITORY}:${IMAGE_TAG}"

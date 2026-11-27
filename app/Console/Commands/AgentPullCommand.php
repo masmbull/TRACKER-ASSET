@@ -40,12 +40,37 @@ class AgentPullCommand extends Command
         }
 
         $this->info("Downloading TrackerAgent {$release->version} from GitHub Release {$tag}...");
-        $response = Http::withHeaders($headers)
-            ->timeout(300)
-            ->get("https://github.com/masmbull/TRACKER-ASSET/releases/download/{$tag}/TrackerAgent.exe");
+
+        // Resolve the asset through the API first: the tag may exist while the
+        // asset name differs, and a private repo needs the auth header on the
+        // API call too. Fall back to the well-known download URL when the API
+        // is unreachable (e.g. a network that blocks api.github.com).
+        $assetUrl = "https://github.com/masmbull/TRACKER-ASSET/releases/download/{$tag}/TrackerAgent.exe";
+        $apiHeaders = ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'TRACKER-ASSET-agent-pull'];
+        if ($token) {
+            $apiHeaders['Authorization'] = 'Bearer '.$token;
+        }
+
+        try {
+            $api = Http::withHeaders($apiHeaders)->timeout(30)
+                ->get('https://api.github.com/repos/masmbull/TRACKER-ASSET/releases/tags/'.$tag);
+
+            if ($api->successful()) {
+                $asset = collect($api->json('assets', []))
+                    ->first(fn (array $a) => strtolower($a['name'] ?? '') === 'trackeragent.exe');
+
+                if ($asset && ! empty($asset['browser_download_url'])) {
+                    $assetUrl = $asset['browser_download_url'];
+                }
+            }
+        } catch (\Throwable) {
+            // The direct URL below is still a valid fallback.
+        }
+
+        $response = Http::withHeaders($headers)->timeout(300)->get($assetUrl);
 
         if (! $response->successful()) {
-            $this->error("Download failed with HTTP {$response->status()}. The release may be private - set GITHUB_TOKEN.");
+            $this->error("Download failed with HTTP {$response->status()} from {$assetUrl}. The release may be private - set GITHUB_TOKEN.");
 
             return self::FAILURE;
         }
