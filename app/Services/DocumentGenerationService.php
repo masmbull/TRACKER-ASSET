@@ -362,14 +362,13 @@ class DocumentGenerationService
     private function viewFor(string $type): string
     {
         return match ($type) {
-            'FAT' => 'documents.pdf.fat',
             'BAST' => 'documents.pdf.bast',
-            'HANDOVER' => 'documents.pdf.handover',
-            'TRANSFER' => 'documents.pdf.transfer',
-            'RETURN' => 'documents.pdf.return',
             'REPAIR' => 'documents.pdf.repair',
             'DISPOSAL' => 'documents.pdf.disposal',
-            default => 'documents.pdf.assignment',
+            'ASSIGNMENT' => 'documents.pdf.assignment',
+            // FAT covers transfer, handover and return; a legacy document
+            // recorded under one of those old types still renders the same sheet.
+            default => 'documents.pdf.fat',
         };
     }
 

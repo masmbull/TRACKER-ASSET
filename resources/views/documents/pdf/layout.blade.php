@@ -3,87 +3,116 @@
 <head>
 <meta charset="utf-8">
 {{--
-    Shared shell for every generated document.
+    Shared A4 shell for every generated document.
 
-    Reproduces the official paper form "Template Form Fixed Transfer Asset IT
-    v1 (2026)": the four company names in the letterhead, then the document's own
-    sections (rendered by the type template), then the signature block.
-
-    The layout owns the letterhead and nothing else. It used to also paint a
-    four-column "Yang Menyerahkan / Yang Menerima / Mengetahui / IT" signature
-    table onto every document, on top of the two signature blocks each template
-    already drew - so a BAST arrived with six places to sign and no indication
-    which four were real. Signatures belong to the form, not the shell.
+    The office's paper form is a single sheet: a compact letterhead, a titled
+    cover band, then the body sections and one signature block. This shell owns
+    only that chrome - the body is rendered by the type template. Keeping the
+    density deliberate (7.5-9 px, tight rows, no spacer rows) is what lets the
+    whole form fit on one A4 page instead of spilling a signature onto page two.
 --}}
 <style>
-    @page { margin: 1cm 1.3cm; size: auto; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111827; line-height: 1.28; }
-    .letterhead { border-bottom: 3px solid #e11d2e; padding-bottom: 5px; margin-bottom: 6px; }
-    .letterhead table { border: none; width: 100%; margin: 0; }
-    .letterhead td { border: none; vertical-align: middle; padding: 0; }
-    /* The brand block: a red tile holding the mark, sized to the mark's own
-       aspect ratio. The old rule boxed an 800x200 canvas - mostly empty - at
-       104px wide, so the wordmark rendered about 20px across inside a wide red
-       bar, which is why the logo looked like a placeholder. The source image is
-       now cropped to the mark and supersampled for print, so it is drawn at its
-       real proportions and stays sharp at 96 dpi and above. */
-    .logo-cell { width: 76px; padding: 6px; background: #e11d2e; text-align: center; }
-    .logo-cell img { width: 58px; height: auto; display: block; margin: 0 auto; image-rendering: auto; }
-    .entities { padding-left: 12px; }
-    .entities .legal { font-size: 8.5px; font-weight: 600; line-height: 1.35; color: #344054; }
-    .entities .legal-primary { font-size: 10px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: .02em; }
-    .doc-title { text-align: right; }
-    .doc-title h1 { margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid #e11d2e; font-size: 12px; font-weight: 800; color: #b42318; text-transform: uppercase; letter-spacing: .03em; }
-    .doc-title .sub { font-size: 8px; line-height: 1.45; color: #475569; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
-    th, td { border: 1px solid #cbd5e1; padding: 1px 6px; text-align: left; vertical-align: top; }
-    th { background: #f1f5f9; font-size: 7.5px; text-transform: uppercase; letter-spacing: .04em; color: #334155; }
-    .section-head { background: #e2e8f0; font-weight: bold; font-size: 8.5px; }
-    .label { width: 34%; color: #475569; }
-    .cols-2 { width: 50%; }
-    .spec-line { margin: 0; }
-    .pass { color: #027a48; font-weight: bold; }
-    .fail { color: #b42318; font-weight: bold; }
-    .statement { padding: 3px 8px; line-height: 1.35; text-align: justify; }
-    .extra-room { height: 20px; }
-    .sign { width: 100%; margin-top: 3px; border: none; }
-    .sign td { border: none; width: 50%; padding: 0 8px 0 0; vertical-align: top; }
-    .sign-box { border: 1px solid #cbd5e1; }
-    .sign-box th { background: #e2e8f0; }
-    .sign-row { height: 26px; }
-    .footer { margin-top: 6px; font-size: 7px; color: #64748b; text-align: center; }
-    
-    /* Single-page enforcement: prevent tables from splitting across pages */
-    .section-head, table { page-break-inside: avoid; }
-    .sign-box, .sign-row, .sign-grid, .sign-grid tr { page-break-inside: avoid; }
+    @page { size: A4 portrait; margin: 10mm 11mm; }
+    * { box-sizing: border-box; }
+    body {
+        font-family: DejaVu Sans, sans-serif;
+        font-size: 8.2px;
+        color: #1f2937;
+        line-height: 1.22;
+        margin: 0;
+    }
+
+    /* ---- Letterhead ---- */
+    .letterhead { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    .letterhead td { border: 0; padding: 0; vertical-align: middle; }
+    .logo-cell { width: 56px; padding: 5px; background: #b91c1c; text-align: center; }
+    .logo-cell img { width: 44px; height: auto; display: block; margin: 0 auto; }
+    .entities { padding-left: 9px; }
+    .entities .legal { font-size: 7.4px; line-height: 1.28; color: #475569; }
+    .entities .legal-primary { font-size: 9.5px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: .02em; }
+    .doc-title { text-align: right; width: 40%; }
+    .doc-title h1 {
+        margin: 0 0 2px; padding-bottom: 3px; border-bottom: 2px solid #b91c1c;
+        font-size: 10.5px; font-weight: 800; color: #991b1b;
+        text-transform: uppercase; letter-spacing: .03em;
+    }
+    .doc-title .sub { font-size: 7.4px; line-height: 1.35; color: #475569; }
+    .doc-title .sub strong { color: #111827; }
+
+    .intro {
+        font-size: 7.6px; color: #475569; text-align: justify;
+        border-left: 2px solid #e2e8f0; padding: 2px 0 2px 7px; margin-bottom: 6px;
+    }
+
+    /* ---- Tables ---- */
+    table.form { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    table.form th, table.form td {
+        border: 1px solid #cbd5e1; padding: 1.5px 5px;
+        text-align: left; vertical-align: top;
+    }
+    table.form th.section-head {
+        background: #eef2f7; color: #1e293b;
+        font-size: 8px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+        padding: 2.5px 5px; border-color: #94a3b8;
+    }
+    table.form td.label { width: 33%; color: #475569; background: #f8fafc; font-weight: 600; }
+    .pass { color: #047857; font-weight: bold; }
+    .fail { color: #b91c1c; font-weight: bold; }
+    .statement { text-align: justify; line-height: 1.3; }
+    .check-cell { width: 13%; text-align: center; font-size: 7.4px; }
+
+    /* ---- Signatures ---- */
+    .sign-grid { width: 100%; border-collapse: collapse; margin-top: 3px; }
+    .sign-grid th {
+        border: 1px solid #94a3b8; background: #eef2f7;
+        font-weight: 800; text-align: center; font-size: 8px;
+        text-transform: uppercase; letter-spacing: .04em; color: #1e293b; padding: 2.5px;
+    }
+    .sign-grid td { border: 1px solid #94a3b8; width: 50%; height: 58px; vertical-align: top; padding: 4px 6px; }
+    .sign-cell-role { font-size: 7.6px; font-weight: 700; color: #334155; }
+    .sign-cell-dashed { border-bottom: 1px dashed #94a3b8; margin: 4px 0 2px; height: 1px; }
+    .sign-cell-name { font-size: 8.4px; font-weight: 700; text-align: center; color: #111827; }
+    .sign-cell-date { font-size: 7px; color: #64748b; text-align: center; }
+    .sign-cell-image { display: block; height: 24px; max-width: 100%; margin: 1px auto; }
+
+    /* Footer stays on the single page. */
+    .footer {
+        margin-top: 4px; padding-top: 2px; border-top: 1px solid #e2e8f0;
+        font-size: 6.8px; color: #94a3b8; text-align: center;
+    }
+    .section-head, table.form, .sign-grid, .sign-grid tr { page-break-inside: avoid; }
 </style>
 </head>
 <body>
 @php
     $logoPath = $document['company_logo'] ?? null;
-    $logoUri = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path($logoPath ?? 'images/mito-logo-pdf.png')));
+    $logoFile = $logoPath && is_file(public_path($logoPath))
+        ? public_path($logoPath)
+        : public_path('images/mito-logo-pdf.png');
+    $logoUri = 'data:image/png;base64,'.base64_encode(file_get_contents($logoFile));
 @endphp
-<div class="letterhead">
-    <table>
-        <tr>
-            <td class="logo-cell">
-                <img src="{{ $logoUri }}" alt="MITO Electronic">
-            </td>
-            <td class="entities">
-                @foreach((array) config('documents.entities', []) as $entity)
-                    <div class="{{ $loop->first ? 'legal legal-primary' : 'legal' }}">{{ $entity }}</div>
-                @endforeach
-            </td>
-            <td class="doc-title">
-                <h1>@yield('title')</h1>
-                <div class="sub">No. {{ $document['number'] }}</div>
-                <div class="sub">Tanggal: {{ $document['date_long'] ?? $document['date'] }}</div>
-                @if(filled($document['nomor_surat'] ?? null))
-                    <div class="sub">Nomor Surat: {{ $document['nomor_surat'] }}</div>
-                @endif
-            </td>
-        </tr>
-    </table>
+
+<table class="letterhead">
+    <tr>
+        <td class="logo-cell"><img src="{{ $logoUri }}" alt="MITO Electronic"></td>
+        <td class="entities">
+            @foreach((array) config('documents.entities', []) as $entity)
+                <div class="{{ $loop->first ? 'legal legal-primary' : 'legal' }}">{{ $entity }}</div>
+            @endforeach
+        </td>
+        <td class="doc-title">
+            <h1>@yield('title')</h1>
+            <div class="sub">No. <strong>{{ $document['number'] }}</strong></div>
+            <div class="sub">Tanggal: {{ $document['date_long'] ?? $document['date'] }}</div>
+            @if(filled($document['nomor_surat'] ?? null) && $document['nomor_surat'] !== $document['number'])
+                <div class="sub">Nomor Surat: {{ $document['nomor_surat'] }}</div>
+            @endif
+        </td>
+    </tr>
+</table>
+
+<div class="intro">
+    Form ini dibuat secara resmi untuk mencatat, mengontrol, dan memonitor proses peminjaman aset Teknologi Informasi milik perusahaan, yang dipinjam oleh karyawan untuk keperluan operasional, proyek, atau kegiatan resmi perusahaan.
 </div>
 
 @yield('content')

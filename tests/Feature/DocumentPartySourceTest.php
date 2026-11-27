@@ -242,17 +242,17 @@ class DocumentPartySourceTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin', 'name' => 'The Administrator']);
 
+        // A single FAT now covers handover, transfer and return. The person
+        // holding the asset is the receiver on that one form.
         $response = $this->actingAs($admin)
-            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'RETURN']));
+            ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']));
 
         $response->assertOk();
 
-        // Second Party is handing it back, so the form is a RETURN. A BAST here
-        // would correctly show the IT PIC instead - they are different documents.
-        $response->assertSee('name="signatory_menyerahkan" value="Second Party"', false);
+        $response->assertSee('name="signatory_menerima" value="Second Party"', false);
 
         // And critically: not the administrator who is logged in and running it.
-        $response->assertDontSee('name="signatory_menyerahkan" value="The Administrator"', false);
+        $response->assertDontSee('name="signatory_menerima" value="The Administrator"', false);
     }
 
     /**

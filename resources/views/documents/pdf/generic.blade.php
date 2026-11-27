@@ -6,7 +6,9 @@
     // type's own role map rather than always falling back to FAT's ordering.
     $type = strtolower($document['type'] ?? '');
     $heading = config('documents.labels.'.$document['type'] ?? '', $document['title'] ?? 'Dokumen Aset');
-    $variant = in_array($type, ['fat', 'bast', 'transfer', 'handover', 'return', 'assignment', 'repair', 'disposal'], true)
+    // Legacy TRANSFER/HANDOVER/RETURN documents render through FAT: they were
+    // the same serah-terima event before the types were consolidated.
+    $variant = in_array($type, ['fat', 'bast', 'assignment', 'repair', 'disposal'], true)
         ? $type
         : 'fat';
 @endphp
