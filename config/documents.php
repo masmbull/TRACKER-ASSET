@@ -88,22 +88,33 @@ return [
         'FAT' => [
             'handover_date' => 'Tanggal Serah Terima',
             'received_date' => 'Tanggal Diterima',
-            'statement' => 'Aset ini diserahkan oleh pihak penyerah kepada penerima untuk digunakan dalam mendukung pelaksanaan tugas. Penerima bertanggung jawab menjaga keutuhan, keamanan, dan kondisi aset selama penggunaan, serta wajib mengembalikannya kepada pihak penyerah dalam kondisi baik sesuai keadaan saat diterima, kecuali kerusakan wajar akibat pemakaian normal.',
+            // The clause is written from the operator's point of view: the
+            // obligations of the person handing over differ from the person
+            // receiving. `statement` stays as the sender fallback.
+            'statement' => 'Saya sebagai penyerah menyatakan bahwa aset ini diserahkan dalam kondisi baik dan lengkap sesuai daftar yang tercantum. Sejak saat serah terima, tanggung jawab atas penggunaan dan pemeliharaan aset beralih kepada penerima. Penerima wajib menggunakan aset untuk keperluan pekerjaan dan mengembalikannya dalam kondisi baik apabila tidak lagi digunakan.',
+            'statement_sender' => 'Saya sebagai penyerah menyatakan bahwa aset ini diserahkan dalam kondisi baik dan lengkap sesuai daftar yang tercantum. Sejak saat serah terima, tanggung jawab atas penggunaan dan pemeliharaan aset beralih kepada penerima. Penerima wajib menggunakan aset untuk keperluan pekerjaan dan mengembalikannya dalam kondisi baik apabila tidak lagi digunakan.',
+            'statement_receiver' => 'Saya sebagai penerima menyatakan telah menerima aset ini dalam kondisi baik dan lengkap sesuai daftar yang tercantum. Sejak saat serah terima saya bertanggung jawab menjaga keutuhan, keamanan, dan penggunaan aset semata-mata untuk keperluan pekerjaan, serta wajib mengembalikannya dalam kondisi baik kepada pihak penyerah apabila tidak lagi digunakan.',
         ],
         'BAST' => [
             'handover_date' => 'Tanggal Serah Terima',
             'received_date' => 'Tanggal Diterima',
-            'statement' => 'Dengan ini pihak penyerah menyerahkan aset kepada penerima, dan penerima menyatakan telah menerima aset tersebut dalam kondisi baik serta lengkap sesuai daftar yang tercantum dalam dokumen ini. Penerima berkewajiban menggunakan aset semata-mata untuk keperluan pekerjaan, menjaga dan memeliharanya dengan baik, serta mengembalikannya dalam kondisi baik apabila tidak lagi digunakan atau sesuai dengan ketentuan yang berlaku.',
+            'statement' => 'Dengan ini saya selaku penyerah menyerahkan aset kepada penerima dan menyatakan bahwa daftar serta kondisi aset telah diperiksa bersama. Penerima menyatakan telah menerima aset tersebut dan berkewajiban menggunakannya untuk keperluan resmi serta mengembalikannya sesuai ketentuan yang berlaku.',
+            'statement_sender' => 'Dengan ini saya selaku penyerah menyerahkan aset kepada penerima dan menyatakan bahwa daftar serta kondisi aset telah diperiksa bersama. Penerima menyatakan telah menerima aset tersebut dan berkewajiban menggunakannya untuk keperluan resmi serta mengembalikannya sesuai ketentuan yang berlaku.',
+            'statement_receiver' => 'Dengan ini saya selaku penerima menyatakan telah menerima aset dari pihak penyerah setelah pemeriksaan bersama atas daftar dan kondisinya. Saya berkewajiban menggunakan aset semata-mata untuk keperluan pekerjaan, memeliharanya dengan baik, dan mengembalikannya dalam kondisi baik apabila tidak lagi digunakan atau sesuai ketentuan.',
         ],
         'REPAIR' => [
             'handover_date' => 'Tanggal Penyerahan ke IT',
             'received_date' => 'Tanggal Pengembalian',
-            'statement' => 'Perangkat diserahkan kepada IT untuk didiagnosa dan diperbaiki. User telah mencadangkan data penting sebelum penyerahan. IT tidak bertanggung jawab atas data yang tidak dicadangkan.',
+            'statement' => 'Saya selaku user menyerahkan perangkat kepada IT untuk didiagnosa dan diperbaiki. Saya menyatakan telah mencadangkan data penting sebelum penyerahan dan memahami bahwa IT tidak bertanggung jawab atas data yang tidak dicadangkan.',
+            'statement_sender' => 'Saya selaku user menyerahkan perangkat kepada IT untuk didiagnosa dan diperbaiki. Saya menyatakan telah mencadangkan data penting sebelum penyerahan dan memahami bahwa IT tidak bertanggung jawab atas data yang tidak dicadangkan.',
+            'statement_receiver' => 'Saya selaku penerima di IT menyatakan telah menerima perangkat untuk didiagnosa dan diperbaiki. Pemeriksaan dan perbaikan dilakukan dengan mengutamakan keamanan data, dan perangkat dikembalikan kepada user setelah kondisinya dinyatakan layak digunakan.',
         ],
         'DISPOSAL' => [
             'handover_date' => 'Tanggal Pemusnahan',
             'received_date' => 'Tanggal Pencatatan',
-            'statement' => 'Aset dinyatakan tidak dapat digunakan lagi / tidak economically repairable dan diusulkan untuk dihapus dari register setelah data dihapus permanen dan persetujuan diperoleh.',
+            'statement' => 'Saya selaku penyerah menyatakan aset ini tidak dapat digunakan lagi dan mengusulkannya untuk dihapus dari register setelah data dihapus permanen dan persetujuan diperoleh.',
+            'statement_sender' => 'Saya selaku penyerah menyatakan aset ini tidak dapat digunakan lagi dan mengusulkannya untuk dihapus dari register setelah data dihapus permanen dan persetujuan diperoleh.',
+            'statement_receiver' => 'Saya selaku penerima menyatakan telah menerima aset untuk dicatat penghapusannya dari register. Penghapusan data dilakukan permanen dan persetujuan telah diperoleh sesuai ketentuan yang berlaku.',
         ],
     ],
 

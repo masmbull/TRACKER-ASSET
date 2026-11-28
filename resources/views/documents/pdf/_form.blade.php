@@ -17,6 +17,7 @@
     $handover = $document['handover'] ?? [];
     $sign = $document['signatories'] ?? [];
     $kelengkapan = (array) ($document['kelengkapan'] ?? []);
+    $kelengkapanDetail = (array) ($document['kelengkapan_detail'] ?? []);
     $copyView = (array) ($copy ?? []);
 
     $blank = static fn ($v) => filled($v) ? $v : '-';
@@ -74,7 +75,7 @@
     <tr><td class="label">Asset Tag / Inventory Code</td><td>{{ $blank($asset['tag'] ?? null) }}</td></tr>
     <tr><td class="label">Processor</td><td>{{ $blank($asset['processor_detail'] ?? null) }}</td></tr>
     <tr><td class="label">RAM</td><td>{{ $blank($asset['ram_detail'] ?? null) }}</td></tr>
-    <tr><td class="label">Storage</td><td>{{ $blank($asset['storage_detail'] ?? null) }}</td></tr>
+    <tr><td class="label">Storage / Kapasitas</td><td>{{ $blank($asset['storage_detail'] ?? null) }}</td></tr>
     @if(filled($asset['os_version'] ?? null))
         <tr><td class="label">Sistem Operasi</td><td>{{ $asset['os_version'] }}</td></tr>
     @endif
@@ -91,7 +92,12 @@
         <tr>
             @foreach($chunk as $item => $answer)
                 <td class="label">{{ $item }}</td>
-                <td>{{ $answer === 'ada' ? 'Ada' : ($answer === 'tidak' ? 'Tidak Ada' : '-') }}</td>
+                <td>
+                    {{ $answer === 'ada' ? 'Ada' : ($answer === 'tidak' ? 'Tidak Ada' : '-') }}
+                    @if($answer === 'ada' && filled($kelengkapanDetail[$item] ?? null))
+                        <span class="detail">— {{ $kelengkapanDetail[$item] }}</span>
+                    @endif
+                </td>
             @endforeach
             @if($chunk->count() === 1)
                 <td class="label"></td><td></td>

@@ -256,6 +256,8 @@ class DocumentController extends Controller
     {
         $rules = [
             'document_type' => ['required', Rule::in((array) config('documents.types', []))],
+            // Which side the operator is on decides the default clause.
+            'operator_role' => 'nullable|in:sender,receiver',
             'template_id' => 'nullable|exists:document_templates,id',
             'transfer_id' => 'nullable|exists:asset_transfers,id',
             'document_date' => 'nullable|date',
@@ -288,6 +290,8 @@ class DocumentController extends Controller
             'nomor_surat' => 'nullable|string|max:100',
             'kelengkapan' => 'nullable|array',
             'kelengkapan.*' => 'nullable|in:ada,tidak',
+            'kelengkapan_detail' => 'nullable|array',
+            'kelengkapan_detail.*' => 'nullable|string|max:255',
             'signatory_menyerahkan' => 'nullable|string|max:150',
             'signatory_menerima' => 'nullable|string|max:150',
             'signatory_mengetahui' => 'nullable|string|max:150',

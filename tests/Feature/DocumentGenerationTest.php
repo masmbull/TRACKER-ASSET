@@ -85,7 +85,7 @@ class DocumentGenerationTest extends TestCase
             ->assertOk()
             ->assertSee('Dokumen kosong')
             ->assertSee('name="asset_os_version"', false)
-            ->assertSee('name="asset_storage_type"', false)
+            ->assertSee('name="asset_storage"', false)
             ->assertSee('enctype="multipart/form-data"', false)
             // The blank form states whose side is being filled and preloads the
             // office identity for those fields.
@@ -108,9 +108,7 @@ class DocumentGenerationTest extends TestCase
             'asset_tag' => 'MANUAL-001',
             'asset_processor' => 'Intel Core i5',
             'asset_ram' => '16 GB',
-            'asset_storage' => '512 GB SSD',
-            'asset_storage_type' => 'NVMe',
-            'asset_storage_capacity' => '512 GB',
+            'asset_storage' => '512 GB NVMe SSD',
             'asset_os_version' => 'Windows 11 Pro',
         ]);
 
@@ -120,7 +118,7 @@ class DocumentGenerationTest extends TestCase
         $this->assertNull($document->asset_id);
         $this->assertSame('MANUAL-001', $document->payload['asset']['tag']);
         $this->assertSame('Windows 11 Pro', $document->payload['asset']['os_version']);
-        $this->assertSame('NVMe', $document->payload['asset']['storage_type_detail']);
+        $this->assertSame('512 GB NVMe SSD', $document->payload['asset']['storage_detail']);
         $this->assertSame('Andi', $document->payload['parties']['sender']['name']);
         $this->assertModelExists($document);
         Storage::assertExists($document->file_path);
@@ -263,7 +261,7 @@ class DocumentGenerationTest extends TestCase
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'REPAIR']))
             ->assertOk()
             ->assertSee('Tanggal Penyerahan ke IT')
-            ->assertSee('Perangkat diserahkan kepada IT untuk didiagnosa');
+            ->assertSee('Saya selaku user menyerahkan perangkat kepada IT untuk didiagnosa');
 
         $this->actingAs($admin)
             ->get(route('documents.generate', ['asset' => $this->asset, 'document_type' => 'FAT']))
@@ -439,6 +437,40 @@ class DocumentGenerationTest extends TestCase
         ]);
 
         $this->assertSame('Deni IT', Document::latest('id')->firstOrFail()->payload['signatories']['it']);
+    }
+
+    public function test_the_clause_follows_the_operator_role_and_accessory_details_are_saved(): void
+    {
+        $support = User::factory()->create(['role' => 'support']);
+
+        $this->actingAs($support)->post(route('documents.generate.blank.store'), [
+            'document_type' => 'FAT',
+            'operator_role' => 'sender',
+            'sender_entity' => 'Test Co',
+            'receiver_entity' => 'Test Co',
+            'signatory_menyerahkan' => 'Andi',
+            'signatory_menerima' => 'Budi',
+            'kelengkapan' => [4 => 'ada'],
+            'kelengkapan_detail' => [4 => 'Charger, mouse'],
+        ]);
+
+        $document = Document::firstOrFail();
+        $this->assertStringContainsString('Saya sebagai penyerah', $document->payload['statement']);
+        $this->assertSame('Charger, mouse', $document->payload['kelengkapan_detail']['Accessories']);
+
+        $this->actingAs($support)->post(route('documents.generate.blank.store'), [
+            'document_type' => 'FAT',
+            'operator_role' => 'receiver',
+            'sender_entity' => 'Test Co',
+            'receiver_entity' => 'Test Co',
+            'signatory_menyerahkan' => 'Andi',
+            'signatory_menerima' => 'Budi',
+        ]);
+
+        $this->assertStringContainsString(
+            'Saya sebagai penerima',
+            Document::latest('id')->firstOrFail()->payload['statement']
+        );
     }
 
     public function test_a_generated_document_can_be_edited_and_regenerated_in_place(): void

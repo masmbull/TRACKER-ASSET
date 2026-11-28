@@ -12,9 +12,12 @@
     if (! in_array($formType, $types, true)) {
         $formType = $selectedType;
     }
+    $formRole = old('operator_role', 'sender');
+    $roleStatement = config('documents.copy.'.$formType.'.statement_'.$formRole);
     $formCopy = array_merge(
         (array) config('documents.copy.FAT', []),
-        (array) config('documents.copy.'.$formType, [])
+        (array) config('documents.copy.'.$formType, []),
+        filled($roleStatement) ? ['statement' => $roleStatement] : []
     );
 @endphp
 <div class="mx-auto max-w-6xl space-y-6">
@@ -46,7 +49,13 @@
                                     (array) config('documents.copy.'.$type, [])
                                 );
                             @endphp
-                            <option value="{{ $type }}" data-handover-label="{{ $typeCopy['handover_date'] ?? '' }}" data-received-label="{{ $typeCopy['received_date'] ?? '' }}" data-statement="{{ $typeCopy['statement'] ?? '' }}" {{ $formType === $type ? 'selected' : '' }}>{{ $type }}</option>
+                            <option value="{{ $type }}"
+                                    data-handover-label="{{ $typeCopy['handover_date'] ?? '' }}"
+                                    data-received-label="{{ $typeCopy['received_date'] ?? '' }}"
+                                    data-statement="{{ $typeCopy['statement'] ?? '' }}"
+                                    data-statement-sender="{{ $typeCopy['statement_sender'] ?? ($typeCopy['statement'] ?? '') }}"
+                                    data-statement-receiver="{{ $typeCopy['statement_receiver'] ?? ($typeCopy['statement'] ?? '') }}"
+                                    {{ $formType === $type ? 'selected' : '' }}>{{ $type }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -269,16 +278,12 @@
                         <input type="text" value="{{ old('asset_ram', $asset?->ram ?? '') }}" name="asset_ram" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Storage</label>
-                        <input type="text" value="{{ old('asset_storage', $asset?->storage ?? '') }}" name="asset_storage" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                    </div>
-                    <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Storage Type</label>
-                        <input type="text" value="{{ old('asset_storage_type', $asset?->storage_type ?? '') }}" name="asset_storage_type" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                    </div>
-                    <div>
-                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Storage Capacity</label>
-                        <input type="text" value="{{ old('asset_storage_capacity', $asset?->storage_capacity ?? '') }}" name="asset_storage_capacity" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        {{-- One field for the fact that matters on a signed sheet:
+                             capacity/type combined, e.g. "512 GB NVMe". The old
+                             Storage + Storage Type + Capacity triple asked the
+                             same question three times and printed one answer. --}}
+                        <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Storage / Kapasitas</label>
+                        <input type="text" value="{{ old('asset_storage', $asset?->storage ?? '') }}" name="asset_storage" placeholder="Contoh: 512 GB NVMe" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-theme-sm font-medium text-gray-700 dark:text-gray-300">Sistem Operasi</label>
@@ -302,15 +307,26 @@
                             <div class="space-y-2">
                                 @foreach($completenessItems as $index => $item)
                                     @php($answer = $completenessType === $formType ? old("kelengkapan.{$index}", 'ada') : 'ada')
+                                    @php($needsDetail = stripos($item, 'accessor') !== false || str_contains($item, 'Aksesoris'))
                                     <div class="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/50 md:flex-row md:items-center md:justify-between">
                                         <span class="text-theme-sm text-gray-700 dark:text-gray-300">{{ $item }}</span>
-                                        <div class="flex gap-3 text-theme-xs">
+                                        <div class="flex flex-wrap items-center gap-3 text-theme-xs">
                                             @foreach(['ada' => 'Ada', 'tidak' => 'Tidak Ada'] as $value => $label)
                                                 <label class="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-200">
-                                                    <input type="radio" name="kelengkapan[{{ $index }}]" value="{{ $value }}" @if($completenessType !== $formType) disabled @endif {{ $answer === $value ? 'checked' : '' }}>
+                                                    <input type="radio" name="kelengkapan[{{ $index }}]" value="{{ $value }}" data-kelengkapan-radio="{{ $index }}" @if($completenessType !== $formType) disabled @endif {{ $answer === $value ? 'checked' : '' }}>
                                                     {{ $label }}
                                                 </label>
                                             @endforeach
+                                            @if($needsDetail)
+                                                {{-- "Ada" alone says nothing about which accessories came in the
+                                                     box. Ask for the detail only when the item is present. --}}
+                                                <input type="text" name="kelengkapan_detail[{{ $index }}]"
+                                                       value="{{ old("kelengkapan_detail.{$index}", '') }}"
+                                                       data-kelengkapan-detail="{{ $index }}"
+                                                       placeholder="Sebutkan aksesoris, mis. charger + mouse"
+                                                       class="min-w-[220px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-theme-xs text-gray-700 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 {{ $answer === 'ada' ? '' : 'hidden' }}"
+                                                       @if($completenessType !== $formType) disabled @endif>
+                                            @endif
                                         </div>
                                     </div>
                                 @endforeach
@@ -420,6 +436,18 @@
         const receivedLabel = document.getElementById('received-date-label');
         const statement = document.querySelector('textarea[name="statement"]');
         let previousDefaultStatement = statement?.dataset.defaultStatement ?? '';
+        const currentRole = () => document.querySelector('input[name="operator_role"]:checked')?.value || 'sender';
+        const roleStatementOf = (option) => {
+            const role = currentRole() === 'receiver' ? 'Receiver' : 'Sender';
+            return option?.dataset['statement'+role] || option?.dataset.statement || '';
+        };
+        const applyStatement = () => {
+            const next = roleStatementOf(typeSelect?.selectedOptions[0]);
+            if (statement && (!statement.value.trim() || statement.value === previousDefaultStatement)) {
+                statement.value = next;
+            }
+            previousDefaultStatement = next;
+        };
 
         const syncDocumentType = () => {
             const selectedOption = typeSelect?.selectedOptions[0];
@@ -456,15 +484,28 @@
             if (handoverLabel) handoverLabel.textContent = selectedOption.dataset.handoverLabel ?? '';
             if (receivedLabel) receivedLabel.textContent = selectedOption.dataset.receivedLabel ?? '';
 
-            const nextDefaultStatement = selectedOption.dataset.statement ?? '';
-            if (statement && (!statement.value.trim() || statement.value === previousDefaultStatement)) {
-                statement.value = nextDefaultStatement;
-            }
-            previousDefaultStatement = nextDefaultStatement;
+            applyStatement();
         };
 
         typeSelect?.addEventListener('change', syncDocumentType);
         syncDocumentType();
+
+        // Accessories with "Ada" need to say which accessories. Show the free
+        // text only for that item, and only inside the active document type.
+        const syncKelengkapanDetails = (radio) => {
+            const group = radio?.closest('[data-kelengkapan-type]');
+            const detail = group?.querySelector(`[data-kelengkapan-detail="${radio.dataset.kelengkapanRadio}"]`);
+            if (detail) {
+                detail.classList.toggle('hidden', radio.value !== 'ada');
+                if (radio.value !== 'ada') detail.value = '';
+            }
+        };
+        document.querySelectorAll('input[data-kelengkapan-radio]').forEach((radio) => {
+            if (radio.checked) syncKelengkapanDetails(radio);
+            radio.addEventListener('change', () => {
+                if (radio.checked) syncKelengkapanDetails(radio);
+            });
+        });
 
         // Blank document: the operator says which side of the FAT they are, and
         // that side is filled from their profile. The other side stays blank so
@@ -476,9 +517,7 @@
                 catch (e) { return {}; }
             })();
 
-            const applyRole = (role, onlyEmpty) => {
-                const prefix = role === 'sender' ? 'sender' : 'receiver';
-                const nameField = role === 'sender' ? 'signatory_menyerahkan' : 'signatory_menerima';
+            const fill = (prefix, nameField, onlyEmpty) => {
                 const fields = {
                     [nameField]: operator.name,
                     [`${prefix}_employee_id`]: operator.employee_id,
@@ -503,6 +542,37 @@
                     if (!onlyEmpty || !entity.value) {
                         entity.value = operator.entity;
                     }
+                }
+            };
+
+            // The side that is NOT chosen must be empty. Otherwise both
+            // signature boxes silently carry the administrator's name.
+            const clear = (prefix, nameField) => {
+                [`${prefix}_employee_id`, `${prefix}_division`, `${prefix}_email`, `${prefix}_phone`, `${prefix}_location`, nameField]
+                    .forEach((name) => {
+                        const input = document.querySelector(`[name="${name}"]`);
+                        if (input) input.value = '';
+                    });
+                const entity = document.querySelector(`[name="${prefix}_entity"]`);
+                if (entity) entity.value = '';
+            };
+
+            const applyRole = (role, onlyEmpty) => {
+                if (role === 'sender') {
+                    fill('sender', 'signatory_menyerahkan', onlyEmpty);
+                    if (!onlyEmpty) clear('receiver', 'signatory_menerima');
+                } else {
+                    fill('receiver', 'signatory_menerima', onlyEmpty);
+                    if (!onlyEmpty) clear('sender', 'signatory_menyerahkan');
+                }
+
+                // An explicit IT signer from an earlier attempt would shadow the
+                // role-based signature. Clear it so the signature follows the
+                // party fields again.
+                if (!onlyEmpty) {
+                    const it = document.querySelector('[name="signatory_it"]');
+                    if (it) it.value = '';
+                    applyStatement();
                 }
             };
 

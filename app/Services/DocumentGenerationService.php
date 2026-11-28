@@ -187,6 +187,7 @@ class DocumentGenerationService
 
         $payload['checklist'] = $this->checklistFor($type, $input);
         $payload['kelengkapan'] = $this->kelengkapanFor($type, $input);
+        $payload['kelengkapan_detail'] = $this->kelengkapanDetails($input + ['document_type' => $type]);
 
         // A blank document has no register to fall back to, so its asset block
         // lives entirely in the payload and must be editable there.
@@ -280,9 +281,11 @@ class DocumentGenerationService
                 'hostname' => $asset?->hostname,
                 'processor' => $asset?->processor,
                 'ram' => $asset?->ram,
-                'storage' => $asset?->storage,
-                'storage_type' => $input['asset_storage_type'] ?? $asset?->storage_type,
-                'storage_capacity' => $input['asset_storage_capacity'] ?? $asset?->storage_capacity,
+                // One field only: "Storage / Kapasitas". The old type + size
+                // pair asked for the same fact twice and only one was printed.
+                'storage' => $input['asset_storage'] ?? $asset?->storage,
+                'storage_type' => $asset?->storage_type,
+                'storage_capacity' => $asset?->storage_capacity,
                 'os_version' => $input['asset_os_version'] ?? $asset?->os_version,
                 'status' => $asset?->status?->name,
                 'type' => $input['asset_type'] ?? $asset?->category?->name,
@@ -292,8 +295,6 @@ class DocumentGenerationService
                 'processor_detail' => $input['asset_processor'] ?? $asset?->processor,
                 'ram_detail' => $input['asset_ram'] ?? $asset?->ram,
                 'storage_detail' => $input['asset_storage'] ?? $asset?->storage,
-                'storage_type_detail' => $input['asset_storage_type'] ?? $asset?->storage_type,
-                'storage_capacity_detail' => $input['asset_storage_capacity'] ?? $asset?->storage_capacity,
                 'accessories' => $input['asset_accessories'] ?? null,
             ],
             'company' => $asset?->company?->name,
@@ -344,8 +345,9 @@ class DocumentGenerationService
             // Completeness answers keyed by the item label, so the document prints
             // "Charger: Ada" and not a bare list of keys.
             'kelengkapan' => $this->kelengkapanFor($type, $input),
+            'kelengkapan_detail' => $this->kelengkapanDetails($input),
             'notes' => $input['notes'] ?? null,
-            'statement' => $input['statement'] ?? $this->statementFor($type),
+            'statement' => $input['statement'] ?? $this->statementFor($type, $input['operator_role'] ?? 'sender'),
         ];
     }
 
@@ -384,10 +386,35 @@ class DocumentGenerationService
         return $result;
     }
 
-    /** Default statement wording for a type, so E. Pernyataan is never blank. */
-    private function statementFor(string $type): string
+    /**
+     * Free-text details for completeness items that need one (Accessories).
+     * Stored per label so the PDF can print "Ada — Charger, mouse" without
+     * changing the ada/tidak shape the rest of the code relies on.
+     */
+    private function kelengkapanDetails(array $input): array
     {
-        return (string) config('documents.copy.'.$type.'.statement', config('documents.copy.FAT.statement', ''));
+        $items = (array) config('documents.kelengkapan.'.($input['document_type'] ?? 'FAT'), []);
+        $details = (array) ($input['kelengkapan_detail'] ?? []);
+        $result = [];
+
+        foreach ($items as $index => $label) {
+            $value = trim((string) ($details[$index] ?? ''));
+
+            if ($value !== '') {
+                $result[$label] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    /** Default clause for the type and for the side the operator is on. */
+    private function statementFor(string $type, string $role = 'sender'): string
+    {
+        return (string) config(
+            'documents.copy.'.$type.'.statement_'.$role,
+            config('documents.copy.'.$type.'.statement', config('documents.copy.FAT.statement', ''))
+        );
     }
 
     /**

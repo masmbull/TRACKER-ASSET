@@ -2,6 +2,22 @@
 
 @section('title', 'Document ' . $document->document_number)
 
+@push('styles')
+<style>
+    /* The preview is the moment an operator checks a printed document, so it
+       arrives with a short, calm entrance instead of snapping into place. */
+    .doc-preview-enter { animation: doc-preview-rise 420ms cubic-bezier(.16,1,.3,1) both; }
+    .doc-preview-enter-delay { animation: doc-preview-rise 420ms 90ms cubic-bezier(.16,1,.3,1) both; }
+    @keyframes doc-preview-rise {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .doc-preview-enter, .doc-preview-enter-delay { animation: none; }
+    }
+</style>
+@endpush
+
 @section('content')
 {{-- The document opens as a native <dialog> the moment this page loads.
 
@@ -10,7 +26,7 @@
      JavaScript - no Alpine - because the Alpine version silently rendered
      nothing when the framework had not started, and a preview that does not
      appear is indistinguishable from a broken route. --}}
-<div class="flex flex-wrap items-start justify-between gap-3 mb-5">
+<div class="doc-preview-enter flex flex-wrap items-start justify-between gap-3 mb-5">
     <div class="min-w-0">
         <h1 class="truncate text-xl font-semibold text-gray-900 dark:text-white">{{ $document->title }}</h1>
         <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-theme-xs text-gray-500 dark:text-gray-400">
@@ -25,9 +41,9 @@
     </div>
 </div>
 
-<div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
+<div class="doc-preview-enter-delay flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
     <x-document-preview :document="$document" :auto-open="true">
-        <x-button variant="primary">Buka Pratinjau</x-button>
+        <x-button variant="primary"><x-icon name="documents.index" class="h-4 w-4" /> Buka Pratinjau</x-button>
     </x-document-preview>
 
     <a href="{{ route('documents.download', $document) }}"
@@ -37,7 +53,7 @@
 
     <a href="{{ route('documents.edit', $document) }}"
        class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-theme-xs font-semibold text-white transition hover:bg-brand-700">
-        Edit &amp; regenerate
+        <x-icon name="templates.index" class="h-4 w-4" /> Edit &amp; regenerate
     </a>
 
     <a href="{{ $document->asset_id ? route('assets.show', $document->asset_id) : route('documents.index') }}"

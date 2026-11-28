@@ -93,13 +93,22 @@
             backdrop-filter: blur(6px) saturate(120%);
             -webkit-backdrop-filter: blur(6px) saturate(120%);
         }
-        dialog.document-dialog[open] { animation: document-dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+        dialog.document-dialog[open] { animation: document-dialog-in 280ms cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes document-dialog-in {
-            from { opacity: 0; transform: translateY(8px) scale(0.98); }
-            to   { opacity: 1; transform: translateY(0) scale(1); }
+            from { opacity: 0; transform: translateY(14px) scale(0.97); filter: blur(2px); }
+            to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        /* Each rendered page lifts in just after its canvas is painted. */
+        dialog.document-dialog [data-pdf-pages] canvas {
+            animation: document-page-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes document-page-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
         @media (prefers-reduced-motion: reduce) {
-            dialog.document-dialog[open] { animation: none; }
+            dialog.document-dialog[open],
+            dialog.document-dialog [data-pdf-pages] canvas { animation: none; }
         }
     </style>
 

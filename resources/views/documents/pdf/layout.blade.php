@@ -41,12 +41,14 @@
         font-size: 9.5px; font-weight: 800; color: #111827;
         text-transform: uppercase; letter-spacing: .02em; line-height: 1.2;
     }
+    .entities .entity-primary::before { content: "■ "; color: #b91c1c; font-size: 8px; }
     .entities .legal { font-size: 7.4px; font-weight: 600; line-height: 1.28; color: #475569; }
-    .entities .legal::before { content: "• "; color: #b91c1c; font-weight: 800; }
+    .entities .legal::before { content: "▸ "; color: #b91c1c; font-weight: 800; }
     .entities .tagline {
         margin-top: 2px; font-size: 6.6px; color: #94a3b8;
         text-transform: uppercase; letter-spacing: .06em;
     }
+    .entities .tagline::before { content: "› "; color: #b91c1c; }
     .doc-title { text-align: right; width: 40%; }
     .doc-title .badge {
         display: inline-block; margin-bottom: 2px; padding: 0 5px;
@@ -54,11 +56,13 @@
         font-size: 6.4px; font-weight: 800; color: #b91c1c;
         text-transform: uppercase; letter-spacing: .08em;
     }
+    .doc-title .badge::before { content: "◆ "; font-size: 6px; }
     .doc-title h1 {
         margin: 0 0 3px; padding-bottom: 2px; border-bottom: 2px solid #b91c1c;
         font-size: 10.5px; font-weight: 800; color: #111827;
         text-transform: uppercase; letter-spacing: .03em;
     }
+    .doc-title h1::before { content: "▣ "; color: #b91c1c; }
     .doc-meta { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; background: #f8fafc; }
     .doc-meta td { border: 0; padding: 0.5px 5px; font-size: 7.2px; line-height: 1.25; }
     .doc-meta td.meta-label { width: 26%; color: #94a3b8; text-align: left; font-weight: 600; }
@@ -84,6 +88,7 @@
     .pass { color: #047857; font-weight: bold; }
     .fail { color: #b91c1c; font-weight: bold; }
     .statement { text-align: justify; line-height: 1.3; }
+    .detail { color: #b91c1c; font-size: 6.8px; font-style: italic; }
     .check-cell { width: 13%; text-align: center; font-size: 7.4px; }
 
     /* ---- Signatures ---- */

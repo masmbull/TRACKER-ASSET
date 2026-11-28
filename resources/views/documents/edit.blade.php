@@ -125,7 +125,7 @@
                     'asset_tag' => 'Asset Tag',
                     'asset_processor' => 'Processor',
                     'asset_ram' => 'RAM',
-                    'asset_storage' => 'Storage',
+                    'asset_storage' => 'Storage / Kapasitas',
                     'asset_os_version' => 'Sistem Operasi',
                 ] as $field => $label)
                     <div>
